@@ -112,11 +112,11 @@ export async function listIncomeDocs(opts: {
 }): Promise<IncomeListResult> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
-  const kind = opts.kind && ['IV', 'IVT', 'RC'].includes(opts.kind) ? opts.kind : null;
+  const kind = opts.kind && ['QT', 'IV', 'IVT', 'RC'].includes(opts.kind) ? opts.kind : null;
 
   return query(async (c) => {
     // ค้นจากเลขที่เอกสาร ชื่อลูกค้า หรือทะเบียนรถ — สามอย่างที่หน้าเคาน์เตอร์ใช้จริง
-    const where: string[] = [`d.kind in ('IV','IVT','RC')`, `d.status <> 'void'`];
+    const where: string[] = [`d.kind in ('QT','IV','IVT','RC')`, `d.status <> 'void'`];
     const params: unknown[] = [];
 
     if (kind) {
@@ -196,9 +196,12 @@ export interface DocDetail {
   docDate: string;
   status: string;
   partyName: string;
+  partyType: 'person' | 'company';
   partyTaxId: string;
   partyTel: string;
+  partyEmail: string;
   partyAddrText: string;
+  refDocNo: string;
   vehicle: Record<string, string> | null;
   vehiclePlate: string;
   discount: number;
@@ -216,6 +219,11 @@ export interface DocDetail {
   warrantyText: string | null;
   receivedBy: string;
   note: string;
+  /* เฉพาะใบเสนอราคา */
+  complaints: string[];
+  findings: string[];
+  approver: string;
+  proposer: string;
   parent: { id: string; kind: string; docNo: string } | null;
   items: DocItemRow[];
   payments: PaymentRow[];
@@ -254,9 +262,12 @@ export async function getDocDetail(id: string): Promise<DocDetail | null> {
       docDate: d.doc_date,
       status: d.status_text,
       partyName: d.party_name,
+      partyType: d.party_type,
       partyTaxId: d.party_tax_id,
       partyTel: d.party_tel,
+      partyEmail: d.party_email,
       partyAddrText: d.party_addr_text,
+      refDocNo: d.ref_doc_no,
       vehicle: d.vehicle,
       vehiclePlate: d.vehicle_plate,
       discount: money(d.discount),
@@ -274,6 +285,10 @@ export async function getDocDetail(id: string): Promise<DocDetail | null> {
       warrantyText: d.warranty_text,
       receivedBy: d.received_by,
       note: d.note,
+      complaints: (d.complaints ?? []).filter((x: string) => x?.trim()),
+      findings: (d.findings ?? []).filter((x: string) => x?.trim()),
+      approver: d.approver ?? '',
+      proposer: d.proposer ?? '',
       parent: d.parent_id ? { id: d.parent_id, kind: d.parent_kind, docNo: d.parent_no } : null,
       items: items.rows.map((r) => ({
         lineNo: Number(r.line_no),

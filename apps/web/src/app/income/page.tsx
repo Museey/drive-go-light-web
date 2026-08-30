@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 
 const TABS = [
   { key: '', label: 'ทั้งหมด' },
+  { key: 'QT', label: 'ใบเสนอราคา' },
   { key: 'IVT', label: 'ใบส่งมอบ + ใบกำกับภาษี' },
   { key: 'IV', label: 'ใบส่งมอบ (ไม่มี VAT)' },
   { key: 'RC', label: 'ใบเสร็จรับเงิน' },
@@ -90,9 +91,15 @@ export default async function IncomePage({
                       <td className="wrap">{r.partyName || '-'}</td>
                       <td className="mono">{r.vehiclePlate || '-'}</td>
                       <td className="num">{baht(r.payable)}</td>
-                      <td className="num">{baht(r.paid)}</td>
-                      <td className="num">{r.outstanding > 0.004 ? baht(r.outstanding) : '-'}</td>
-                      <td><span className={`chip ${st.tone}`}>{st.text}</span></td>
+                      <td className="num">{r.kind === 'QT' ? '-' : baht(r.paid)}</td>
+                      <td className="num">
+                        {r.kind === 'QT' ? '-' : r.outstanding > 0.004 ? baht(r.outstanding) : '-'}
+                      </td>
+                      <td>
+                        {r.kind === 'QT'
+                          ? <span className="chip">ใบเสนอราคา</span>
+                          : <span className={`chip ${st.tone}`}>{st.text}</span>}
+                      </td>
                       <td>{thDate(r.dueDate)}</td>
                     </tr>
                   );

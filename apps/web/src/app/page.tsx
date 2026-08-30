@@ -64,7 +64,7 @@ export default async function HomePage({
                   <td>{KIND_SHORT[d.kind] ?? d.kind}</td>
                   <td className="num">{d.count.toLocaleString('en-US')}</td>
                   <td>
-                    {seesIncome && ['IV', 'IVT', 'RC'].includes(d.kind) ? (
+                    {seesIncome && ['QT', 'IV', 'IVT', 'RC'].includes(d.kind) ? (
                       <Link href={{ pathname: '/income', query: { kind: d.kind } }}
                             style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}>
                         ดูรายการ

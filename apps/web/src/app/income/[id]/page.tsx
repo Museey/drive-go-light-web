@@ -23,7 +23,12 @@ export default async function DocPage({ params }: { params: Promise<{ id: string
       current="/income"
       title={KIND_LABEL[doc.kind] ?? doc.kind}
       sub={`เลขที่ ${doc.docNo} · ${thDateLong(doc.docDate)}`}
-      actions={<Link className="btn" href="/income">← กลับรายการ</Link>}
+      actions={
+        <>
+          <Link className="btn" href="/income">← กลับรายการ</Link>
+          <Link className="btn primary" href={`/income/${doc.id}/print`}>พิมพ์เอกสาร</Link>
+        </>
+      }
     >
       <div className="grid g2">
         <div className="card">
