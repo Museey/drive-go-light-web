@@ -35,7 +35,17 @@ export default async function IncomePage({
   });
 
   return (
-    <Shell current="/income" title="รายรับ" sub={`เอกสารขายทั้งหมด ${total.toLocaleString('en-US')} ฉบับ`}>
+    <Shell
+      current="/income"
+      title="รายรับ"
+      sub={`เอกสารขายทั้งหมด ${total.toLocaleString('en-US')} ฉบับ`}
+      actions={
+        <div className="tag-row">
+          <Link className="btn" href="/income/new?kind=QT">+ ใบเสนอราคา</Link>
+          <Link className="btn primary" href="/income/new?kind=RC">+ ใบเสร็จ</Link>
+        </div>
+      }
+    >
       <div className="card">
         <div className="toolbar">
           {TABS.map((t) => (

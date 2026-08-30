@@ -4,14 +4,22 @@ import { bahttext } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getDocDetail, getShop } from '@/lib/queries';
+import { canEdit } from '@/lib/sales';
+import { DocActions } from '../doc-actions';
 import { baht, KIND_LABEL, payLabel, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DocPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function DocPage({
+  params, searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ saved?: string; error?: string }>;
+}) {
   await requirePerm('income');
   const { id } = await params;
-  const [doc, shop] = await Promise.all([getDocDetail(id), getShop()]);
+  const sp = await searchParams;
+  const [doc, shop, editable] = await Promise.all([getDocDetail(id), getShop(), canEdit(id)]);
   if (!doc) notFound();
 
   const paid = doc.payments.reduce((s, p) => s + p.amount, 0);
@@ -23,13 +31,24 @@ export default async function DocPage({ params }: { params: Promise<{ id: string
       current="/income"
       title={KIND_LABEL[doc.kind] ?? doc.kind}
       sub={`เลขที่ ${doc.docNo} · ${thDateLong(doc.docDate)}`}
-      actions={
-        <>
-          <Link className="btn" href="/income">← กลับรายการ</Link>
-          <Link className="btn primary" href={`/income/${doc.id}/print`}>พิมพ์เอกสาร</Link>
-        </>
-      }
+      actions={<Link className="btn" href="/income">← กลับรายการ</Link>}
     >
+      {sp.saved ? (
+        <div className="ok-msg" style={{ marginBottom: 16 }}>
+          บันทึกเรียบร้อย — เลขที่ {sp.saved}
+        </div>
+      ) : null}
+      {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}
+      {doc.status === 'void' ? (
+        <div className="err" style={{ marginBottom: 16 }}>
+          เอกสารนี้ถูกยกเลิกแล้ว — ไม่ถูกนับในยอดขายและภาษี
+        </div>
+      ) : (
+        <div style={{ marginBottom: 16 }}>
+          <DocActions id={doc.id} kind={doc.kind} canEdit={editable.ok} editReason={editable.reason} />
+        </div>
+      )}
+
       <div className="grid g2">
         <div className="card">
           <header><h2>ผู้ซื้อ</h2><div className="spacer" /><span className={`chip ${status.tone}`}>{status.text}</span></header>

@@ -1,0 +1,528 @@
+'use client';
+
+import { useActionState, useState, useTransition } from 'react';
+import { useFormStatus } from 'react-dom';
+import Link from 'next/link';
+import { bahttext, recTotals, type VatMode } from '@drivegolight/core';
+import { saveDocAction, searchCustomersAction, searchProductsAction } from './actions';
+import type { FormResult } from '@/lib/mutate';
+import type { DocItemInput, PickedContact, PickedProduct, SalesDocInput, SalesKind } from '@/lib/sales';
+import { baht, KIND_LABEL } from '@/lib/format';
+
+const EPS = 0.004;
+const money = (n: number) => (Math.round(n * 100) / 100);
+
+const KIND_HELP: Record<SalesKind, string> = {
+  QT: 'เสนอราคาให้ลูกค้าอนุมัติก่อนลงมือซ่อม ยังไม่เป็นหนี้และยังไม่ตัดสต๊อก',
+  IV: 'ส่งมอบงานและแจ้งหนี้ โดยไม่มีภาษีมูลค่าเพิ่ม',
+  IVT: 'ส่งมอบงานพร้อมใบกำกับภาษี — ลูกค้าต้องมีเลขประจำตัวผู้เสียภาษี',
+  RC: 'รับเงินและปิดงาน — ตัดสต๊อกอะไหล่ตอนบันทึกใบนี้',
+};
+
+const emptyItem = (): DocItemInput => ({
+  productId: null, code: '', oem: '', name: '', unit: '',
+  qty: 1, unitPrice: 0, isService: false,
+});
+
+function Submit({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button className="btn primary" type="submit" disabled={pending}>
+      {pending ? 'กำลังบันทึก…' : label}
+    </button>
+  );
+}
+
+export function DocEditor({
+  initial, vatRate, shopWhtRate, mode,
+}: {
+  initial: SalesDocInput;
+  vatRate: number;
+  shopWhtRate: number;
+  mode: 'new' | 'edit';
+}) {
+  const [state, action] = useActionState<FormResult, FormData>(saveDocAction, {});
+  const [doc, setDoc] = useState<SalesDocInput>(initial);
+  const [custQuery, setCustQuery] = useState('');
+  const [custResults, setCustResults] = useState<PickedContact[] | null>(null);
+  const [partQuery, setPartQuery] = useState('');
+  const [partResults, setPartResults] = useState<PickedProduct[] | null>(null);
+  const [picked, setPicked] = useState<PickedContact | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const set = <K extends keyof SalesDocInput>(k: K, v: SalesDocInput[K]) =>
+    setDoc((d) => ({ ...d, [k]: v }));
+
+  const setItem = (i: number, patch: Partial<DocItemInput>) =>
+    setDoc((d) => ({ ...d, items: d.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
+
+  /* ยอดคำนวณสด ๆ ด้วยสูตรชุดเดียวกับที่เซิร์ฟเวอร์ใช้ตอนบันทึก ตัวเลขจึงตรงกันเสมอ */
+  const t = recTotals(
+    {
+      items: doc.items.map((i) => ({ qty: i.qty, price: i.unitPrice, svc: i.isService })),
+      discount: doc.discount,
+      vatMode: doc.vatMode,
+      whtRate: doc.kind === 'QT' ? 0 : doc.whtRate,
+      date: doc.docDate,
+    },
+    { vatRate },
+  );
+
+  const paidNow = money(doc.payments.reduce((s, p) => s + p.amount, 0));
+  const remain = money(t.payable - paidNow);
+
+  const searchCust = () => startTransition(async () => {
+    setCustResults(await searchCustomersAction(custQuery));
+  });
+  const searchPart = () => startTransition(async () => {
+    setPartResults(await searchProductsAction(partQuery));
+  });
+
+  const applyCustomer = (c: PickedContact) => {
+    setPicked(c);
+    setCustResults(null);
+    setDoc((d) => ({
+      ...d,
+      partyId: c.id, partyType: c.type, partyName: c.name, partyTaxId: c.taxId,
+      partyTel: c.tel, partyEmail: c.email, partyAddr: c.addr, partyAddrText: c.addrText,
+      creditDays: d.creditDays || c.creditDays,
+      vehicleId: c.vehicles[0]?.id ?? null,
+      vehicle: c.vehicles[0]?.data ?? null,
+    }));
+  };
+
+  const priceOf = (p: PickedProduct) =>
+    doc.priceTier === 'C' ? p.priceC : doc.priceTier === 'B' ? p.priceB : p.priceA;
+
+  const addProduct = (p: PickedProduct) => {
+    setDoc((d) => {
+      const at = d.items.findIndex((i) => i.productId === p.id);
+      if (at >= 0) {
+        return { ...d, items: d.items.map((i, j) => (j === at ? { ...i, qty: i.qty + 1 } : i)) };
+      }
+      return {
+        ...d,
+        items: [...d.items, {
+          productId: p.id, code: p.code, oem: p.oem, name: p.name, unit: p.unit,
+          qty: 1, unitPrice: priceOf(p), isService: false,
+        }],
+      };
+    });
+  };
+
+  const isQuote = doc.kind === 'QT';
+  const isReceipt = doc.kind === 'RC';
+  const vatLocked = doc.kind === 'IV' || doc.kind === 'IVT';
+
+  return (
+    <form action={action}>
+      <input type="hidden" name="payload" value={JSON.stringify(doc)} />
+
+      {state.error ? <div className="err" style={{ marginBottom: 16 }}>{state.error}</div> : null}
+
+      <div className="card">
+        <header>
+          <h2>{KIND_LABEL[doc.kind]}</h2>
+          <div className="spacer" />
+          <span className="subtle">{KIND_HELP[doc.kind]}</span>
+        </header>
+        <div className="body">
+          <div className="row-fields f4">
+            <div className="field">
+              <label htmlFor="docDate">วันที่เอกสาร</label>
+              <input className="in mono" id="docDate" type="date" value={doc.docDate}
+                     onChange={(e) => set('docDate', e.target.value)} />
+            </div>
+
+            {isQuote ? (
+              <div className="field">
+                <label htmlFor="tier">ระดับราคา</label>
+                <select className="in" id="tier" value={doc.priceTier ?? 'A'}
+                        onChange={(e) => set('priceTier', e.target.value as 'A' | 'B' | 'C')}>
+                  <option value="A">A — ราคาปกติ</option>
+                  <option value="B">B — ลูกค้าประจำ</option>
+                  <option value="C">C — ราคาพิเศษ</option>
+                </select>
+              </div>
+            ) : null}
+
+            <div className="field">
+              <label htmlFor="vatMode">ภาษีมูลค่าเพิ่ม</label>
+              <select className="in" id="vatMode" value={doc.vatMode} disabled={vatLocked}
+                      onChange={(e) => set('vatMode', e.target.value as VatMode)}>
+                <option value="none">ไม่คิดภาษี</option>
+                <option value="ex">ราคายังไม่รวมภาษี</option>
+                <option value="in">ราคารวมภาษีแล้ว</option>
+              </select>
+              {vatLocked ? (
+                <span className="hint">
+                  {doc.kind === 'IVT' ? 'ใบกำกับภาษีต้องมี VAT เสมอ' : 'ใบส่งมอบแบบนี้ไม่มี VAT เสมอ'}
+                </span>
+              ) : null}
+            </div>
+
+            {!isQuote ? (
+              <div className="field">
+                <label htmlFor="whtRate">หัก ณ ที่จ่าย (%)</label>
+                <input className="in mono" id="whtRate" inputMode="decimal" value={doc.whtRate}
+                       onChange={(e) => set('whtRate', Number(e.target.value) || 0)} />
+                <span className="hint">คิดจากค่าแรงเท่านั้น (ร้านตั้งไว้ {shopWhtRate}%)</span>
+              </div>
+            ) : null}
+
+            {!isQuote ? (
+              <div className="field">
+                <label htmlFor="creditDays">เครดิต (วัน)</label>
+                <input className="in mono" id="creditDays" inputMode="numeric" value={doc.creditDays}
+                       onChange={(e) => set('creditDays', Math.max(0, Number(e.target.value) || 0))} />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {/* ---------- ลูกค้า ---------- */}
+      <div className={`card${state.field === 'party' ? ' bad' : ''}`}>
+        <header><h2>ลูกค้า</h2>{doc.partyId ? <span className="chip ok">เลือกจากทะเบียนแล้ว</span> : null}</header>
+        <div className="body">
+          <div className="tag-row" style={{ marginBottom: 12 }}>
+            <input className="in" value={custQuery} placeholder="ค้นชื่อ รหัส เบอร์โทร หรือทะเบียนรถ"
+                   style={{ width: 300 }}
+                   onChange={(e) => setCustQuery(e.target.value)}
+                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchCust(); } }} />
+            <button className="btn" type="button" onClick={searchCust} disabled={pending}>ค้นหาลูกค้า</button>
+            {doc.partyId ? (
+              <button className="btn" type="button"
+                      onClick={() => { setPicked(null); setDoc((d) => ({ ...d, partyId: null, vehicleId: null })); }}>
+                ล้างการเลือก
+              </button>
+            ) : null}
+          </div>
+
+          {custResults ? (
+            <div className="tablewrap" style={{ marginBottom: 12, maxHeight: 220, overflowY: 'auto' }}>
+              <table className="tbl">
+                <tbody>
+                  {custResults.length === 0 ? (
+                    <tr><td className="subtle">ไม่พบลูกค้า — พิมพ์ชื่อในช่องด้านล่างเพื่อออกเอกสารให้ลูกค้าขาจร</td></tr>
+                  ) : custResults.map((c) => (
+                    <tr key={c.id}>
+                      <td className="mono">{c.code}</td>
+                      <td className="wrap">{c.name}</td>
+                      <td className="mono">{c.tel || '-'}</td>
+                      <td className="subtle">{c.vehicles.length ? `${c.vehicles.length} คัน` : 'ไม่มีรถ'}</td>
+                      <td><button className="btn" type="button" onClick={() => applyCustomer(c)}>เลือก</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          <div className="row-fields f3">
+            <div className="field">
+              <label>ชื่อลูกค้า *</label>
+              <input className="in" value={doc.partyName}
+                     onChange={(e) => set('partyName', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>เลขประจำตัวผู้เสียภาษี</label>
+              <input className="in mono" value={doc.partyTaxId} inputMode="numeric"
+                     onChange={(e) => set('partyTaxId', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>โทรศัพท์</label>
+              <input className="in mono" value={doc.partyTel}
+                     onChange={(e) => set('partyTel', e.target.value)} />
+            </div>
+          </div>
+
+          <div className="field" style={{ marginTop: 12 }}>
+            <label>ที่อยู่บนเอกสาร</label>
+            <textarea className="in" value={doc.partyAddrText}
+                      onChange={(e) => set('partyAddrText', e.target.value)} />
+          </div>
+
+          {picked && picked.vehicles.length > 0 ? (
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>รถที่เข้ารับบริการ</label>
+              <select className="in" value={doc.vehicleId ?? ''}
+                      onChange={(e) => {
+                        const v = picked.vehicles.find((x) => x.id === e.target.value);
+                        setDoc((d) => ({ ...d, vehicleId: v?.id ?? null, vehicle: v?.data ?? null }));
+                      }}>
+                {picked.vehicles.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+              </select>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* ---------- อาการที่แจ้ง (ใบเสนอราคา) ---------- */}
+      {isQuote ? (
+        <div className="card">
+          <header><h2>อาการและสิ่งที่ตรวจพบ</h2></header>
+          <div className="body row-fields f2">
+            <div className="field">
+              <label>ปัญหาที่ลูกค้าแจ้ง</label>
+              {[0, 1, 2].map((i) => (
+                <input key={i} className="in" style={{ marginBottom: 6 }}
+                       value={doc.complaints[i] ?? ''}
+                       onChange={(e) => {
+                         const next = [...doc.complaints];
+                         next[i] = e.target.value;
+                         set('complaints', next);
+                       }} />
+              ))}
+            </div>
+            <div className="field">
+              <label>ปัญหาที่อู่ตรวจพบ</label>
+              {[0, 1, 2].map((i) => (
+                <input key={i} className="in" style={{ marginBottom: 6 }}
+                       value={doc.findings[i] ?? ''}
+                       onChange={(e) => {
+                         const next = [...doc.findings];
+                         next[i] = e.target.value;
+                         set('findings', next);
+                       }} />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ---------- รายการ ---------- */}
+      <div className={`card${state.field === 'items' ? ' bad' : ''}`}>
+        <header>
+          <h2>รายการอะไหล่และค่าแรง</h2>
+          <div className="spacer" />
+          <span className="subtle">{doc.items.length} บรรทัด</span>
+        </header>
+
+        <div className="toolbar">
+          <input className="in" value={partQuery} placeholder="ค้นอะไหล่จากรหัส ชื่อ หรือ OEM"
+                 style={{ width: 280 }}
+                 onChange={(e) => setPartQuery(e.target.value)}
+                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchPart(); } }} />
+          <button className="btn" type="button" onClick={searchPart} disabled={pending}>ค้นหาอะไหล่</button>
+          <button className="btn" type="button"
+                  onClick={() => setDoc((d) => ({ ...d, items: [...d.items, emptyItem()] }))}>
+            + บรรทัดเปล่า
+          </button>
+          <button className="btn" type="button"
+                  onClick={() => setDoc((d) => ({
+                    ...d,
+                    items: [...d.items, { ...emptyItem(), code: 'LAB', name: 'ค่าแรง', unit: 'รายการ', isService: true }],
+                  }))}>
+            + ค่าแรง
+          </button>
+        </div>
+
+        {partResults ? (
+          <div className="tablewrap" style={{ maxHeight: 240, overflowY: 'auto', borderBottom: '1px solid var(--line)' }}>
+            <table className="tbl">
+              <tbody>
+                {partResults.length === 0 ? (
+                  <tr><td className="subtle">ไม่พบอะไหล่ — ใช้ปุ่ม “บรรทัดเปล่า” พิมพ์ชื่อเองได้</td></tr>
+                ) : partResults.map((p) => (
+                  <tr key={p.id}>
+                    <td className="mono">{p.code}</td>
+                    <td className="wrap">{p.name}</td>
+                    <td className="num">{baht(priceOf(p))}</td>
+                    <td className="num subtle">คงเหลือ {p.qtyOnHand.toLocaleString('en-US')}</td>
+                    <td><button className="btn" type="button" onClick={() => addProduct(p)}>เพิ่ม</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {doc.items.length === 0 ? (
+          <div className="empty">ยังไม่มีรายการ — ค้นหาอะไหล่หรือกดเพิ่มบรรทัดเปล่า</div>
+        ) : (
+          <div className="tablewrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th style={{ width: 34 }}>#</th>
+                  <th style={{ width: 110 }}>รหัส</th>
+                  <th>รายการ</th>
+                  <th style={{ width: 80 }} className="num">จำนวน</th>
+                  <th style={{ width: 70 }}>หน่วย</th>
+                  <th style={{ width: 110 }} className="num">ราคา/หน่วย</th>
+                  <th style={{ width: 110 }} className="num">จำนวนเงิน</th>
+                  <th style={{ width: 60 }}>ค่าแรง</th>
+                  <th style={{ width: 44 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {doc.items.map((it, i) => (
+                  <tr key={i}>
+                    <td className="subtle">{i + 1}</td>
+                    <td>
+                      <input className="in mono" style={{ padding: '4px 6px' }} value={it.code}
+                             onChange={(e) => setItem(i, { code: e.target.value })} />
+                    </td>
+                    <td>
+                      <input className="in" style={{ padding: '4px 6px' }} value={it.name}
+                             onChange={(e) => setItem(i, { name: e.target.value })} />
+                    </td>
+                    <td>
+                      <input className="in mono" style={{ padding: '4px 6px', textAlign: 'right' }}
+                             inputMode="decimal" value={it.qty}
+                             onChange={(e) => setItem(i, { qty: Number(e.target.value) || 0 })} />
+                    </td>
+                    <td>
+                      <input className="in" style={{ padding: '4px 6px' }} value={it.unit}
+                             onChange={(e) => setItem(i, { unit: e.target.value })} />
+                    </td>
+                    <td>
+                      <input className="in mono" style={{ padding: '4px 6px', textAlign: 'right' }}
+                             inputMode="decimal" value={it.unitPrice}
+                             onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) || 0 })} />
+                    </td>
+                    <td className="num">{baht(money(it.qty * it.unitPrice))}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <input type="checkbox" checked={it.isService}
+                             onChange={(e) => setItem(i, { isService: e.target.checked })} />
+                    </td>
+                    <td>
+                      <button className="btn danger" type="button" style={{ padding: '2px 8px' }}
+                              onClick={() => setDoc((d) => ({ ...d, items: d.items.filter((_, j) => j !== i) }))}>
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="body" style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+          <div className="field" style={{ width: 200 }}>
+            <label>ส่วนลด (บาท)</label>
+            <input className="in mono" inputMode="decimal" value={doc.discount}
+                   onChange={(e) => set('discount', Number(e.target.value) || 0)} />
+          </div>
+
+          <div className="totals">
+            <div className="row"><span className="lbl">รวมเป็นเงิน</span><span>{baht(t.sub)}</span></div>
+            {doc.discount > 0 ? (
+              <div className="row"><span className="lbl">ส่วนลด</span><span>−{baht(t.disc)}</span></div>
+            ) : null}
+            {doc.vatMode !== 'none' ? (
+              <>
+                <div className="row"><span className="lbl">มูลค่าก่อนภาษี</span><span>{baht(t.net)}</span></div>
+                <div className="row"><span className="lbl">ภาษีมูลค่าเพิ่ม {vatRate}%</span><span>{baht(t.vat)}</span></div>
+              </>
+            ) : null}
+            <div className="row grand"><span>รวมทั้งสิ้น</span><span>{baht(t.grand)}</span></div>
+            {t.wht > 0 ? (
+              <>
+                <div className="row">
+                  <span className="lbl">หัก ณ ที่จ่าย {doc.whtRate}% (ค่าแรง {baht(t.whtBase)})</span>
+                  <span>−{baht(t.wht)}</span>
+                </div>
+                <div className="row grand"><span>ยอดสุทธิ</span><span>{baht(t.payable)}</span></div>
+              </>
+            ) : null}
+            <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--ink-3)' }}>
+              ({bahttext(t.payable)})
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ---------- รับชำระเงิน ---------- */}
+      {isReceipt ? (
+        <div className="card">
+          <header>
+            <h2>รับชำระเงิน</h2>
+            <div className="spacer" />
+            <span className="subtle">
+              รับแล้ว {baht(paidNow)} · {remain > EPS ? `คงเหลือเป็นเครดิต ${baht(remain)}` : 'ครบแล้ว'}
+            </span>
+          </header>
+          <div className="body">
+            <div className="row-fields f3">
+              {['เงินสด', 'เงินโอน', 'บัตรเครดิต'].map((method) => {
+                const at = doc.payments.findIndex((p) => p.method === method);
+                const amount = at >= 0 ? doc.payments[at]!.amount : 0;
+                return (
+                  <div className="field" key={method}>
+                    <label>{method}</label>
+                    <input className="in mono" inputMode="decimal" value={amount || ''}
+                           placeholder="0.00"
+                           onChange={(e) => {
+                             const v = Number(e.target.value) || 0;
+                             setDoc((d) => {
+                               const rest = d.payments.filter((p) => p.method !== method);
+                               return {
+                                 ...d,
+                                 payments: v > 0 ? [...rest, { method, amount: v, ref: '' }] : rest,
+                               };
+                             });
+                           }} />
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="tag-row" style={{ marginTop: 12 }}>
+              <button className="btn" type="button"
+                      onClick={() => setDoc((d) => ({
+                        ...d,
+                        payments: [{ method: 'เงินสด', amount: t.payable, ref: '' }],
+                      }))}>
+                รับเงินสดเต็มจำนวน
+              </button>
+              <button className="btn" type="button"
+                      onClick={() => setDoc((d) => ({
+                        ...d,
+                        payments: [{ method: 'เงินโอน', amount: t.payable, ref: '' }],
+                      }))}>
+                รับโอนเต็มจำนวน
+              </button>
+              <button className="btn" type="button"
+                      onClick={() => setDoc((d) => ({ ...d, payments: [] }))}>
+                ยังไม่รับเงิน (เครดิต)
+              </button>
+            </div>
+
+            <div className="row-fields f2" style={{ marginTop: 14 }}>
+              <div className="field">
+                <label>ผู้รับเงิน</label>
+                <input className="in" value={doc.receivedBy}
+                       onChange={(e) => set('receivedBy', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>เงื่อนไขการรับประกัน</label>
+                <textarea className="in" value={doc.warrantyText}
+                          onChange={(e) => set('warrantyText', e.target.value)} />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="card">
+        <div className="body">
+          <div className="field">
+            <label>หมายเหตุ</label>
+            <textarea className="in" value={doc.note} onChange={(e) => set('note', e.target.value)} />
+          </div>
+
+          <div className="formbar">
+            <Submit label={mode === 'new' ? `บันทึก${KIND_LABEL[doc.kind]}` : 'บันทึกการแก้ไข'} />
+            <Link className="btn" href="/income">ยกเลิก</Link>
+            {doc.parentDocId ? (
+              <span className="subtle">ออกต่อจากเอกสารที่เลือกไว้</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </form>
+  );
+}
