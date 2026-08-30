@@ -5,6 +5,9 @@ import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getDocDetail, getShop } from '@/lib/queries';
 import { canEdit } from '@/lib/sales';
+import { listPayments } from '@/lib/receivables';
+import { can } from '@/lib/auth';
+import { PaymentsPanel } from '../../finance/payments-panel';
 import { DocActions } from '../doc-actions';
 import { baht, KIND_LABEL, payLabel, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
 
@@ -16,10 +19,12 @@ export default async function DocPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
-  await requirePerm('income');
+  const session = await requirePerm('income');
   const { id } = await params;
   const sp = await searchParams;
-  const [doc, shop, editable] = await Promise.all([getDocDetail(id), getShop(), canEdit(id)]);
+  const [doc, shop, editable, payments] = await Promise.all([
+    getDocDetail(id), getShop(), canEdit(id), listPayments(id),
+  ]);
   if (!doc) notFound();
 
   const paid = doc.payments.reduce((s, p) => s + p.amount, 0);
@@ -151,38 +156,17 @@ export default async function DocPage({
         </div>
       </div>
 
-      <div className="grid g2">
-        <div className="card">
-          <header><h2>การรับชำระเงิน</h2></header>
-          {doc.payments.length === 0 ? (
-            <div className="empty">ยังไม่มีการรับชำระ</div>
-          ) : (
-            <div className="tablewrap">
-              <table className="tbl">
-                <thead>
-                  <tr><th>วันที่</th><th>ช่องทาง</th><th>อ้างอิง</th><th className="num">จำนวนเงิน</th></tr>
-                </thead>
-                <tbody>
-                  {doc.payments.map((p, i) => (
-                    <tr key={i}>
-                      <td>{thDate(p.paidOn)}</td>
-                      <td>{p.method}{p.atIssue ? <span className="chip" style={{ marginLeft: 6 }}>ตอนออกเอกสาร</span> : null}</td>
-                      <td className="wrap" style={{ color: 'var(--ink-3)' }}>{p.ref || '-'}</td>
-                      <td className="num">{baht(p.amount)}</td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td colSpan={3} style={{ fontWeight: 600 }}>คงค้าง</td>
-                    <td className="num" style={{ fontWeight: 700, color: outstanding > 0.004 ? 'var(--due)' : 'var(--ok)' }}>
-                      {baht(outstanding)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+      {doc.kind === 'QT' ? null : (
+        <PaymentsPanel
+          docId={doc.id}
+          docNo={doc.docNo}
+          payable={doc.payable}
+          payments={payments}
+          canPay={doc.status === 'issued' && can(session, 'finance')}
+        />
+      )}
 
+      <div className="grid g2">
         <div className="card">
           <header><h2>รายละเอียดอื่น</h2></header>
           <div className="body">

@@ -8,7 +8,7 @@ const MENU: { no: string; href: string; label: string; perm: Perm | null; ready:
   { no: '03', href: '/income', label: 'รายรับ', perm: 'income', ready: true },
   { no: '04', href: '/expense', label: 'รายจ่าย', perm: 'expense', ready: false },
   { no: '05', href: '/stock', label: 'สินค้า', perm: 'stock', ready: true },
-  { no: '06', href: '/finance', label: 'บัญชี / การเงิน', perm: 'finance', ready: false },
+  { no: '06', href: '/finance', label: 'บัญชี / การเงิน', perm: 'finance', ready: true },
   { no: '07', href: '/settings', label: 'ตั้งค่าร้าน', perm: 'settings', ready: false },
   { no: '08', href: '/license', label: 'ลิขสิทธิ์การใช้งาน', perm: 'settings', ready: false },
 ];
