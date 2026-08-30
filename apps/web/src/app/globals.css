@@ -252,3 +252,49 @@ table.doc td.blank { height: 19px; }
   }
   .paper + .paper { page-break-before: always; }
 }
+
+/* =====================================================================
+   ฟอร์ม
+   ===================================================================== */
+.form { display: flex; flex-direction: column; gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > label { font-size: 12.5px; color: var(--ink-3); }
+.field .in, .field select, .field textarea { width: 100%; }
+.field.bad .in, .field.bad select { border-color: var(--due); }
+.hint { font-size: 12px; color: var(--ink-3); }
+
+.row-fields { display: grid; gap: 12px; }
+.f2 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.f3 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.f4 { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+
+select.in { appearance: auto; background: #fff; }
+textarea.in { font-family: inherit; resize: vertical; min-height: 60px; }
+
+.formbar {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding-top: 14px; border-top: 1px solid var(--line); margin-top: 4px;
+}
+.err {
+  background: #FCF1F1; border: 1px solid #EEC4C4; color: #7A2020;
+  border-radius: 6px; padding: 10px 14px; font-size: 13px;
+}
+.ok-msg {
+  background: #F1F9F4; border: 1px solid #BFE0CE; color: #17603A;
+  border-radius: 6px; padding: 10px 14px; font-size: 13px;
+}
+.btn.danger { color: var(--due); border-color: #EEC4C4; }
+.btn.danger:hover { border-color: var(--due); }
+.btn:disabled { opacity: .5; cursor: default; }
+
+/* แถวรถในฟอร์มผู้ติดต่อ */
+.veh {
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 14px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--card);
+}
+.veh > header { display: flex; align-items: center; gap: 10px; }
+.veh > header b { font-size: 13.5px; }
+
+.subtle { color: var(--ink-3); font-size: 12.5px; }
+.tag-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
