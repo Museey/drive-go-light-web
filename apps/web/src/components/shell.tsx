@@ -1,4 +1,4 @@
-import { getShop } from '@/lib/queries';
+import { requireSession } from '@/lib/auth';
 import { Rail } from './rail';
 
 export async function Shell({
@@ -10,10 +10,10 @@ export async function Shell({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const shop = await getShop();
+  const session = await requireSession();
   return (
     <div className="app">
-      <Rail shopName={shop.name} current={current} />
+      <Rail session={session} current={current} />
       <div className="main">
         <div className="topbar">
           <div>

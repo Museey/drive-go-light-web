@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { listIncomeDocs } from '@/lib/queries';
 import { baht, KIND_SHORT, payLabel, thDate } from '@/lib/format';
@@ -17,6 +18,7 @@ export default async function IncomePage({
 }: {
   searchParams: Promise<{ q?: string; kind?: string; page?: string }>;
 }) {
+  await requirePerm('income');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const search = sp.q ?? '';

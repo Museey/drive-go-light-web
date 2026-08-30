@@ -1,48 +1,70 @@
 import { redirect } from 'next/navigation';
-import { listTenantsForDev, setTenant } from '@/lib/session';
+import { headers } from 'next/headers';
+import { currentSession, signIn } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-async function choose(formData: FormData) {
-  'use server';
-  const id = String(formData.get('tenantId') ?? '').trim();
-  if (id) {
-    await setTenant(id);
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; next?: string }>;
+}) {
+  if (await currentSession()) redirect('/');
+  const sp = await searchParams;
+
+  async function submit(formData: FormData) {
+    'use server';
+    const email = String(formData.get('email') ?? '');
+    const password = String(formData.get('password') ?? '');
+
+    if (!email || !password) {
+      redirect('/login?error=' + encodeURIComponent('กรุณากรอกอีเมลและรหัสผ่าน'));
+    }
+
+    const ua = (await headers()).get('user-agent') ?? undefined;
+    const result = await signIn(email, password, ua);
+
+    if (!result.ok) redirect('/login?error=' + encodeURIComponent(result.message));
     redirect('/');
   }
-}
-
-export default async function LoginPage() {
-  const tenants = await listTenantsForDev();
 
   return (
-    <div className="wrap" style={{ maxWidth: 620, margin: '48px auto' }}>
-      <div className="card">
-        <header><h2>เลือกอู่ที่จะเข้าใช้งาน</h2></header>
-        <div className="body">
-          <div className="note">
-            <b>ยังไม่มีระบบเข้าสู่ระบบจริง</b><br />
-            หน้านี้มีไว้ให้เดินหน้าพัฒนาต่อได้เท่านั้น ยังไม่มีการยืนยันตัวตน
-            และเปิดเฉพาะตอนพัฒนา ของจริงต้องเป็นอีเมล + รหัสผ่าน แล้วออก session
-            ที่ผูกทั้งผู้ใช้และอู่
-          </div>
+    <div style={{ maxWidth: 400, margin: '80px auto', padding: '0 20px' }}>
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ fontSize: 24, fontWeight: 700 }}>
+          DriveGo<span style={{ color: 'var(--accent)' }}>Light!</span>
+        </div>
+        <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>ระบบบริหารงานอู่ซ่อมรถยนต์</div>
+      </div>
 
-          {tenants.length === 0 ? (
-            <p style={{ color: 'var(--ink-3)' }}>
-              ยังไม่มีอู่ในฐานข้อมูล หรือยังไม่ได้ตั้ง <span className="mono">DEV_ADMIN_DATABASE_URL</span>
-              <br />
-              นำเข้าข้อมูลก่อนด้วย <span className="mono">packages/importer</span>
-            </p>
-          ) : (
-            <form action={choose}>
-              <select className="in" name="tenantId" style={{ width: '100%', marginBottom: 12 }}>
-                {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name} — {t.id.slice(0, 8)}</option>
-                ))}
-              </select>
-              <button className="btn primary" type="submit">เข้าใช้งาน</button>
-            </form>
-          )}
+      <div className="card">
+        <header><h2>เข้าสู่ระบบ</h2></header>
+        <div className="body">
+          {sp.error ? (
+            <div className="note" style={{ background: '#FCF1F1', borderColor: '#EEC4C4', color: '#7A2020' }}>
+              {sp.error}
+            </div>
+          ) : null}
+
+          <form action={submit}>
+            <label className="in-label" htmlFor="email" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+              อีเมล
+            </label>
+            <input className="in" id="email" name="email" type="email" autoComplete="username"
+                   required autoFocus style={{ width: '100%', marginBottom: 12 }} />
+
+            <label htmlFor="password" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+              รหัสผ่าน
+            </label>
+            <input className="in" id="password" name="password" type="password"
+                   autoComplete="current-password" required style={{ width: '100%', marginBottom: 16 }} />
+
+            <button className="btn primary" type="submit" style={{ width: '100%' }}>เข้าสู่ระบบ</button>
+          </form>
+
+          <p style={{ color: 'var(--ink-3)', fontSize: 12, marginTop: 16, marginBottom: 0 }}>
+            ยังไม่ได้ตั้งรหัสผ่าน? ใช้ลิงก์ตั้งรหัสผ่านที่ได้รับจากเจ้าของกิจการ
+          </p>
         </div>
       </div>
     </div>

@@ -35,7 +35,12 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
     await admin.query('drop schema if exists public cascade; create schema public;');
     await admin.query(readFileSync(SCHEMA, 'utf8'));
     await admin.query(`
-      drop role if exists dgl_app;
+      do $$ begin
+        if exists (select 1 from pg_roles where rolname = 'dgl_app') then
+          execute 'drop owned by dgl_app';   -- ต้องคืนสิทธิ์ก่อน ไม่งั้นลบ role ไม่ได้
+          execute 'drop role dgl_app';
+        end if;
+      end $$;
       create role dgl_app login password 'apppass';
       grant usage on schema public to dgl_app;
       grant select, insert, update, delete on all tables in schema public to dgl_app;

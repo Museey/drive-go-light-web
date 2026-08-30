@@ -1,5 +1,5 @@
 import 'server-only';
-import { query } from './session';
+import { query } from './auth';
 
 /** ยอดเงินจาก Postgres มาเป็นสตริง แปลงเองเพื่อไม่ให้เสียความละเอียดระหว่างทาง */
 const money = (v: unknown): number => Number(v ?? 0);

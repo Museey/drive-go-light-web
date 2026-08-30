@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext } from '@drivegolight/core';
+import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getDocDetail, getShop } from '@/lib/queries';
 import { baht, KIND_LABEL, payLabel, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
@@ -8,6 +9,7 @@ import { baht, KIND_LABEL, payLabel, thDate, thDateLong, VAT_MODE_LABEL } from '
 export const dynamic = 'force-dynamic';
 
 export default async function DocPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePerm('income');
   const { id } = await params;
   const [doc, shop] = await Promise.all([getDocDetail(id), getShop()]);
   if (!doc) notFound();

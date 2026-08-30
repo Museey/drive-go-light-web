@@ -1,15 +1,34 @@
 import Link from 'next/link';
+import { can, requireSession } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getHomeSummary, getShop } from '@/lib/queries';
 import { baht, KIND_SHORT } from '@/lib/format';
 
+const PERM_LABEL: Record<string, string> = {
+  customer: 'ข้อมูลลูกค้า / ผู้ขาย', income: 'รายรับ', expense: 'รายจ่าย',
+  stock: 'สินค้า', finance: 'บัญชี / การเงิน', settings: 'ตั้งค่าร้าน',
+};
+
 export const dynamic = 'force-dynamic';
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ denied?: string }>;
+}) {
+  const session = await requireSession();
+  const sp = await searchParams;
   const [shop, summary] = await Promise.all([getShop(), getHomeSummary()]);
+  const seesIncome = can(session, 'income');
 
   return (
     <Shell current="/" title="หน้าแรก" sub={`ภาษีมูลค่าเพิ่ม ${shop.vatRate}% · หัก ณ ที่จ่าย ${shop.whtRate}%`}>
+      {sp.denied ? (
+        <div className="note" style={{ background: '#FCF1F1', borderColor: '#EEC4C4', color: '#7A2020' }}>
+          คุณไม่มีสิทธิ์เข้าเมนู <b>{PERM_LABEL[sp.denied] ?? sp.denied}</b> — ติดต่อเจ้าของกิจการหากต้องใช้งาน
+        </div>
+      ) : null}
+
       <div className="grid g4" style={{ marginBottom: 18 }}>
         <div className="card"><div className="body stat">
           <div className="label">ยอดขาย (ก่อนภาษี)</div>
@@ -45,7 +64,7 @@ export default async function HomePage() {
                   <td>{KIND_SHORT[d.kind] ?? d.kind}</td>
                   <td className="num">{d.count.toLocaleString('en-US')}</td>
                   <td>
-                    {['IV', 'IVT', 'RC'].includes(d.kind) ? (
+                    {seesIncome && ['IV', 'IVT', 'RC'].includes(d.kind) ? (
                       <Link href={{ pathname: '/income', query: { kind: d.kind } }}
                             style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}>
                         ดูรายการ

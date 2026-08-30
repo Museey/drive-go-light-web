@@ -48,21 +48,50 @@ docker run -d --name dgl_pg -e POSTGRES_PASSWORD=x -e POSTGRES_DB=dgl -p 5433:54
 ```
 
 ```bash
-psql postgresql://postgres:x@localhost:5433/dgl -v ON_ERROR_STOP=1 -f db/001_init.sql -f db/app-role.sql
+psql postgresql://postgres:x@localhost:5433/dgl -v ON_ERROR_STOP=1 \
+  -f db/001_init.sql -f db/002_auth.sql -f db/app-role.sql
 ```
 
 ```bash
 npm run fixture && npm run build -w @drivegolight/core && npm run build -w @drivegolight/importer
 ```
 
+นำเข้าข้อมูลพร้อมสร้างบัญชีเจ้าของกิจการ — คำสั่งจะพิมพ์ลิงก์ตั้งรหัสผ่านออกมา
+
 ```bash
-node packages/importer/dist/cli.js fixtures/demo-backup.json --url=postgresql://postgres:x@localhost:5433/dgl
+node packages/importer/dist/cli.js fixtures/demo-backup.json --url=postgresql://postgres:x@localhost:5433/dgl --owner-email=owner@example.com
 ```
 
 คัดลอก `apps/web/.env.example` เป็น `apps/web/.env.local` แล้วสั่ง
 
 ```bash
 npm run dev
+```
+
+เปิดลิงก์ตั้งรหัสผ่านที่ได้จากขั้นตอนก่อนหน้า ตั้งรหัสผ่าน แล้วเข้าสู่ระบบ
+
+## ระบบเข้าสู่ระบบ
+
+**ไก่กับไข่ของ multi-tenant + RLS** — ตาราง `users` มี RLS กรองด้วย `tenant_id`
+แต่ตอนผู้ใช้กรอกอีเมลเข้ามาเรายังไม่รู้ว่าเขาอยู่อู่ไหน จึงหาแถวไม่เจอเลย
+
+ทางออกคือแยกงานยืนยันตัวตนไปไว้ในสคีมา `auth` ที่ role ของแอป **แตะตารางตรง ๆ ไม่ได้**
+เข้าถึงได้เฉพาะผ่านฟังก์ชัน `SECURITY DEFINER` ที่เขียนไว้ให้ทำงานแคบ ๆ ทีละอย่าง
+(ดู [`db/002_auth.sql`](db/002_auth.sql)) ช่องทางที่ข้าม RLS ได้จึงมีเท่าที่เขียนไว้ในไฟล์เดียวนั้น
+
+| เรื่อง | ทำอย่างไร |
+|---|---|
+| รหัสผ่าน | scrypt จาก `node:crypto` เก็บพารามิเตอร์ไว้ในค่าที่บันทึกเพื่อปรับความหนักภายหลังได้ |
+| session | สุ่ม 32 ไบต์ ฐานข้อมูลเก็บแค่ SHA-256 — ฐานข้อมูลรั่วก็สวมสิทธิ์ไม่ได้ · เพิกถอนได้ทันที |
+| กันเดารหัส | ผิดครบ 5 ครั้งล็อก 15 นาที · ข้อความตอบเหมือนกันหมดไม่ว่าพลาดตรงไหน |
+| ตั้งรหัสผ่านครั้งแรก | ลิงก์ใช้ได้ครั้งเดียว หมดอายุ 7 วัน · ออกลิงก์ใหม่ทำให้ลิงก์เก่าใช้ไม่ได้ |
+| เปลี่ยนรหัสผ่าน | ไล่ทุก session ออกทั้งหมด |
+| สิทธิ์ | เมนูที่ไม่มีสิทธิ์ถูกซ่อน **และ** ทุกหน้าเรียก `requirePerm()` ฝั่ง server — การซ่อนปุ่มไม่ใช่การป้องกัน |
+
+ออกลิงก์ตั้งรหัสผ่านให้อู่ที่นำเข้าไปแล้ว
+
+```bash
+node packages/importer/dist/cli.js --tenant=<uuid> --owner-email=owner@example.com --url=...
 ```
 
 ## การตัดสินใจหลักที่ยึดไว้
@@ -87,10 +116,8 @@ npm run dev
 
 ## ที่ยังไม่ได้ทำ
 
-- **ระบบเข้าสู่ระบบจริง** — ตอนนี้ `/login` เป็นตัวสลับอู่สำหรับพัฒนาเท่านั้น
-  ไม่มีการยืนยันตัวตน ห้ามขึ้น production ตามสภาพ
-  ของจริงต้องมีฟังก์ชัน `SECURITY DEFINER` ไว้หา `users` จากอีเมล
-  (เพราะ `users` มี RLS จึงหาไม่เจอถ้ายังไม่รู้ว่าอยู่อู่ไหน) + ตรวจรหัสผ่านด้วย argon2
 - เมนู 02 · 04–08 ยังไม่ได้ทำ — ทำแล้วเฉพาะหน้าแรกกับรายรับ (อ่านอย่างเดียว)
+- หน้าจัดการผู้ใช้ในเว็บ — ตอนนี้เพิ่มพนักงานได้ทาง SQL เท่านั้น
+- ลืมรหัสผ่านด้วยตัวเอง — โครงสร้างรองรับแล้ว (`purpose = 'reset'`) แต่ยังไม่มีหน้าและยังไม่ส่งอีเมล
 - ยังสร้าง/แก้เอกสารไม่ได้ · ยังพิมพ์ไม่ได้
 - ตาราง `vat_periods` สำหรับปิดงวด ภ.พ.30
