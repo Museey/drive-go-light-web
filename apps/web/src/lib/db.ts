@@ -1,0 +1,100 @@
+import 'server-only';
+import pg from 'pg';
+
+/**
+ * คอลัมน์ date (oid 1082) ต้องกลับมาเป็นสตริง 'YYYY-MM-DD'
+ *
+ * ค่าตั้งต้นของ pg คือแปลงเป็น JS Date ที่เที่ยงคืนตามเวลาเครื่อง พอเรียก
+ * toISOString() ต่อจะได้วันที่ก่อนหน้า 1 วันเสมอในเขตเวลาไทย (UTC+7)
+ * วันครบกำหนดชำระและวันที่บนเอกสารจะเพี้ยนทั้งระบบ
+ *
+ * เป็นบั๊กเดียวกับที่โปรแกรมรุ่นเดิมเคยเจอ — ดูคอมเมนต์เหนือ iso() ใน legacy/
+ */
+pg.types.setTypeParser(1082, (v) => v);
+
+/** numeric (oid 1700) กลับมาเป็นสตริงตามค่าตั้งต้นอยู่แล้ว — แปลงเองตอนใช้ ห้ามให้ pg ปัดให้ */
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __dglPool: pg.Pool | undefined;
+  // eslint-disable-next-line no-var
+  var __dglRlsChecked: boolean | undefined;
+}
+
+function makePool(): pg.Pool {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('ยังไม่ได้ตั้งตัวแปรแวดล้อม DATABASE_URL — ดู apps/web/.env.example');
+  }
+  return new pg.Pool({ connectionString, max: 10 });
+}
+
+/** dev server รีโหลดโมดูลบ่อย — เก็บ pool ไว้บน globalThis กัน connection รั่ว */
+const pool: pg.Pool = globalThis.__dglPool ?? (globalThis.__dglPool = makePool());
+
+/**
+ * ตรวจว่า role ที่ต่ออยู่ไม่ข้าม Row Level Security
+ *
+ * superuser และ role ที่มี BYPASSRLS จะมองเห็นข้อมูลทุกอู่โดยไม่มีอาการผิดปกติ
+ * ให้เห็นเลย — แอปจะดูเหมือนทำงานได้ปกติจนกว่าจะมีอู่ที่สอง แล้วข้อมูลรั่วข้ามกัน
+ * ยอมให้พังตั้งแต่ต้นดีกว่าปล่อยให้เงียบ
+ */
+async function assertRlsEnforced(client: pg.PoolClient): Promise<void> {
+  if (globalThis.__dglRlsChecked) return;
+
+  const { rows } = await client.query<{ rolsuper: boolean; rolbypassrls: boolean }>(
+    `select rolsuper, rolbypassrls from pg_roles where rolname = current_user`,
+  );
+  const role = rows[0];
+  if (role?.rolsuper || role?.rolbypassrls) {
+    throw new Error(
+      'แอปต่อฐานข้อมูลด้วย role ที่ข้าม Row Level Security ได้ ' +
+      '(superuser หรือมี BYPASSRLS) — ข้อมูลจะรั่วข้ามอู่โดยไม่มีอาการให้เห็น\n' +
+      'สร้าง role สำหรับแอปด้วย db/app-role.sql แล้วเปลี่ยน DATABASE_URL ไปใช้ role นั้น',
+    );
+  }
+  globalThis.__dglRlsChecked = true;
+}
+
+/**
+ * รัน query ในนามของอู่หนึ่งราย
+ *
+ * ทุกการอ่านเขียนข้อมูลต้องผ่านฟังก์ชันนี้ ห้ามเรียก pool.query() ตรง ๆ
+ * เพราะ app.tenant_id ตั้งแบบ local ซึ่งมีผลเฉพาะในทรานแซกชัน ถ้าไม่มีทรานแซกชัน
+ * RLS จะกรองทุกแถวออกหมด (หรือแย่กว่านั้นคือใช้ค่าที่ค้างจาก request ก่อน)
+ */
+export async function withTenant<T>(
+  tenantId: string,
+  fn: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await assertRlsEnforced(client);
+    await client.query('begin');
+    await client.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
+    const result = await fn(client);
+    await client.query('commit');
+    return result;
+  } catch (err) {
+    await client.query('rollback').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * query ที่ไม่ผูกกับอู่ใดอู่หนึ่ง — ใช้ได้เฉพาะตอนเข้าสู่ระบบและงานดูแลระบบ
+ * ตาราง tenants มี RLS อยู่ด้วย จึงอ่านได้เฉพาะคอลัมน์ที่นโยบายอนุญาต
+ */
+export async function withoutTenant<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await assertRlsEnforced(client);
+    return await fn(client);
+  } finally {
+    client.release();
+  }
+}
+
+export type { PoolClient } from 'pg';

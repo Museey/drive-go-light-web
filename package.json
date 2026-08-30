@@ -2,10 +2,16 @@
   "name": "drivegolight",
   "private": true,
   "description": "DriveGoLight! — เว็บแอปบริหารงานอู่ซ่อมรถยนต์",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "fixture": "node tools/make-demo-backup.mjs --date=2026-08-28",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "dev": "npm run dev -w @drivegolight/web"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
