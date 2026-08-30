@@ -5,6 +5,9 @@ import { redirect } from 'next/navigation';
 import {
   adjustStock, createCategory, deleteCategory, renameCategory, saveProduct,
 } from '@/lib/products';
+import {
+  createProductFromPending, ignorePendingItem, linkPendingToProduct, restoreIgnoredItems,
+} from '@/lib/pending';
 import { flag, friendlyDbError, keepValues, money, qty, str, type FormResult } from '@/lib/mutate';
 
 export async function saveProductAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
@@ -84,4 +87,48 @@ export async function renameCategoryAction(id: string, name: string): Promise<vo
 export async function deleteCategoryAction(id: string): Promise<void> {
   await deleteCategory(id);
   revalidatePath('/stock');
+}
+
+/* ---------- รายการค้างทำ ---------- */
+
+export async function linkPendingAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
+  const nameNorm = str(fd, 'nameNorm');
+  const productId = str(fd, 'productId');
+  if (!productId) return { error: 'ต้องเลือกสินค้าที่จะผูกด้วย' };
+
+  try {
+    const linked = await linkPendingToProduct(nameNorm, productId);
+    revalidatePath('/stock/pending');
+    return { ok: true, error: undefined, values: { linked: String(linked) } };
+  } catch (err) {
+    return { error: friendlyDbError(err) };
+  }
+}
+
+export async function ignorePendingAction(nameNorm: string): Promise<void> {
+  await ignorePendingItem(nameNorm);
+  revalidatePath('/stock/pending');
+}
+
+export async function restoreIgnoredAction(): Promise<void> {
+  await restoreIgnoredItems();
+  revalidatePath('/stock/pending');
+}
+
+export async function createFromPendingAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
+  const nameNorm = str(fd, 'nameNorm');
+  const code = str(fd, 'code');
+  if (!code) return { error: 'ต้องกรอกรหัสสินค้า', field: 'code' };
+
+  try {
+    await createProductFromPending(
+      nameNorm, code, str(fd, 'name'), str(fd, 'unit'), money(fd, 'cost'), money(fd, 'priceA'),
+    );
+  } catch (err) {
+    return { error: friendlyDbError(err, { code: `รหัสสินค้า "${code}" มีอยู่แล้ว` }), field: 'code' };
+  }
+
+  revalidatePath('/stock/pending');
+  revalidatePath('/stock');
+  return { ok: true };
 }

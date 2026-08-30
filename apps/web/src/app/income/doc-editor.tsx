@@ -94,6 +94,37 @@ export function DocEditor({
   const priceOf = (p: PickedProduct) =>
     doc.priceTier === 'C' ? p.priceC : doc.priceTier === 'B' ? p.priceB : p.priceA;
 
+  /**
+   * เปลี่ยนระดับราคา — ถามก่อนว่าจะปรับราคาบรรทัดที่ใส่ไปแล้วด้วยหรือไม่
+   * ของเดิมปรับให้เงียบ ๆ ซึ่งอันตรายถ้าช่างแก้ราคาบางบรรทัดเองไว้
+   */
+  const changeTier = (tier: 'A' | 'B' | 'C') => {
+    const linked = doc.items.filter((i) => i.productId);
+    if (linked.length === 0) { set('priceTier', tier); return; }
+
+    const yes = window.confirm(
+      `เปลี่ยนเป็นราคาระดับ ${tier} แล้ว\n` +
+      `ต้องการปรับราคาอะไหล่ ${linked.length} บรรทัดที่ใส่ไว้แล้วตามระดับใหม่ด้วยหรือไม่?\n\n` +
+      'กดตกลง = ปรับราคาให้ · กดยกเลิก = เปลี่ยนเฉพาะรายการที่จะเพิ่มใหม่',
+    );
+    if (!yes) { set('priceTier', tier); return; }
+
+    startTransition(async () => {
+      const codes = linked.map((i) => i.code).filter(Boolean);
+      const found = await searchProductsAction(codes.join(' '));
+      setDoc((d) => ({
+        ...d,
+        priceTier: tier,
+        items: d.items.map((it) => {
+          if (!it.productId) return it;
+          const p = found.find((x) => x.id === it.productId);
+          if (!p) return it;
+          return { ...it, unitPrice: tier === 'C' ? p.priceC : tier === 'B' ? p.priceB : p.priceA };
+        }),
+      }));
+    });
+  };
+
   const addProduct = (p: PickedProduct) => {
     setDoc((d) => {
       const at = d.items.findIndex((i) => i.productId === p.id);
@@ -134,17 +165,16 @@ export function DocEditor({
                      onChange={(e) => set('docDate', e.target.value)} />
             </div>
 
-            {isQuote ? (
-              <div className="field">
-                <label htmlFor="tier">ระดับราคา</label>
-                <select className="in" id="tier" value={doc.priceTier ?? 'A'}
-                        onChange={(e) => set('priceTier', e.target.value as 'A' | 'B' | 'C')}>
-                  <option value="A">A — ราคาปกติ</option>
-                  <option value="B">B — ลูกค้าประจำ</option>
-                  <option value="C">C — ราคาพิเศษ</option>
-                </select>
-              </div>
-            ) : null}
+            <div className="field">
+              <label htmlFor="tier">ระดับราคา</label>
+              <select className="in" id="tier" value={doc.priceTier ?? 'A'}
+                      onChange={(e) => changeTier(e.target.value as 'A' | 'B' | 'C')}>
+                <option value="A">A — ราคาปกติ</option>
+                <option value="B">B — ลูกค้าประจำ</option>
+                <option value="C">C — ราคาพิเศษ</option>
+              </select>
+              <span className="hint">ใช้ตอนดึงราคาอะไหล่เข้ามา</span>
+            </div>
 
             <div className="field">
               <label htmlFor="vatMode">ภาษีมูลค่าเพิ่ม</label>
@@ -346,7 +376,8 @@ export function DocEditor({
               <thead>
                 <tr>
                   <th style={{ width: 34 }}>#</th>
-                  <th style={{ width: 110 }}>รหัส</th>
+                  <th style={{ width: 100 }}>รหัส</th>
+                  <th style={{ width: 110 }}>OEM</th>
                   <th>รายการ</th>
                   <th style={{ width: 80 }} className="num">จำนวน</th>
                   <th style={{ width: 70 }}>หน่วย</th>
@@ -363,6 +394,10 @@ export function DocEditor({
                     <td>
                       <input className="in mono" style={{ padding: '4px 6px' }} value={it.code}
                              onChange={(e) => setItem(i, { code: e.target.value })} />
+                    </td>
+                    <td>
+                      <input className="in mono" style={{ padding: '4px 6px' }} value={it.oem}
+                             onChange={(e) => setItem(i, { oem: e.target.value })} />
                     </td>
                     <td>
                       <input className="in" style={{ padding: '4px 6px' }} value={it.name}
@@ -459,12 +494,23 @@ export function DocEditor({
                              const v = Number(e.target.value) || 0;
                              setDoc((d) => {
                                const rest = d.payments.filter((p) => p.method !== method);
+                               const ref = d.payments.find((p) => p.method === method)?.ref ?? '';
                                return {
                                  ...d,
-                                 payments: v > 0 ? [...rest, { method, amount: v, ref: '' }] : rest,
+                                 payments: v > 0 ? [...rest, { method, amount: v, ref }] : rest,
                                };
                              });
                            }} />
+                    {method !== 'เงินสด' && amount > 0 ? (
+                      <input className="in" style={{ marginTop: 6 }}
+                             placeholder={method === 'เงินโอน' ? 'ธนาคาร / เลขที่อ้างอิง' : 'เลขที่อนุมัติบัตร'}
+                             value={doc.payments[at]?.ref ?? ''}
+                             onChange={(e) => setDoc((d) => ({
+                               ...d,
+                               payments: d.payments.map((p) =>
+                                 p.method === method ? { ...p, ref: e.target.value } : p),
+                             }))} />
+                    ) : null}
                   </div>
                 );
               })}
@@ -491,21 +537,44 @@ export function DocEditor({
               </button>
             </div>
 
-            <div className="row-fields f2" style={{ marginTop: 14 }}>
-              <div className="field">
-                <label>ผู้รับเงิน</label>
-                <input className="in" value={doc.receivedBy}
-                       onChange={(e) => set('receivedBy', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>เงื่อนไขการรับประกัน</label>
-                <textarea className="in" value={doc.warrantyText}
-                          onChange={(e) => set('warrantyText', e.target.value)} />
-              </div>
-            </div>
           </div>
         </div>
       ) : null}
+
+      {/* การรับประกันและผู้ลงนามพิมพ์อยู่บนใบส่งมอบด้วย ไม่ใช่เฉพาะใบเสร็จ */}
+      {!isQuote ? (
+        <div className="card">
+          <header><h2>การรับประกันและผู้ลงนาม</h2></header>
+          <div className="body row-fields f2">
+            <div className="field">
+              <label>{isReceipt ? 'ผู้รับเงิน' : 'ผู้ส่งมอบงาน'}</label>
+              <input className="in" value={doc.receivedBy}
+                     onChange={(e) => set('receivedBy', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>เงื่อนไขการรับประกัน</label>
+              <textarea className="in" value={doc.warrantyText}
+                        onChange={(e) => set('warrantyText', e.target.value)} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="card">
+          <header><h2>ผู้ลงนาม</h2></header>
+          <div className="body row-fields f2">
+            <div className="field">
+              <label>ผู้เสนอซ่อม</label>
+              <input className="in" value={doc.proposer}
+                     onChange={(e) => set('proposer', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>ผู้อนุมัติซ่อม</label>
+              <input className="in" value={doc.approver}
+                     onChange={(e) => set('approver', e.target.value)} />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="body">

@@ -3,6 +3,7 @@ import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { listCategories, listProducts } from '@/lib/products';
 import { baht, thDate } from '@/lib/format';
+import { CategoryManager } from './category-manager';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +40,12 @@ export default async function StockPage({
       current="/stock"
       title="ทะเบียนสินค้า"
       sub={`${total.toLocaleString('en-US')} รายการ`}
-      actions={<Link className="btn primary" href="/stock/new">+ เพิ่มสินค้า</Link>}
+      actions={
+        <div className="tag-row">
+          <Link className="btn" href="/stock/pending">รายการค้างทำ</Link>
+          <Link className="btn primary" href="/stock/new">+ เพิ่มสินค้า</Link>
+        </div>
+      }
     >
       <div className="card">
         <div className="toolbar">
@@ -118,6 +124,15 @@ export default async function StockPage({
           {page > 1 ? <Link className="btn" href={{ pathname: '/stock', query: { ...keep, page: page - 1 } }}>ก่อนหน้า</Link> : null}
           {page < lastPage ? <Link className="btn" href={{ pathname: '/stock', query: { ...keep, page: page + 1 } }}>ถัดไป</Link> : null}
         </div>
+      </div>
+
+      <div className="card">
+        <header>
+          <h2>หมวดหมู่สินค้า</h2>
+          <div className="spacer" />
+          <span className="subtle">{cats.length} หมวด</span>
+        </header>
+        <CategoryManager categories={cats} />
       </div>
     </Shell>
   );
