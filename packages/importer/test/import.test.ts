@@ -12,6 +12,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
+
+// คอลัมน์ date (oid 1082) ต้องกลับมาเป็นสตริง 'YYYY-MM-DD'
+// ถ้าปล่อยให้เป็น Date แล้วเรียก toISOString() จะเพี้ยนไป 1 วันในเขตเวลาไทย (UTC+7)
+pg.types.setTypeParser(1082, (v) => v);
 import {
   arDue, exTotals, poTotals, recTotals, profitAndLoss, salesDocs, vatChain,
 } from '@drivegolight/core';
@@ -107,7 +111,7 @@ describe.skipIf(!DB_URL)('นำเข้าไฟล์สำรองข้อ
     const byLegacy = new Map(rows.map((r) => [r.legacy_id, r]));
     for (const d of [...db.invoices, ...db.receipts]) {
       const t = recTotals(d, ctx);
-      const row = byLegacy.get(d.id);
+      const row = byLegacy.get(`${d.kind}:${d.id}`);
       expect(row, `ไม่พบเอกสาร ${d.no} ใน DB`).toBeTruthy();
       expect(n(row.net_amount), `net ${d.no}`).toBe(t.net);
       expect(n(row.vat_amount), `vat ${d.no}`).toBe(t.vat);
@@ -126,14 +130,14 @@ describe.skipIf(!DB_URL)('นำเข้าไฟล์สำรองข้อ
 
     for (const p of db.purchases) {
       const t = poTotals(p, ctx);
-      const row = byLegacy.get(p.id);
+      const row = byLegacy.get(`PO:${p.id}`);
       expect(n(row.net_amount), `net ${p.no}`).toBe(t.net);
       expect(n(row.payable), `payable ${p.no}`).toBe(t.payable);
       expect(n(row.wht_amount), `ใบซื้อห้ามมีภาษีหัก ณ ที่จ่าย ${p.no}`).toBe(0);
     }
     for (const e of db.expenses) {
       const t = exTotals(e, ctx);
-      const row = byLegacy.get(e.id);
+      const row = byLegacy.get(`EX:${e.id}`);
       expect(n(row.net_amount), `net ${e.no}`).toBe(t.net);
       expect(n(row.wht_amount), `wht ${e.no}`).toBe(t.wht);
       expect(n(row.payable), `payable ${e.no}`).toBe(t.payable);

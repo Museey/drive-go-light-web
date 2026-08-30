@@ -123,3 +123,13 @@ SET LOCAL app.tenant_id = '<uuid ของอู่>';
 ```sql
 SELECT set_config('app.tenant_id', $1, true);   -- true = มีผลเฉพาะในทรานแซกชันนี้
 ```
+
+## ⚠ คอลัมน์ date กับเขตเวลา
+
+ไดรเวอร์ `pg` คืนคอลัมน์ `date` มาเป็น JS `Date` ที่เที่ยงคืนตามเวลาเครื่อง
+เรียก `.toISOString()` ต่อเมื่อไหร่ ได้วันที่ก่อนหน้า 1 วันทันทีในเขตเวลาไทย (UTC+7)
+ตั้งค่านี้ครั้งเดียวตอนเริ่มแอป
+
+```ts
+pg.types.setTypeParser(1082, (v) => v);   // date → สตริง 'YYYY-MM-DD'
+```

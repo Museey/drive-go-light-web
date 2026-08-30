@@ -212,6 +212,7 @@ export async function importBackup(
     const contactId = new Map<string, string>();
     const contactById = new Map<string, any>();
     const contactRows: unknown[][] = [];
+    let badTaxIdCount = 0;
     const vehicleRows: unknown[][] = [];
     const vehicleId = new Map<string, string>();
     const seenContactCode = new Map<string, number>();
@@ -254,10 +255,15 @@ export async function importBackup(
         }
       }
 
+      /* เลขผู้เสียภาษีที่ไม่ครบ 13 หลักยังเก็บไว้ ไม่ลบทิ้ง — เป็นสิ่งที่ผู้ใช้กรอกเอง
+         อาจเป็นเลขบัตรประชาชนหรือกรอกไม่จบ ทิ้งไปแล้วกู้ไม่ได้ แค่เตือนให้ไปแก้ */
+      const contactTaxId = digitsOnly(c.taxId) || null;
+      if (contactTaxId && contactTaxId.length !== 13) badTaxIdCount++;
+
       contactRows.push([
         id, tenantId, code, c.kind === 'vendor' ? 'vendor' : 'customer', type,
         text(c.prefix), firstName, lastName, orgName,
-        digitsOnly(c.taxId) || null,
+        contactTaxId,
         JSON.stringify(c.addr ?? {}), text(c.addrText),
         text(c.tel), text(c.tel2), c.email ? text(c.email) : null, text(c.note),
         Math.max(0, Math.trunc(num(c.creditDays))),
@@ -276,6 +282,13 @@ export async function importBackup(
       }
     }
 
+    if (badTaxIdCount) {
+      warnings.push(
+        `ผู้ติดต่อ ${badTaxIdCount} รายมีเลขประจำตัวผู้เสียภาษีไม่ครบ 13 หลัก — ` +
+        'เก็บค่าเดิมไว้ให้แล้ว แต่ต้องแก้ก่อนออกใบกำกับภาษีให้รายนั้น',
+      );
+    }
+
     await insertRows(client, 'contacts',
       ['id', 'tenant_id', 'code', 'kind', 'type', 'prefix', 'first_name', 'last_name', 'org_name',
        'tax_id', 'addr', 'addr_text', 'tel', 'tel2', 'email', 'note', 'credit_days',
@@ -289,7 +302,38 @@ export async function importBackup(
       vehicleRows);
 
     /* ---------- เอกสาร ---------- */
-    const docId = new Map<string, string>();
+    /**
+     * คีย์ด้วยตัวออบเจกต์เอกสาร ไม่ใช่ legacy id
+     *
+     * uid() ของโปรแกรมเดิมคือ Math.random().toString(36).slice(2,10) ซึ่งไม่รับประกัน
+     * ว่าไม่ซ้ำข้ามอาเรย์ ใบเสร็จกับใบซื้ออาจได้ id เดียวกันได้ ถ้าใช้ id เป็นคีย์
+     * เอกสารใบหลังจะทับใบหน้าแล้วสองใบได้ uuid เดียวกัน → ชน primary key
+     */
+    const docUuid = new Map<any, string>();
+
+    /**
+     * ตารางใหม่บังคับ UNIQUE (tenant_id, kind, doc_no) แต่โปรแกรมเดิมไม่ได้บังคับอะไรเลย
+     * ไฟล์จริงจึงมีเลขที่ซ้ำหรือว่างได้ — ต้องทำให้ไม่ชนโดยไม่ทิ้งเอกสารใบไหน
+     */
+    const takenDocNo = new Set<string>();
+    let generatedNoCount = 0;
+    let renamedNoCount = 0;
+
+    const uniqueDocNo = (kind: string, raw: string): string => {
+      let base = raw.trim();
+      if (!base) {
+        base = `${kind}-นำเข้า-${String(++generatedNoCount).padStart(4, '0')}`;
+      }
+      let candidate = base;
+      let suffix = 1;
+      while (takenDocNo.has(`${kind}|${candidate}`)) {
+        suffix++;
+        candidate = `${base}-${suffix}`;
+      }
+      if (candidate !== base) renamedNoCount++;
+      takenDocNo.add(`${kind}|${candidate}`);
+      return candidate;
+    };
     const docRows: unknown[][] = [];
     const itemRows: unknown[][] = [];
     const paymentRows: unknown[][] = [];
@@ -300,7 +344,8 @@ export async function importBackup(
       d: any,
       kind: 'QT' | 'IV' | 'IVT' | 'RC' | 'PO' | 'EX',
       opts: {
-        parentLegacyId?: string | null;
+        /** ออบเจกต์เอกสารต้นทาง (ใบเสนอราคา/ใบส่งมอบ) ไม่ใช่ id */
+        parent?: any;
         totals: { subtotal: number; net: number; vat: number; wht: number; grand: number; payable: number };
         party: {
           id: string | null; type: string; name: string; taxId: string;
@@ -313,12 +358,12 @@ export async function importBackup(
         dueDate: string | null;
       },
     ) => {
-      const id = docId.get(d.id)!;
+      const id = docUuid.get(d)!;
       const t = opts.totals;
 
       docRows.push([
-        id, tenantId, kind, text(d.no), d.date, opts.status,
-        opts.parentLegacyId ? (docId.get(opts.parentLegacyId) ?? null) : null,
+        id, tenantId, kind, uniqueDocNo(kind, text(d.no)), d.date, opts.status,
+        opts.parent ? (docUuid.get(opts.parent) ?? null) : null,
         text(d.invNo),
         opts.party.id, opts.party.type, opts.party.name, digitsOnly(opts.party.taxId),
         opts.party.tel, opts.party.email, JSON.stringify(opts.party.addr ?? {}), opts.party.addrText,
@@ -340,7 +385,7 @@ export async function importBackup(
         kind === 'EX' ? d.cat : null,
         kind === 'EX' && d.cat === 'asset' && num(d.assetLife) > 0 ? Math.trunc(num(d.assetLife)) : null,
         text(d.note),
-        text(d.id),
+        `${kind}:${text(d.id)}`,
       ]);
 
       (d.items ?? []).forEach((it: any, i: number) => {
@@ -366,9 +411,16 @@ export async function importBackup(
       }
     };
 
-    // จองรหัสให้ทุกเอกสารก่อน เพื่อให้ผูก parent ข้ามชนิดได้โดยไม่ต้องสนลำดับ
+    // จองรหัสให้ทุกเอกสารก่อน เพื่อให้ผูก parent ได้โดยไม่ต้องสนลำดับ
     for (const d of [...db.quotes, ...db.invoices, ...db.receipts, ...db.purchases, ...db.expenses]) {
-      docId.set(d.id, randomUUID());
+      docUuid.set(d, randomUUID());
+    }
+
+    // หา parent ต้องมองในอาเรย์ที่ถูกต้องเท่านั้น — quoteId ชี้ใบเสนอราคา invId ชี้ใบส่งมอบ
+    const quoteByLegacy = new Map<string, any>(db.quotes.map((q: any) => [q.id, q]));
+    const invoiceByLegacy = new Map<string, any>(db.invoices.map((i: any) => [i.id, i]));
+    if (quoteByLegacy.size < db.quotes.length || invoiceByLegacy.size < db.invoices.length) {
+      warnings.push('พบเอกสารที่มี id ซ้ำกันในไฟล์ — การเชื่อมโยงเอกสารบางใบอาจไม่ครบ');
     }
 
     const partyFromContact = (id: string | null, fallbackType: string) => {
@@ -407,7 +459,7 @@ export async function importBackup(
       const t = recTotals(inv, ctx);
       const creditDays = Math.max(0, Math.trunc(num(inv.creditDays)));
       addDoc(inv, kind, {
-        parentLegacyId: inv.quoteId ?? null,
+        parent: inv.quoteId ? quoteByLegacy.get(inv.quoteId) : null,
         totals: { subtotal: t.sub, net: t.net, vat: t.vat, wht: t.wht, grand: t.grand, payable: t.payable },
         party: {
           id: inv.custId ? (contactId.get(inv.custId) ?? null) : null,
@@ -429,7 +481,8 @@ export async function importBackup(
       const onCredit = !!r.pay?.credit;
       const creditDays = onCredit ? Math.max(0, Math.trunc(num(r.pay?.days))) : 0;
       addDoc(r, 'RC', {
-        parentLegacyId: r.invId ?? r.quoteId ?? null,
+        parent: (r.invId ? invoiceByLegacy.get(r.invId) : null)
+                ?? (r.quoteId ? quoteByLegacy.get(r.quoteId) : null),
         totals: { subtotal: t.sub, net: t.net, vat: t.vat, wht: t.wht, grand: t.grand, payable: t.payable },
         party: {
           id: r.custId ? (contactId.get(r.custId) ?? null) : null,
@@ -487,6 +540,15 @@ export async function importBackup(
       });
     }
 
+    if (renamedNoCount) {
+      warnings.push(
+        `เลขที่เอกสารซ้ำ ${renamedNoCount} ใบ — เติมเลขต่อท้ายให้ไม่ชน ` +
+        '(โปรแกรมเดิมไม่ได้บังคับว่าเลขที่ห้ามซ้ำ)',
+      );
+    }
+    if (generatedNoCount) {
+      warnings.push(`เอกสาร ${generatedNoCount} ใบไม่มีเลขที่ — ออกเลขให้ใหม่โดยขึ้นต้นด้วยชนิดเอกสาร`);
+    }
     if (missingProduct.size) {
       warnings.push(
         `มีบรรทัดในเอกสารอ้างถึงสินค้า ${missingProduct.size} รายการที่ไม่มีในทะเบียนแล้ว — ` +
