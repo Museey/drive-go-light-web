@@ -1,0 +1,3 @@
+node_modules/
+# สร้างใหม่ได้ด้วย npm run fixture (เหมือนเดิมทุกไบต์) ไม่ต้อง commit ไฟล์ 1.5 MB
+fixtures/demo-backup.json

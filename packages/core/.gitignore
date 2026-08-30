@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# สร้างใหม่จาก drivegolight.html ทุกครั้งที่รันเทสต์ (ดู pretest) ไม่ต้อง commit
+test/legacy.generated.mjs

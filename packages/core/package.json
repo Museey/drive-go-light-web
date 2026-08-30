@@ -1,0 +1,31 @@
+{
+  "name": "@drivegolight/core",
+  "version": "0.1.0",
+  "description": "สูตรคำนวณเงินและภาษีของ DriveGoLight! — TypeScript ล้วน ไม่พึ่ง DOM/DB ใช้ร่วมกันได้ทั้งเว็บและไฟล์ offline",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "extract-legacy": "node test/extract-legacy.mjs",
+    "pretest": "node ../../tools/make-demo-backup.mjs --date=2026-08-28 --if-missing && node test/extract-legacy.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
