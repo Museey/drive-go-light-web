@@ -38,15 +38,24 @@ export interface HomeSummary {
   docCounts: { kind: string; count: number }[];
 }
 
-export async function getHomeSummary(): Promise<HomeSummary> {
+export async function getHomeSummary(from?: string, to?: string): Promise<HomeSummary> {
   return query(async (c) => {
+    /* ยอดขายจำกัดตามช่วงที่เลือก ส่วนลูกหนี้เจ้าหนี้เป็นยอดคงค้าง ณ ปัจจุบันเสมอ
+       ไม่ผูกกับช่วงเวลา เพราะหนี้เก่ายังต้องตามเก็บอยู่ดี */
+    const params: unknown[] = [];
+    let range = '';
+    if (from) { params.push(from); range += ` and doc_date >= $${params.length}`; }
+    if (to) { params.push(to); range += ` and doc_date <= $${params.length}`; }
+
     const sales = await c.query(
       `select coalesce(sum(net_amount), 0) as total
        from documents
        where status <> 'void'
          and (kind in ('IV','IVT')
               or (kind = 'RC' and (parent_doc_id is null
-                  or (select kind from documents p where p.id = documents.parent_doc_id) = 'QT')))`,
+                  or (select kind from documents p where p.id = documents.parent_doc_id) = 'QT')))
+         ${range}`,
+      params,
     );
 
     const outstanding = await c.query(

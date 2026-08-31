@@ -43,21 +43,43 @@ export function vatOfMonth(db: VatDataset, key: string, ctx: ShopContext): { out
   return { out: round2(out), in: round2(inn) };
 }
 
+/** ยอดภาษีขายและภาษีซื้อของงวดหนึ่ง ก่อนคิดเครดิตยกยอด */
+export interface VatMonthInput {
+  /** 'YYYY-MM' */
+  key: string;
+  out: number;
+  in: number;
+}
+
 /**
- * ไล่คำนวณภาษีทีละงวดตามลำดับเวลา
- * งวดใดภาษีซื้อมากกว่าภาษีขาย ส่วนเกินกลายเป็นเครดิตยกไปหักงวดถัดไป
+ * กฎเครดิตภาษียกยอด — งวดใดภาษีซื้อมากกว่าภาษีขาย ส่วนเกินยกไปหักงวดถัดไป
+ *
+ * แยกออกมาจาก vatChain() เพื่อให้ป้อนยอดสรุปรายเดือนที่มาจากที่อื่นได้ด้วย
+ * (เช่น รวมมาจากฐานข้อมูลแล้ว ไม่ต้องโหลดเอกสารทุกใบมาคำนวณใหม่)
+ * กฎยกยอดจึงมีอยู่ที่เดียว ไม่ว่าตัวเลขจะมาจากทางไหน
+ *
+ * ต้องเรียงงวดจากเก่าไปใหม่มาก่อน มิฉะนั้นเครดิตจะยกผิดทาง
  */
-export function vatChain(db: VatDataset, ctx: ShopContext): VatMonth[] {
+export function vatChainFromMonths(months: VatMonthInput[]): VatMonth[] {
   let carry = 0;
-  return vatMonthKeys(db).map((key) => {
-    const v = vatOfMonth(db, key, ctx);
+  return months.map((m) => {
     const carryIn = carry;
-    const net = round2(v.out - v.in - carryIn);
+    const net = round2(m.out - m.in - carryIn);
     const payable = net > 0 ? net : 0;
     const carryOut = net < 0 ? -net : 0;
     carry = carryOut;
-    return { key, out: v.out, in: v.in, carryIn, payable, carryOut };
+    return { key: m.key, out: m.out, in: m.in, carryIn, payable, carryOut };
   });
+}
+
+/**
+ * ไล่คำนวณภาษีทีละงวดตามลำดับเวลาจากเอกสารทั้งหมด
+ * งวดใดภาษีซื้อมากกว่าภาษีขาย ส่วนเกินกลายเป็นเครดิตยกไปหักงวดถัดไป
+ */
+export function vatChain(db: VatDataset, ctx: ShopContext): VatMonth[] {
+  return vatChainFromMonths(
+    vatMonthKeys(db).map((key) => ({ key, ...vatOfMonth(db, key, ctx) })),
+  );
 }
 
 /** เครดิตภาษีที่ยกมา ณ ต้นงวดที่ระบุ */

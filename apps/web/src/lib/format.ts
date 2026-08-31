@@ -51,3 +51,10 @@ export function payLabel(outstanding: number, paid: number): { text: string; ton
   if (paid > 0.004) return { text: 'ชำระบางส่วน', tone: 'warn' };
   return { text: 'ค้างชำระ', tone: 'due' };
 }
+
+/** ชื่องวดภาษีแบบไทย จากคีย์ 'YYYY-MM' */
+export function monthLabel(key: string): string {
+  const [y, m] = key.split('-').map(Number);
+  if (!y || !m) return key;
+  return `${TH_MONTHS[m - 1]} ${y + 543}`;
+}

@@ -2,7 +2,7 @@
  * เครดิตภาษีมูลค่าเพิ่มยกยอดข้ามงวด — ส่วนที่ผิดแล้วลูกค้าเสียหายจริงกับสรรพากร
  */
 import { describe, expect, it } from 'vitest';
-import { salesDocs, vatCarryInto, vatChain, vatMonthKeys } from '../src/index.js';
+import { salesDocs, vatCarryInto, vatChain, vatChainFromMonths, vatMonthKeys } from '../src/index.js';
 import type { ExpenseDoc, PurchaseDoc, SalesDoc } from '../src/index.js';
 
 const VAT7 = { vatRate: 7 };
@@ -104,5 +104,48 @@ describe('salesDocs — กันนับยอดขายซ้ำ', () => {
 
     // ถ้านับซ้ำ ภาษีขายจะกลายเป็น 175 แทนที่จะเป็น 105
     expect(vatChain({ sales: docs, purchases: [], expenses: [] }, VAT7)[0]!.out).toBe(105);
+  });
+});
+
+describe('vatChainFromMonths — กฎยกยอดเมื่อป้อนยอดสรุปมาเอง', () => {
+  it('ให้ผลเท่ากับ vatChain ที่คำนวณจากเอกสาร', () => {
+    const db = {
+      sales: [sale('2026-01-10', 1000), sale('2026-02-10', 100000)],
+      purchases: [purchase('2026-01-05', 50000)],
+      expenses: [],
+    };
+    const fromDocs = vatChain(db, VAT7);
+    const fromMonths = vatChainFromMonths(
+      fromDocs.map((m) => ({ key: m.key, out: m.out, in: m.in })),
+    );
+    expect(fromMonths).toEqual(fromDocs);
+  });
+
+  it('ยกเครดิตข้ามงวดตามลำดับที่ป้อนมา', () => {
+    const chain = vatChainFromMonths([
+      { key: '2026-01', out: 70, in: 700 },
+      { key: '2026-02', out: 200, in: 0 },
+      { key: '2026-03', out: 1000, in: 0 },
+    ]);
+    expect(chain[0]!.carryOut).toBe(630);
+    expect(chain[1]!.carryIn).toBe(630);
+    expect(chain[1]!.payable).toBe(0);
+    expect(chain[1]!.carryOut).toBe(430);
+    expect(chain[2]!.payable).toBe(570);
+    expect(chain[2]!.carryOut).toBe(0);
+  });
+
+  it('งวดว่างไม่ทำให้เครดิตหาย', () => {
+    const chain = vatChainFromMonths([
+      { key: '2026-01', out: 0, in: 500 },
+      { key: '2026-02', out: 0, in: 0 },
+      { key: '2026-03', out: 800, in: 0 },
+    ]);
+    expect(chain[1]!.carryOut).toBe(500);
+    expect(chain[2]!.payable).toBe(300);
+  });
+
+  it('รายการว่างได้ผลว่าง', () => {
+    expect(vatChainFromMonths([])).toEqual([]);
   });
 });
