@@ -72,6 +72,7 @@ export async function listProducts(opts: {
   page?: number;
   /** ขอทุกแถวโดยไม่แบ่งหน้า — ใช้ตอนสั่งพิมพ์รายการ */
   all?: boolean;
+  pageSize?: number;
 }): Promise<ProductListResult> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -104,10 +105,11 @@ export async function listProducts(opts: {
       params,
     );
 
+    const size = opts.pageSize ?? PAGE_SIZE;
     const limitSql = opts.all
       ? ''
       : `limit $${params.length + 1} offset $${params.length + 2}`;
-    if (!opts.all) params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+    if (!opts.all) params.push(size, (page - 1) * size);
 
     const { rows } = await c.query(
       `select p.*, g.name as category_name, s.qty_on_hand, s.last_move_on

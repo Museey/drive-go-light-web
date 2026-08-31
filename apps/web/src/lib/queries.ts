@@ -31,11 +31,42 @@ export async function getShop(): Promise<ShopInfo> {
   });
 }
 
+export interface ReorderItem {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  qtyOnHand: number;
+  qtyMin: number;
+  /** ควรสั่งเท่าไรให้เต็มระดับสูงสุด */
+  need: number;
+  /** เงินที่ต้องใช้สำหรับรายการนี้ตามต้นทุนล่าสุด */
+  cost: number;
+}
+
 export interface HomeSummary {
   salesThisYear: number;
+  /** จำนวนเอกสารขายในช่วงที่เลือก */
+  salesDocCount: number;
+  /** รับชำระแล้วจากเอกสารขายในช่วงที่เลือก */
+  salesPaid: number;
+  /** เฉลี่ยต่อใบ — ยอดขายหารจำนวนใบ */
+  salesAvg: number;
+  /** รายจ่ายในช่วงเดียวกัน แยกซื้อสินค้ากับค่าใช้จ่าย */
+  spendTotal: number;
+  spendBuy: number;
+  spendExpense: number;
   arOutstanding: number;
   apOutstanding: number;
   reorderCount: number;
+  /** เงินที่ต้องใช้ถ้าสั่งของที่ถึงจุดสั่งซื้อทั้งหมดให้เต็ม Max */
+  reorderCost: number;
+  /** รายการที่ควรสั่งก่อน เรียงจากที่ขาดมือหนักที่สุด */
+  reorderTop: ReorderItem[];
+  productCount: number;
+  /** สินค้าที่ไม่เคลื่อนไหวตั้งแต่ 6 เดือน — เงินจมในชั้นวาง */
+  deadCount: number;
+  deadValue: number;
   docCounts: { kind: string; count: number }[];
 }
 
@@ -49,13 +80,17 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
     if (to) { params.push(to); range += ` and doc_date <= $${params.length}`; }
 
     const sales = await c.query(
-      `select coalesce(sum(net_amount), 0) as total
-       from documents
-       where status <> 'void'
-         and (kind in ('IV','IVT')
-              or (kind = 'RC' and (parent_doc_id is null
-                  or (select kind from documents p where p.id = documents.parent_doc_id) = 'QT')))
-         ${range}`,
+      `select coalesce(sum(d.net_amount), 0) as total,
+              count(*)::int as n,
+              coalesce(sum(coalesce(pay.paid, 0)), 0) as paid
+       from documents d
+       left join (select doc_id, sum(amount) as paid from payments group by doc_id) pay
+              on pay.doc_id = d.id
+       where d.status <> 'void'
+         and (d.kind in ('IV','IVT')
+              or (d.kind = 'RC' and (d.parent_doc_id is null
+                  or (select kind from documents p where p.id = d.parent_doc_id) = 'QT')))
+         ${range.replace(/doc_date/g, 'd.doc_date')}`,
       params,
     );
 
@@ -77,6 +112,37 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
        where p.active and p.qty_min > 0 and s.qty_on_hand <= p.qty_min`,
     );
 
+    /* รายจ่ายในช่วงเดียวกัน แยกใบซื้อกับค่าใช้จ่ายเหมือนที่หน้าแรกรุ่นเดิมแสดง */
+    const spend = await c.query(
+      `select kind::text as kind, coalesce(sum(payable), 0) as total
+       from documents
+       where status <> 'void' and direction = 'buy' ${range}
+       group by kind`,
+      params,
+    );
+
+    /* รายการที่ควรสั่งก่อน — เรียงจากที่ต่ำกว่าจุดสั่งซื้อมากที่สุด ตามรุ่นเดิม
+       จำนวนที่ควรสั่งคือเติมให้เต็ม Max อย่างน้อยหนึ่งหน่วย */
+    const reorderList = await c.query(
+      `select p.id, p.code, p.name, p.unit, p.last_cost, p.qty_min, p.qty_max,
+              s.qty_on_hand,
+              greatest(1, p.qty_max - s.qty_on_hand) as need
+       from products p join product_stock s on s.product_id = p.id
+       where p.active and p.qty_min > 0 and s.qty_on_hand <= p.qty_min
+       order by s.qty_on_hand - p.qty_min, p.code`,
+    );
+
+    const stockStats = await c.query(
+      `select count(*)::int as total,
+              count(*) filter (where s.last_move_on is null
+                                  or s.last_move_on <= current_date - interval '6 months')::int as dead,
+              coalesce(sum(s.qty_on_hand * p.last_cost) filter (
+                where s.last_move_on is null
+                   or s.last_move_on <= current_date - interval '6 months'), 0) as dead_value
+       from products p join product_stock s on s.product_id = p.id
+       where p.active`,
+    );
+
     const counts = await c.query(
       `select kind::text as kind, count(*)::int as count
        from documents where status <> 'void' group by kind order by kind`,
@@ -85,12 +151,40 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
     const byDirection = Object.fromEntries(
       outstanding.rows.map((r) => [r.direction, money(r.due)]),
     );
+    const byKind = Object.fromEntries(spend.rows.map((r) => [r.kind, money(r.total)]));
+    const spendBuy = byKind['PO'] ?? 0;
+    const spendExpense = byKind['EX'] ?? 0;
+
+    const salesTotal = money(sales.rows[0].total);
+    const salesDocCount = Number(sales.rows[0].n);
+
+    const reorderTop: ReorderItem[] = reorderList.rows.map((r) => ({
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      unit: r.unit,
+      qtyOnHand: money(r.qty_on_hand),
+      qtyMin: money(r.qty_min),
+      need: money(r.need),
+      cost: Math.round(money(r.need) * money(r.last_cost) * 100) / 100,
+    }));
 
     return {
-      salesThisYear: money(sales.rows[0].total),
+      salesThisYear: salesTotal,
+      salesDocCount,
+      salesPaid: money(sales.rows[0].paid),
+      salesAvg: salesDocCount ? Math.round((salesTotal / salesDocCount) * 100) / 100 : 0,
+      spendTotal: Math.round((spendBuy + spendExpense) * 100) / 100,
+      spendBuy,
+      spendExpense,
       arOutstanding: byDirection['sell'] ?? 0,
       apOutstanding: byDirection['buy'] ?? 0,
       reorderCount: Number(reorder.rows[0].c),
+      reorderCost: Math.round(reorderTop.reduce((s, r) => s + r.cost, 0) * 100) / 100,
+      reorderTop: reorderTop.slice(0, 5),
+      productCount: stockStats.rows[0].total,
+      deadCount: stockStats.rows[0].dead,
+      deadValue: money(stockStats.rows[0].dead_value),
       docCounts: counts.rows.map((r) => ({ kind: r.kind, count: r.count })),
     };
   });
@@ -128,6 +222,7 @@ export async function listIncomeDocs(opts: {
   to?: string;
   /** ขอทุกแถวโดยไม่แบ่งหน้า — ใช้ตอนสั่งพิมพ์หรือส่งออก */
   all?: boolean;
+  pageSize?: number;
 }): Promise<IncomeListResult> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -163,10 +258,11 @@ export async function listIncomeDocs(opts: {
       params,
     );
 
+    const size = opts.pageSize ?? PAGE_SIZE;
     const limitSql = opts.all
       ? ''
       : `limit $${params.length + 1} offset $${params.length + 2}`;
-    if (!opts.all) params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+    if (!opts.all) params.push(size, (page - 1) * size);
 
     const { rows } = await c.query(
       `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.party_name, d.vehicle_plate,

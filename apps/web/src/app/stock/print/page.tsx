@@ -2,6 +2,7 @@ import { STOCK_FLAG_LABEL, type StockFlag } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
 import { ListPaper } from '@/components/list-paper';
 import { listCategories, listProducts } from '@/lib/products';
+import { getStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
 import { baht, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -15,8 +16,9 @@ export default async function StockPrintPage({
   const sp = await searchParams;
   const flag = (['min', 'max', 'dead'] as const).find((f) => f === sp.flag);
 
-  const [cats, { rows, total, stockValue }] = await Promise.all([
+  const [cats, hidden, { rows, total, stockValue }] = await Promise.all([
     listCategories(),
+    getStockHiddenCols(),
     listProducts({
       search: sp.q,
       categoryId: sp.cat,
@@ -35,8 +37,16 @@ export default async function StockPrintPage({
     sp.all === '1' ? 'รวมที่ปิดใช้งาน' : '',
   ].filter(Boolean);
 
-  /* จำนวนคอลัมน์ก่อนช่องยอดรวมท้ายตาราง — แก้หัวตารางแล้วต้องแก้ตรงนี้ด้วย */
-  const COLS_BEFORE_VALUE = 8;
+  /* เอกสารที่พิมพ์ซ่อนคอลัมน์ชุดเดียวกับหน้าจอ ตามรุ่นเดิม
+     ยกเว้นราคา B และ C ที่ไม่พิมพ์ลงกระดาษเลย เพราะกระดาษหลุดถึงมือลูกค้าได้ */
+  const show = (k: string) => !hidden.includes(k as never);
+  const PRINTABLE = ['cost', 'qty', 'min', 'max', 'move'];
+  const hiddenHere = STOCK_COLS.filter(([k]) => PRINTABLE.includes(k) && !show(k));
+
+  /* จำนวนคอลัมน์ก่อนช่องยอดรวมท้ายตาราง — นับตามที่แสดงจริง */
+  const colsBeforeValue = 6 + (show('cost') ? 1 : 0) + 1;
+  const colsAfterValue = (show('qty') ? 1 : 0) + (show('min') ? 1 : 0)
+                       + (show('max') ? 1 : 0) + (show('move') ? 1 : 0);
 
   return (
     <ListPaper
@@ -50,6 +60,13 @@ export default async function StockPrintPage({
           <b>Min</b> = ถึงจุดสั่งซื้อ · <b>Max</b> = เกินระดับสูงสุด · <b>ค้าง</b> = ไม่เคลื่อนไหวตั้งแต่ 6 เดือน
           <br />
           ราคาที่พิมพ์เป็นราคาขายระดับ A เท่านั้น ระดับ B และ C ไม่พิมพ์ลงกระดาษที่อาจหลุดถึงมือลูกค้า
+          {hiddenHere.length ? (
+            <>
+              <br />
+              เอกสารนี้ซ่อนคอลัมน์ {hiddenHere.map(([, label]) => label).join(' · ')} ไว้ตามการตั้งค่าหน้าจอ
+              หากต้องการรายการเต็ม ให้เปิดคอลัมน์ที่หน้าทะเบียนสินค้าแล้วสั่งพิมพ์ใหม่
+            </>
+          ) : null}
         </>
       }
     >
@@ -62,12 +79,12 @@ export default async function StockPrintPage({
             <th>ชื่อสินค้า</th>
             <th style={{ width: 76 }}>หมวดหมู่</th>
             <th style={{ width: 38 }}>หน่วย</th>
-            <th style={{ width: 64 }}>ต้นทุน</th>
+            {show('cost') ? <th style={{ width: 64 }}>ต้นทุน</th> : null}
             <th style={{ width: 64 }}>ราคาขาย</th>
-            <th style={{ width: 46 }}>คงเหลือ</th>
-            <th style={{ width: 36 }}>Min</th>
-            <th style={{ width: 36 }}>Max</th>
-            <th style={{ width: 72 }}>เคลื่อนไหวล่าสุด</th>
+            {show('qty') ? <th style={{ width: 46 }}>คงเหลือ</th> : null}
+            {show('min') ? <th style={{ width: 36 }}>Min</th> : null}
+            {show('max') ? <th style={{ width: 36 }}>Max</th> : null}
+            {show('move') ? <th style={{ width: 72 }}>เคลื่อนไหวล่าสุด</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -87,23 +104,27 @@ export default async function StockPrintPage({
               <td>{p.name}</td>
               <td style={{ fontSize: 11 }}>{p.categoryName ?? ''}</td>
               <td style={{ textAlign: 'center' }}>{p.unit}</td>
-              <td style={{ textAlign: 'right' }}>{baht(p.lastCost)}</td>
+              {show('cost') ? <td style={{ textAlign: 'right' }}>{baht(p.lastCost)}</td> : null}
               <td style={{ textAlign: 'right' }}>{baht(p.priceA)}</td>
-              <td style={{ textAlign: 'right' }}>{p.qtyOnHand.toLocaleString('en-US')}</td>
-              <td style={{ textAlign: 'right' }}>{p.qtyMin.toLocaleString('en-US')}</td>
-              <td style={{ textAlign: 'right' }}>{p.qtyMax > 0 ? p.qtyMax.toLocaleString('en-US') : ''}</td>
-              <td style={{ fontSize: 11 }}>{thDate(p.lastMoveOn)}</td>
+              {show('qty') ? <td style={{ textAlign: 'right' }}>{p.qtyOnHand.toLocaleString('en-US')}</td> : null}
+              {show('min') ? <td style={{ textAlign: 'right' }}>{p.qtyMin.toLocaleString('en-US')}</td> : null}
+              {show('max') ? (
+                <td style={{ textAlign: 'right' }}>{p.qtyMax > 0 ? p.qtyMax.toLocaleString('en-US') : ''}</td>
+              ) : null}
+              {show('move') ? <td style={{ fontSize: 11 }}>{thDate(p.lastMoveOn)}</td> : null}
             </tr>
           ))}
         </tbody>
-        <tfoot>
-          <tr>
-            <td colSpan={COLS_BEFORE_VALUE} style={{ textAlign: 'right' }}>
-              <b>มูลค่าสต๊อกตามต้นทุน ({total.toLocaleString('en-US')} รายการ)</b>
-            </td>
-            <td colSpan={4}><b>{baht(stockValue)}</b> บาท</td>
-          </tr>
-        </tfoot>
+        {show('cost') ? (
+          <tfoot>
+            <tr>
+              <td colSpan={colsBeforeValue} style={{ textAlign: 'right' }}>
+                <b>มูลค่าสต๊อกตามต้นทุน ({total.toLocaleString('en-US')} รายการ)</b>
+              </td>
+              <td colSpan={Math.max(1, colsAfterValue)}><b>{baht(stockValue)}</b> บาท</td>
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
     </ListPaper>
   );

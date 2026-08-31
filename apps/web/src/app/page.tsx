@@ -22,6 +22,7 @@ export default async function HomePage({
   const sp = await searchParams;
   const seesIncome = can(session, 'income');
   const seesFinance = can(session, 'finance');
+  const seesStock = can(session, 'stock');
 
   const [shop, summary, tax] = await Promise.all([
     getShop(),
@@ -47,6 +48,23 @@ export default async function HomePage({
         <div className="card"><div className="body stat">
           <div className="label">ยอดขายก่อนภาษี{ranged ? ' (ช่วงที่เลือก)' : ' (ทั้งหมด)'}</div>
           <div className="value">{baht(summary.salesThisYear)}</div>
+          <span className="n">
+            {summary.salesDocCount.toLocaleString('en-US')} ฉบับ · เฉลี่ยใบละ {baht(summary.salesAvg)}
+          </span>
+        </div></div>
+
+        <div className="card"><div className="body stat">
+          <div className="label">รับชำระแล้ว{ranged ? ' (ช่วงที่เลือก)' : ''}</div>
+          <div className="value ok">{baht(summary.salesPaid)}</div>
+          <span className="n">จากเอกสารขายในช่วงเดียวกัน</span>
+        </div></div>
+
+        <div className="card"><div className="body stat">
+          <div className="label">รายจ่ายในช่วงเดียวกัน</div>
+          <div className="value">{baht(summary.spendTotal)}</div>
+          <span className="n">
+            ซื้อสินค้า {baht(summary.spendBuy)} · ค่าใช้จ่าย {baht(summary.spendExpense)}
+          </span>
         </div></div>
 
         <div className="card"><div className="body stat">
@@ -68,11 +86,55 @@ export default async function HomePage({
         <div className="card"><div className="body stat">
           <div className="label">สินค้าที่ต้องสั่งซื้อ</div>
           <div className={`value${summary.reorderCount > 0 ? ' warn' : ''}`}>{summary.reorderCount}</div>
-          {can(session, 'stock') ? (
-            <Link href="/stock?reorder=1" className="n" style={{ textDecoration: 'underline' }}>ดูรายการ</Link>
-          ) : null}
+          <span className="n">ประมาณการเงินที่ต้องใช้ {baht(summary.reorderCost)}</span>
+        </div></div>
+
+        <div className="card"><div className="body stat">
+          <div className="label">สินค้าค้างสต๊อก ≥ 6 เดือน</div>
+          <div className={`value${summary.deadCount > 0 ? ' warn' : ''}`}>{summary.deadCount}</div>
+          <span className="n">
+            เงินจม {baht(summary.deadValue)} · จากสินค้าทั้งหมด {summary.productCount.toLocaleString('en-US')} รายการ
+          </span>
         </div></div>
       </div>
+
+      {/* ---------- ของที่ควรสั่งก่อน ---------- */}
+      {seesStock && summary.reorderTop.length > 0 ? (
+        <div className="card">
+          <header>
+            <h2>สินค้าที่ควรสั่งก่อน</h2>
+            <div className="spacer" />
+            <Link className="btn" href="/stock?reorder=1">ดูทั้งหมด {summary.reorderCount} รายการ</Link>
+          </header>
+          <div className="tablewrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>รหัส</th><th>ชื่อสินค้า</th>
+                  <th className="num">คงเหลือ</th><th className="num">จุดสั่ง</th>
+                  <th className="num">ควรสั่ง</th><th className="num">เป็นเงิน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.reorderTop.map((p) => (
+                  <tr key={p.id}>
+                    <td className="mono">
+                      <Link href={`/stock/${p.id}`} style={{ textDecoration: 'underline' }}>{p.code}</Link>
+                    </td>
+                    <td className="wrap">{p.name}</td>
+                    <td className="num">
+                      <span className="chip flag-min">{p.qtyOnHand.toLocaleString('en-US')}</span>
+                    </td>
+                    <td className="num" style={{ color: 'var(--ink-3)' }}>{p.qtyMin.toLocaleString('en-US')}</td>
+                    <td className="num">{p.need.toLocaleString('en-US')} {p.unit}</td>
+                    <td className="num">{baht(p.cost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       {/* ---------- สรุปภาษีงวดล่าสุด ---------- */}
       {tax?.latest ? (

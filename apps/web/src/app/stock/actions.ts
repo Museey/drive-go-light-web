@@ -9,6 +9,7 @@ import {
   createProductFromPending, ignorePendingItem, linkPendingToProduct, restoreIgnoredItems,
 } from '@/lib/pending';
 import { flag, friendlyDbError, keepValues, money, qty, str, type FormResult } from '@/lib/mutate';
+import { setStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
 
 export async function saveProductAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
   const id = str(fd, 'id') || undefined;
@@ -86,6 +87,21 @@ export async function stockMoveAction(_prev: FormResult, fd: FormData): Promise<
   revalidatePath(`/stock/${id}`);
   revalidatePath('/stock');
   return { ok: true, values: { direction } };
+}
+
+/** เปิด–ปิดคอลัมน์ในตารางสินค้า จำไว้ให้ทั้งอู่ */
+export async function saveStockColsAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
+  const shown = fd.getAll('col').map(String);
+  const hidden = STOCK_COLS.map(([k]) => k).filter((k) => !shown.includes(k));
+
+  try {
+    await setStockHiddenCols(hidden);
+  } catch (err) {
+    return { error: friendlyDbError(err) };
+  }
+
+  revalidatePath('/stock');
+  return { ok: true };
 }
 
 export async function createCategoryAction(_prev: FormResult, fd: FormData): Promise<FormResult> {

@@ -92,6 +92,7 @@ export async function listContacts(opts: {
   page?: number;
   /** ขอทุกแถวโดยไม่แบ่งหน้า — ใช้ตอนสั่งพิมพ์รายชื่อ */
   all?: boolean;
+  pageSize?: number;
 }): Promise<{ rows: Contact[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -124,10 +125,11 @@ export async function listContacts(opts: {
 
     const totalRes = await c.query(`select count(*)::int as c from contacts k ${whereSql}`, params);
 
+    const size = opts.pageSize ?? PAGE_SIZE;
     const limitSql = opts.all
       ? ''
       : `limit $${params.length + 1} offset $${params.length + 2}`;
-    if (!opts.all) params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+    if (!opts.all) params.push(size, (page - 1) * size);
 
     const { rows } = await c.query(
       `select k.*, (select count(*) from vehicles v where v.contact_id = k.id) as vehicle_count

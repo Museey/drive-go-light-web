@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { requirePerm } from '@/lib/auth';
+import { PageSize, pageSizeOf } from '@/components/page-size';
 import { Shell } from '@/components/shell';
 import { listContacts } from '@/lib/contacts';
 
@@ -19,16 +20,17 @@ const TYPE_TABS = [
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; kind?: string; type?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; kind?: string; type?: string; page?: string; size?: string }>;
 }) {
   await requirePerm('customer');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
 
+  const pageSize = pageSizeOf(sp.size);
   const { rows, total } = await listContacts({
-    search: sp.q, kind: sp.kind, type: sp.type, page,
+    search: sp.q, kind: sp.kind, type: sp.type, page, pageSize,
   });
-  const lastPage = Math.max(1, Math.ceil(total / 40));
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
   const q = (patch: Record<string, string | number>) => ({
     pathname: '/customers',
@@ -36,15 +38,18 @@ export default async function CustomersPage({
       ...(sp.q ? { q: sp.q } : {}),
       ...(sp.kind ? { kind: sp.kind } : {}),
       ...(sp.type ? { type: sp.type } : {}),
+      ...(sp.size ? { size: sp.size } : {}),
       ...patch,
     },
   });
 
-  const printQuery = new URLSearchParams({
+  /* ตัวกรองที่ไม่รวมจำนวนแถว — ใช้ทั้งกับปุ่มเลือกจำนวนแถวและลิงก์พิมพ์ */
+  const filters: Record<string, string> = {
     ...(sp.q ? { q: sp.q } : {}),
     ...(sp.kind ? { kind: sp.kind } : {}),
     ...(sp.type ? { type: sp.type } : {}),
-  }).toString();
+  };
+  const printQuery = new URLSearchParams(filters).toString();
 
   const chipStyle = (on: boolean) =>
     on ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined;
@@ -125,6 +130,7 @@ export default async function CustomersPage({
 
         <div className="pager">
           <span>หน้า {page} จาก {lastPage}</span>
+          <PageSize base="/customers" size={pageSize} keep={filters} />
           <div className="spacer" />
           {page > 1 ? <Link className="btn" href={q({ page: page - 1 })}>ก่อนหน้า</Link> : null}
           {page < lastPage ? <Link className="btn" href={q({ page: page + 1 })}>ถัดไป</Link> : null}

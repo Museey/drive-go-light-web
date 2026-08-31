@@ -3,23 +3,33 @@ import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { listIncomeDocs } from '@/lib/queries';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
+import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, KIND_SHORT, payLabel, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * เลขกำกับยกมาจากเมนูของรุ่น 3.6 ให้ผู้ใช้เดิมไม่ต้องเรียนใหม่
+ *
+ * ใบส่งมอบทั้งสองแบบได้ 03.3 เท่ากันเพราะรุ่นเดิมมีหน้าเดียวชื่อ "ใบส่งมอบที่ออกแล้ว"
+ * ที่รวมทั้งมี VAT และไม่มี VAT ไว้ด้วยกัน เว็บแยกเป็นสองแท็บเพื่อให้กรองง่ายขึ้น
+ */
 const TABS = [
-  { key: '', label: 'ทั้งหมด' },
-  { key: 'QT', label: 'ใบเสนอราคา' },
-  { key: 'IVT', label: 'ใบส่งมอบ + ใบกำกับภาษี' },
-  { key: 'IV', label: 'ใบส่งมอบ (ไม่มี VAT)' },
-  { key: 'RC', label: 'ใบเสร็จรับเงิน' },
+  { key: '', no: '', label: 'ทั้งหมด' },
+  { key: 'QT', no: '03.1', label: 'ใบเสนอราคา' },
+  { key: 'IVT', no: '03.3', label: 'ใบส่งมอบ + ใบกำกับภาษี' },
+  { key: 'IV', no: '03.3', label: 'ใบส่งมอบ (ไม่มี VAT)' },
+  { key: 'RC', no: '03.5', label: 'ใบเสร็จรับเงิน' },
 ];
+
+/** เลขเมนูเดิมของหน้าออกเอกสารใหม่ */
+const NEW_NO = { QT: '03.1', RC: '03.4' } as const;
 
 export default async function IncomePage({
   searchParams,
 }: {
   searchParams: Promise<{
-    q?: string; kind?: string; page?: string;
+    q?: string; kind?: string; page?: string; size?: string;
     from?: string; to?: string; month?: string; year?: string;
   }>;
 }) {
@@ -29,9 +39,9 @@ export default async function IncomePage({
   const search = sp.q ?? '';
   const kind = sp.kind ?? '';
   const { from, to } = rangeFromParams(sp);
+  const pageSize = pageSizeOf(sp.size);
 
-  const { rows, total } = await listIncomeDocs({ search, kind, page, from, to });
-  const pageSize = 25;
+  const { rows, total } = await listIncomeDocs({ search, kind, page, from, to, pageSize });
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
   /* ค่าที่ต้องติดไปกับทุกลิงก์ในหน้านี้ ไม่งั้นกดหน้าถัดไปแล้วตัวกรองหลุด */
@@ -40,7 +50,11 @@ export default async function IncomePage({
     ...(kind ? { kind } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
+    ...(sp.size ? { size: sp.size } : {}),
   };
+  /* เหมือน keep แต่ไม่มี size — ปุ่มเลือกจำนวนแถวใส่ค่าของตัวเอง */
+  const { size: _size, ...filters } = keep;
+
   const linkTo = (patch: Record<string, string | number>) => ({
     pathname: '/income' as const,
     query: { ...keep, ...patch },
@@ -53,8 +67,12 @@ export default async function IncomePage({
       sub={`เอกสารขายทั้งหมด ${total.toLocaleString('en-US')} ฉบับ`}
       actions={
         <div className="tag-row">
-          <Link className="btn" href="/income/new?kind=QT">+ ใบเสนอราคา</Link>
-          <Link className="btn primary" href="/income/new?kind=RC">+ ใบเสร็จ</Link>
+          <Link className="btn" href="/income/new?kind=QT">
+            <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>{NEW_NO.QT}</span>+ ใบเสนอราคา
+          </Link>
+          <Link className="btn primary" href="/income/new?kind=RC">
+            <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>{NEW_NO.RC}</span>+ ใบเสร็จ
+          </Link>
         </div>
       }
     >
@@ -67,6 +85,7 @@ export default async function IncomePage({
               href={{ pathname: '/income', query: { ...keep, ...(t.key ? { kind: t.key } : { kind: undefined }) } }}
               style={t.key === kind ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}
             >
+              {t.no ? <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>{t.no}</span> : null}
               {t.label}
             </Link>
           ))}
@@ -146,6 +165,7 @@ export default async function IncomePage({
 
         <div className="pager">
           <span>หน้า {page} จาก {lastPage}</span>
+          <PageSize base="/income" size={pageSize} keep={filters} />
           <div className="spacer" />
           {page > 1 ? <Link className="btn" href={linkTo({ page: page - 1 })}>ก่อนหน้า</Link> : null}
           {page < lastPage ? <Link className="btn" href={linkTo({ page: page + 1 })}>ถัดไป</Link> : null}

@@ -249,6 +249,7 @@ export async function listBuyDocs(opts: {
   to?: string;
   /** ขอทุกแถวโดยไม่แบ่งหน้า — ใช้ตอนสั่งพิมพ์หรือส่งออก */
   all?: boolean;
+  pageSize?: number;
 }): Promise<{ rows: BuyRow[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -284,10 +285,11 @@ export async function listBuyDocs(opts: {
       `select count(*)::int as c from documents d where ${whereSql}`, params,
     );
 
+    const size = opts.pageSize ?? PAGE_SIZE;
     const limitSql = opts.all
       ? ''
       : `limit $${params.length + 1} offset $${params.length + 2}`;
-    if (!opts.all) params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+    if (!opts.all) params.push(size, (page - 1) * size);
 
     const { rows } = await c.query(
       `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.ref_doc_no, d.party_name,

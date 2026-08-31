@@ -128,9 +128,18 @@ export const FORM_LABEL: Record<FormKind, string> = {
   expense: 'ใบบันทึกค่าใช้จ่าย',
 };
 
-export function BlankForm({ kind, shop }: {
+/** จำนวนบรรทัดรายการที่เลือกได้ตอนพิมพ์ — ชุดเดียวกับรุ่น 3.6 */
+export const FORM_ROWS = [8, 12, 16, 20] as const;
+export const DEFAULT_FORM_ROWS = 12;
+
+/** จำนวนชุดที่พิมพ์ในครั้งเดียว — พิมพ์เก็บไว้เป็นปึกที่เคาน์เตอร์ */
+export const FORM_COPIES = [1, 2, 3, 5, 10] as const;
+
+export function BlankForm({ kind, shop, rows = DEFAULT_FORM_ROWS }: {
   kind: FormKind;
   shop: { name: string; addrText: string; tel: string; tel2: string; taxId: string };
+  /** จำนวนบรรทัดว่างในตารางรายการ */
+  rows?: number;
 }) {
   if (kind === 'quote') {
     return (
@@ -154,7 +163,7 @@ export function BlankForm({ kind, shop }: {
               <th style={{ width: 74 }}>ราคา/หน่วย</th><th style={{ width: 82 }}>จำนวนเงิน</th>
             </tr>
           </thead>
-          <tbody><BlankRows count={9} cols={7} /></tbody>
+          <tbody><BlankRows count={rows} cols={7} /></tbody>
         </table>
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
           <div className="box" style={{ flex: 1, marginTop: 0 }}>
@@ -194,7 +203,7 @@ export function BlankForm({ kind, shop }: {
               <th style={{ width: 88 }}>จำนวนเงิน</th>
             </tr>
           </thead>
-          <tbody><BlankRows count={8} cols={6} /></tbody>
+          <tbody><BlankRows count={rows} cols={6} /></tbody>
         </table>
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
           <div className="box" style={{ flex: 1, marginTop: 0 }}>
@@ -288,7 +297,7 @@ export function BlankForm({ kind, shop }: {
             <th style={{ width: 78 }}>ราคา/หน่วย</th><th style={{ width: 88 }}>จำนวนเงิน</th>
           </tr>
         </thead>
-        <tbody><BlankRows count={10} cols={isPurchase ? 7 : 6} /></tbody>
+        <tbody><BlankRows count={rows} cols={isPurchase ? 7 : 6} /></tbody>
       </table>
       <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
         <div className="box" style={{ flex: 1, marginTop: 0 }}>

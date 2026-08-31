@@ -101,6 +101,7 @@ a { color: inherit; text-decoration: none; }
 .stat .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .stat .value.due { color: var(--due); }
 .stat .value.warn { color: var(--warn); }
+.stat .value.ok { color: var(--ok); }
 
 /* ---------- ตาราง ---------- */
 .tablewrap { overflow-x: auto; }
@@ -244,6 +245,8 @@ table.doc td.blank { height: 19px; }
   position: sticky; top: 0; z-index: 5;
 }
 .printview { background: #DFE6EA; padding: 20px; min-height: 100vh; }
+/* พิมพ์หลายชุดในครั้งเดียว — บนจอเว้นระยะให้เห็นว่าเป็นคนละแผ่น */
+.printview .paper + .paper { margin-top: 20px; }
 
 @media print {
   @page { size: A4; margin: 0; }

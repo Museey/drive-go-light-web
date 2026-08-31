@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { STOCK_FLAG_LABEL, type StockFlag } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
+import { PageSize, pageSizeOf } from '@/components/page-size';
+import { getStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
+import { ColPicker } from './col-picker';
 import { Shell } from '@/components/shell';
 import { listCategories, listProducts } from '@/lib/products';
 import { baht, thDate } from '@/lib/format';
@@ -12,16 +15,18 @@ export default async function StockPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    q?: string; cat?: string; reorder?: string; all?: string; page?: string; flag?: string;
+    q?: string; cat?: string; reorder?: string; all?: string; page?: string; flag?: string; size?: string;
   }>;
 }) {
   await requirePerm('stock');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const flag = (['min', 'max', 'dead'] as const).find((f) => f === sp.flag);
+  const pageSize = pageSizeOf(sp.size);
 
-  const [cats, { rows, total, stockValue }] = await Promise.all([
+  const [cats, hidden, { rows, total, stockValue }] = await Promise.all([
     listCategories(),
+    getStockHiddenCols(),
     listProducts({
       search: sp.q,
       categoryId: sp.cat,
@@ -29,10 +34,12 @@ export default async function StockPage({
       flag,
       includeInactive: sp.all === '1',
       page,
+      pageSize,
     }),
   ]);
 
-  const lastPage = Math.max(1, Math.ceil(total / 40));
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  const show = (k: string) => !hidden.includes(k as never);
   const keep = {
     ...(sp.q ? { q: sp.q } : {}),
     ...(sp.cat ? { cat: sp.cat } : {}),
@@ -41,17 +48,25 @@ export default async function StockPage({
     ...(flag ? { flag } : {}),
   };
   const printQuery = new URLSearchParams(keep as Record<string, string>).toString();
+  /* หน้าพิมพ์ไม่แบ่งหน้า จึงไม่ส่ง size ไปด้วย */
+  const paged = { ...keep, ...(sp.size ? { size: sp.size } : {}) };
 
   return (
     <Shell
       current="/stock"
       title="ทะเบียนสินค้า"
-      sub={`${total.toLocaleString('en-US')} รายการ · มูลค่าสต๊อกตามต้นทุน ${baht(stockValue)} บาท`}
+      sub={
+        `${total.toLocaleString('en-US')} รายการ` +
+        (show('cost') ? ` · มูลค่าสต๊อกตามต้นทุน ${baht(stockValue)} บาท` : '')
+      }
       actions={
         <div className="tag-row">
           <Link className="btn" href={`/stock/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายการ</Link>
+          <ColPicker cols={STOCK_COLS} hidden={hidden} />
           <Link className="btn" href="/settings/backup">นำเข้า / ส่งออก CSV</Link>
-          <Link className="btn" href="/stock/pending">รายการค้างทำ</Link>
+          <Link className="btn" href="/stock/pending">
+            <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>05.2</span>รายการค้างทำ
+          </Link>
           <Link className="btn primary" href="/stock/new">+ เพิ่มสินค้า</Link>
         </div>
       }
@@ -102,14 +117,14 @@ export default async function StockPage({
                   <th>OEM</th>
                   <th>ชื่อสินค้า</th>
                   <th>หมวดหมู่</th>
-                  <th className="num">คงเหลือ</th>
-                  <th className="num">จุดสั่ง</th>
-                  <th className="num">สูงสุด</th>
-                  <th className="num">ทุน</th>
+                  {show('qty') ? <th className="num">คงเหลือ</th> : null}
+                  {show('min') ? <th className="num">จุดสั่ง</th> : null}
+                  {show('max') ? <th className="num">สูงสุด</th> : null}
+                  {show('cost') ? <th className="num">ทุน</th> : null}
                   <th className="num">ราคา A</th>
-                  <th className="num">ราคา B</th>
-                  <th className="num">ราคา C</th>
-                  <th>เคลื่อนไหวล่าสุด</th>
+                  {show('pB') ? <th className="num">ราคา B</th> : null}
+                  {show('pC') ? <th className="num">ราคา C</th> : null}
+                  {show('move') ? <th>เคลื่อนไหวล่าสุด</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -128,20 +143,26 @@ export default async function StockPage({
                     <td className="mono" style={{ color: 'var(--ink-3)' }}>{p.oem || '-'}</td>
                     <td className="wrap">{p.name}</td>
                     <td>{p.categoryName ?? <span style={{ color: 'var(--ink-3)' }}>ไม่ระบุ</span>}</td>
-                    <td className="num">
-                      {p.needReorder
-                        ? <span className="chip due">{p.qtyOnHand.toLocaleString('en-US')}</span>
-                        : p.qtyOnHand.toLocaleString('en-US')}
-                    </td>
-                    <td className="num" style={{ color: 'var(--ink-3)' }}>{p.qtyMin.toLocaleString('en-US')}</td>
-                    <td className="num" style={{ color: 'var(--ink-3)' }}>
-                      {p.qtyMax > 0 ? p.qtyMax.toLocaleString('en-US') : '-'}
-                    </td>
-                    <td className="num">{baht(p.lastCost)}</td>
+                    {show('qty') ? (
+                      <td className="num">
+                        {p.needReorder
+                          ? <span className="chip due">{p.qtyOnHand.toLocaleString('en-US')}</span>
+                          : p.qtyOnHand.toLocaleString('en-US')}
+                      </td>
+                    ) : null}
+                    {show('min') ? (
+                      <td className="num" style={{ color: 'var(--ink-3)' }}>{p.qtyMin.toLocaleString('en-US')}</td>
+                    ) : null}
+                    {show('max') ? (
+                      <td className="num" style={{ color: 'var(--ink-3)' }}>
+                        {p.qtyMax > 0 ? p.qtyMax.toLocaleString('en-US') : '-'}
+                      </td>
+                    ) : null}
+                    {show('cost') ? <td className="num">{baht(p.lastCost)}</td> : null}
                     <td className="num">{baht(p.priceA)}</td>
-                    <td className="num">{baht(p.priceB)}</td>
-                    <td className="num">{baht(p.priceC)}</td>
-                    <td>{thDate(p.lastMoveOn)}</td>
+                    {show('pB') ? <td className="num">{baht(p.priceB)}</td> : null}
+                    {show('pC') ? <td className="num">{baht(p.priceC)}</td> : null}
+                    {show('move') ? <td>{thDate(p.lastMoveOn)}</td> : null}
                   </tr>
                 ))}
               </tbody>
@@ -151,9 +172,10 @@ export default async function StockPage({
 
         <div className="pager">
           <span>หน้า {page} จาก {lastPage}</span>
+          <PageSize base="/stock" size={pageSize} keep={keep as Record<string, string>} />
           <div className="spacer" />
-          {page > 1 ? <Link className="btn" href={{ pathname: '/stock', query: { ...keep, page: page - 1 } }}>ก่อนหน้า</Link> : null}
-          {page < lastPage ? <Link className="btn" href={{ pathname: '/stock', query: { ...keep, page: page + 1 } }}>ถัดไป</Link> : null}
+          {page > 1 ? <Link className="btn" href={{ pathname: '/stock', query: { ...paged, page: page - 1 } }}>ก่อนหน้า</Link> : null}
+          {page < lastPage ? <Link className="btn" href={{ pathname: '/stock', query: { ...paged, page: page + 1 } }}>ถัดไป</Link> : null}
         </div>
       </div>
 

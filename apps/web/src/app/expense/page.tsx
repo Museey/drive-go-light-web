@@ -4,14 +4,16 @@ import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { listBuyDocs } from '@/lib/purchases';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
+import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, payLabel, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
+/** เลขกำกับยกมาจากเมนูของรุ่น 3.6 — หน้ารายการที่บันทึกแล้วคือ 04.2 และ 04.4 */
 const TABS = [
-  { key: '', label: 'ทั้งหมด' },
-  { key: 'PO', label: 'ใบซื้อสินค้า' },
-  { key: 'EX', label: 'ค่าใช้จ่าย' },
+  { key: '', no: '', label: 'ทั้งหมด' },
+  { key: 'PO', no: '04.2', label: 'ใบซื้อสินค้า' },
+  { key: 'EX', no: '04.4', label: 'ค่าใช้จ่าย' },
 ];
 
 const CAT_LABEL = Object.fromEntries(EXPENSE_CATS.map((c) => [c.key, c.label]));
@@ -20,7 +22,7 @@ export default async function ExpensePage({
   searchParams,
 }: {
   searchParams: Promise<{
-    q?: string; kind?: string; cat?: string; page?: string;
+    q?: string; kind?: string; cat?: string; page?: string; size?: string;
     from?: string; to?: string; month?: string; year?: string;
   }>;
 }) {
@@ -28,11 +30,12 @@ export default async function ExpensePage({
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const { from, to } = rangeFromParams(sp);
+  const pageSize = pageSizeOf(sp.size);
 
   const { rows, total } = await listBuyDocs({
-    kind: sp.kind, cat: sp.cat, search: sp.q, page, from, to,
+    kind: sp.kind, cat: sp.cat, search: sp.q, page, from, to, pageSize,
   });
-  const lastPage = Math.max(1, Math.ceil(total / 25));
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
   const keep: Record<string, string> = {
     ...(sp.q ? { q: sp.q } : {}),
@@ -40,8 +43,11 @@ export default async function ExpensePage({
     ...(sp.cat ? { cat: sp.cat } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
+    ...(sp.size ? { size: sp.size } : {}),
   };
-  const printQuery = new URLSearchParams(keep).toString();
+  /* เหมือน keep แต่ไม่มี size — ปุ่มเลือกจำนวนแถวใส่ค่าของตัวเอง และหน้าพิมพ์ไม่แบ่งหน้าอยู่แล้ว */
+  const { size: _size, ...filters } = keep;
+  const printQuery = new URLSearchParams(filters).toString();
   const chipStyle = (on: boolean) =>
     on ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined;
 
@@ -53,8 +59,12 @@ export default async function ExpensePage({
       actions={
         <div className="tag-row">
           <Link className="btn" href={`/expense/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายการ</Link>
-          <Link className="btn" href="/expense/new?kind=PO">+ ใบซื้อ</Link>
-          <Link className="btn primary" href="/expense/new?kind=EX">+ ค่าใช้จ่าย</Link>
+          <Link className="btn" href="/expense/new?kind=PO">
+            <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>04.1</span>+ ใบซื้อ
+          </Link>
+          <Link className="btn primary" href="/expense/new?kind=EX">
+            <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>04.3</span>+ ค่าใช้จ่าย
+          </Link>
         </div>
       }
     >
@@ -64,6 +74,7 @@ export default async function ExpensePage({
             <Link key={t.key || 'all'} className="chip"
                   href={{ pathname: '/expense', query: { ...keep, cat: undefined, ...(t.key ? { kind: t.key } : { kind: undefined }) } }}
                   style={chipStyle((sp.kind ?? '') === t.key)}>
+              {t.no ? <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>{t.no}</span> : null}
               {t.label}
             </Link>
           ))}
@@ -149,6 +160,7 @@ export default async function ExpensePage({
 
         <div className="pager">
           <span>หน้า {page} จาก {lastPage}</span>
+          <PageSize base="/expense" size={pageSize} keep={filters} />
           <div className="spacer" />
           {page > 1 ? <Link className="btn" href={{ pathname: '/expense', query: { ...keep, page: page - 1 } }}>ก่อนหน้า</Link> : null}
           {page < lastPage ? <Link className="btn" href={{ pathname: '/expense', query: { ...keep, page: page + 1 } }}>ถัดไป</Link> : null}
