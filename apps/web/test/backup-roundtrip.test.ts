@@ -35,10 +35,11 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     await admin.query(readFileSync(resolve(ROOT, 'db/001_init.sql'), 'utf8'));
     await admin.query(readFileSync(resolve(ROOT, 'db/002_auth.sql'), 'utf8'));
     await admin.query(`
+      -- role อยู่ระดับคลัสเตอร์ จึงค้างข้ามการรันเทสต์และอาจถูกใช้โดยฐานข้อมูลอื่นอยู่
+      -- ล้างเฉพาะสิทธิ์ในฐานข้อมูลนี้ แล้วให้ app-role.sql สร้างกลับ (รันซ้ำได้)
       do $$ begin
         if exists (select 1 from pg_roles where rolname = 'dgl_app') then
           execute 'drop owned by dgl_app';
-          execute 'drop role dgl_app';
         end if;
       end $$;
     `);

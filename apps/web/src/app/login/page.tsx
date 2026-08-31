@@ -67,6 +67,12 @@ export default async function LoginPage({
           </p>
         </div>
       </div>
+
+      <p style={{ textAlign: 'center', fontSize: 12, marginTop: 18 }}>
+        <a href="/privacy" style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}>
+          นโยบายข้อมูลส่วนบุคคล
+        </a>
+      </p>
     </div>
   );
 }

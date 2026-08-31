@@ -62,7 +62,7 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
         input.warrantyText || null, input.logoUrl || null,
       ],
     );
-  });
+  }, { allowExpired: true });
 }
 
 /* =====================================================================
@@ -149,7 +149,7 @@ export async function saveStaff(input: StaffInput, currentUserId: string): Promi
       [input.code, input.name, input.email || null, input.perms, input.active],
     );
     return rows[0].id;
-  });
+  }, { allowExpired: true });
 }
 
 /** ให้สิทธิ์เจ้าของกิจการกับพนักงานอีกคน — ใช้ตอนเปลี่ยนมือหรือมีหุ้นส่วน */

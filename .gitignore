@@ -4,3 +4,6 @@ fixtures/demo-backup.json
 .next/
 .env.local
 *.tsbuildinfo
+
+# ไฟล์สำรองฐานข้อมูล ห้ามขึ้น git เด็ดขาด
+backups/

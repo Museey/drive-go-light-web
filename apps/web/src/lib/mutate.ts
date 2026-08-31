@@ -2,19 +2,49 @@ import 'server-only';
 import type pg from 'pg';
 import { requirePerm, type Perm } from './auth';
 import { withTenant } from './db';
+import { licenseStatusWith } from './license-window';
+
+export interface MutateOptions {
+  /**
+   * ให้ทำงานได้แม้การใช้งานหมดอายุ
+   *
+   * ใช้กับงานที่ต้องทำได้เสมอ — ต่ออายุ ตั้งค่าร้าน และส่งออกข้อมูล
+   * อู่ที่ขาดต่ออายุต้องเอาข้อมูลของตัวเองออกไปได้เสมอ ไม่ใช่ถูกจับเป็นตัวประกัน
+   */
+  allowExpired?: boolean;
+}
 
 /**
  * ตัวช่วยสำหรับ Server Action ที่เขียนข้อมูล
  *
  * ทุก action ต้องตรวจสิทธิ์เองเสมอ ไม่ใช่พึ่งว่าหน้าที่เรียกมันตรวจไว้แล้ว
  * — action เรียกจากที่ไหนก็ได้ ไม่ได้ผูกกับหน้าใดหน้าหนึ่ง
+ *
+ * และตรวจอายุการใช้งานฝั่งเซิร์ฟเวอร์ทุกครั้งที่จะเขียน ต่างจากโปรแกรมเดิม
+ * ที่ตรวจในไฟล์ HTML ซึ่งข้ามได้จาก DevTools ตามที่คอมเมนต์ในโค้ดเดิมยอมรับไว้เอง
  */
 export async function mutate<T>(
   perm: Perm,
   fn: (client: pg.PoolClient, userId: string) => Promise<T>,
+  options: MutateOptions = {},
 ): Promise<T> {
   const session = await requirePerm(perm);
-  return withTenant(session.tenantId, (c) => fn(c, session.userId));
+
+  return withTenant(session.tenantId, async (c) => {
+    if (!options.allowExpired) {
+      const license = await licenseStatusWith(c);
+      if (license.mode === 'expired') {
+        throw new Error(
+          license.everPaid
+            ? 'การใช้งานหมดอายุแล้ว — ต่ออายุที่เมนูลิขสิทธิ์เพื่อบันทึกรายการใหม่ ' +
+              '(ข้อมูลเดิมยังดู พิมพ์ และส่งออกได้ตามปกติ)'
+            : 'ช่วงทดลองใช้สิ้นสุดแล้ว — สมัครใช้งานที่เมนูลิขสิทธิ์เพื่อบันทึกรายการใหม่ ' +
+              '(ข้อมูลที่บันทึกไว้ยังดู พิมพ์ และส่งออกได้ตามปกติ)',
+        );
+      }
+    }
+    return fn(c, session.userId);
+  });
 }
 
 /** ผลลัพธ์ของฟอร์ม — คืนค่าที่กรอกกลับไปด้วยเพื่อไม่ให้ผู้ใช้ต้องพิมพ์ใหม่ทั้งหมด */

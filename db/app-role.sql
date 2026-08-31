@@ -7,9 +7,19 @@
 -- รันด้วยผู้ใช้ที่สร้าง role ได้ หลังจากรัน 001_init.sql และ 002_auth.sql แล้ว
 --   psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f db/app-role.sql
 -- แล้วให้แอปต่อด้วย role นี้แทน
+--
+-- รันซ้ำได้ — role อยู่ระดับคลัสเตอร์ ไม่ได้อยู่ในฐานข้อมูล จึงยังอยู่หลังกู้ระบบ
+-- แต่สิทธิ์บนตารางหายไปพร้อมฐานข้อมูลเก่า ต้องรันไฟล์นี้ซ้ำทุกครั้งหลังกู้
 -- =====================================================================
 
-create role dgl_app login password 'เปลี่ยนรหัสนี้ก่อนใช้จริง';
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname = 'dgl_app') then
+    execute format('create role dgl_app login password %L', 'เปลี่ยนรหัสนี้ก่อนใช้จริง');
+  end if;
+end $$;
+
+-- กันพลาด: ถ้ามี role อยู่แล้วแต่ถูกยกระดับสิทธิ์ไว้ RLS จะถูกข้ามเงียบ ๆ
+alter role dgl_app nosuperuser nobypassrls nocreatedb nocreaterole;
 
 grant usage on schema public to dgl_app;
 grant select, insert, update, delete on all tables in schema public to dgl_app;
