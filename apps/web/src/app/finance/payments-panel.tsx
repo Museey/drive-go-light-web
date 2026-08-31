@@ -11,14 +11,17 @@ import { baht, thDate } from '@/lib/format';
  * ยอดที่รับ ณ วันออกเอกสารลบไม่ได้จากที่นี่ — เป็นส่วนหนึ่งของตัวเอกสาร
  */
 export function PaymentsPanel({
-  docId, docNo, payable, payments, canPay,
+  docId, docNo, payable, payments, canPay, direction = 'sell',
 }: {
   docId: string;
   docNo: string;
   payable: number;
   payments: PaymentHistoryRow[];
   canPay: boolean;
+  /** ฝั่งขายคือรับเงิน ฝั่งซื้อคือจ่ายเงิน — ใช้เลือกคำเรียก */
+  direction?: 'sell' | 'buy';
 }) {
+  const word = direction === 'buy' ? 'จ่าย' : 'รับ';
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
 
@@ -29,7 +32,7 @@ export function PaymentsPanel({
   return (
     <div className="card">
       <header>
-        <h2>การรับชำระเงิน</h2>
+        <h2>การ{word}ชำระเงิน</h2>
         <div className="spacer" />
         <span className={`chip ${settled ? 'ok' : 'due'}`}>
           {settled ? 'ชำระครบแล้ว' : `คงค้าง ${baht(outstanding)}`}
@@ -39,7 +42,7 @@ export function PaymentsPanel({
       {error ? <div className="err" style={{ margin: 16 }}>{error}</div> : null}
 
       {payments.length === 0 ? (
-        <div className="empty">ยังไม่มีการรับชำระ</div>
+        <div className="empty">ยังไม่มีการ{word}ชำระ</div>
       ) : (
         <div className="tablewrap">
           <table className="tbl">
@@ -83,7 +86,7 @@ export function PaymentsPanel({
                 </tr>
               ))}
               <tr>
-                <td colSpan={3} style={{ fontWeight: 600 }}>รวมรับชำระแล้ว</td>
+                <td colSpan={3} style={{ fontWeight: 600 }}>รวม{word}ชำระแล้ว</td>
                 <td className="num" style={{ fontWeight: 700 }}>{baht(paid)}</td>
                 <td colSpan={2} />
               </tr>
@@ -94,7 +97,7 @@ export function PaymentsPanel({
 
       {canPay && !settled ? (
         <div className="body" style={{ borderTop: '1px solid var(--line)' }}>
-          <PayForm docId={docId} docNo={docNo} outstanding={outstanding} />
+          <PayForm docId={docId} docNo={docNo} outstanding={outstanding} direction={direction} />
         </div>
       ) : null}
     </div>

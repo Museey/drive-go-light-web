@@ -133,10 +133,10 @@ export async function getDocBalance(id: string): Promise<DocBalance | null> {
 }
 
 /**
- * บันทึกการรับชำระจากลูกหนี้
+ * บันทึกการชำระเงินของเอกสารหนึ่งใบ — ใช้ได้ทั้งรับจากลูกหนี้และจ่ายให้เจ้าหนี้
  *
- * ปฏิเสธยอดที่เกินคงค้าง เพราะพิมพ์ผิดหนึ่งหลักแล้วยอดลูกหนี้ทั้งร้านเพี้ยน
- * ถ้าจะรับเกินจริง ให้แก้ยอดในเอกสารก่อน
+ * ปฏิเสธยอดที่เกินคงค้าง เพราะพิมพ์ผิดหนึ่งหลักแล้วยอดทั้งร้านเพี้ยน
+ * ถ้ายอดจริงสูงกว่า ให้แก้ยอดในเอกสารก่อน
  */
 export async function recordPayment(input: {
   docId: string;
@@ -211,5 +211,79 @@ export async function listPayments(docId: string): Promise<PaymentHistoryRow[]> 
       id: r.id, paidOn: r.paid_on, amount: n(r.amount),
       method: r.method, ref: r.ref, atIssue: r.at_issue, byWho: r.by_who,
     }));
+  });
+}
+
+/* =====================================================================
+   เจ้าหนี้ — ใช้โครงเดียวกับลูกหนี้ ต่างแค่ทิศทางของเอกสาร
+   ===================================================================== */
+
+export interface PayableRow extends Omit<ReceivableRow, 'vehiclePlate'> {
+  refDocNo: string;
+  expenseCat: string | null;
+}
+
+export interface PayableSummary {
+  rows: PayableRow[];
+  total: number;
+  overdueTotal: number;
+  overdueCount: number;
+  count: number;
+}
+
+/** เจ้าหนี้คงค้าง — ใบซื้อและค่าใช้จ่ายที่ยังจ่ายไม่ครบ */
+export async function listPayables(opts: {
+  search?: string;
+  onlyOverdue?: boolean;
+} = {}): Promise<PayableSummary> {
+  const search = (opts.search ?? '').trim();
+
+  return query(async (c) => {
+    const params: unknown[] = [];
+    const where = [`d.status = 'issued'`, `d.direction = 'buy'`];
+
+    if (search) {
+      params.push(`%${search}%`);
+      const i = params.length;
+      where.push(`(d.doc_no ilike $${i} or d.party_name ilike $${i} or d.ref_doc_no ilike $${i})`);
+    }
+
+    const { rows } = await c.query(
+      `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.due_date, d.ref_doc_no,
+              d.party_id, d.party_name, d.expense_cat::text as expense_cat, d.payable,
+              coalesce(p.paid, 0) as paid,
+              current_date - d.due_date as days_overdue
+       from documents d
+       left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+              on p.doc_id = d.id
+       where ${where.join(' and ')}
+         and d.payable - coalesce(p.paid, 0) > 0.004
+       order by d.due_date nulls last, d.doc_no`,
+      params,
+    );
+
+    const all: PayableRow[] = rows.map((r) => {
+      const payable = n(r.payable);
+      const paid = n(r.paid);
+      return {
+        id: r.id, kind: r.kind, docNo: r.doc_no, docDate: r.doc_date, dueDate: r.due_date,
+        refDocNo: r.ref_doc_no, partyId: r.party_id, partyName: r.party_name,
+        expenseCat: r.expense_cat,
+        payable, paid,
+        outstanding: round2(payable - paid),
+        daysOverdue: r.days_overdue === null ? -9999 : Number(r.days_overdue),
+      };
+    });
+
+    const list = opts.onlyOverdue ? all.filter((r) => r.daysOverdue > 0) : all;
+    const overdue = all.filter((r) => r.daysOverdue > 0);
+
+    return {
+      rows: list,
+      count: all.length,
+      total: round2(all.reduce((s, r) => s + r.outstanding, 0)),
+      overdueTotal: round2(overdue.reduce((s, r) => s + r.outstanding, 0)),
+      overdueCount: overdue.length,
+    };
   });
 }

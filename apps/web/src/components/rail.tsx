@@ -6,7 +6,7 @@ const MENU: { no: string; href: string; label: string; perm: Perm | null; ready:
   { no: '01', href: '/', label: 'หน้าแรก', perm: null, ready: true },
   { no: '02', href: '/customers', label: 'ข้อมูลลูกค้า / ผู้ขาย', perm: 'customer', ready: true },
   { no: '03', href: '/income', label: 'รายรับ', perm: 'income', ready: true },
-  { no: '04', href: '/expense', label: 'รายจ่าย', perm: 'expense', ready: false },
+  { no: '04', href: '/expense', label: 'รายจ่าย', perm: 'expense', ready: true },
   { no: '05', href: '/stock', label: 'สินค้า', perm: 'stock', ready: true },
   { no: '06', href: '/finance', label: 'บัญชี / การเงิน', perm: 'finance', ready: true },
   { no: '07', href: '/settings', label: 'ตั้งค่าร้าน', perm: 'settings', ready: false },

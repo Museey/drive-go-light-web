@@ -8,11 +8,11 @@ import { baht } from '@/lib/format';
 
 const METHODS = ['เงินสด', 'เงินโอน', 'บัตรเครดิต', 'เช็ค'];
 
-function Submit() {
+function Submit({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
     <button className="btn primary" type="submit" disabled={pending}>
-      {pending ? 'กำลังบันทึก…' : 'บันทึกการรับชำระ'}
+      {pending ? 'กำลังบันทึก…' : label}
     </button>
   );
 }
@@ -27,19 +27,21 @@ const today = () => {
  * ตัดบางส่วนก็แค่แก้ตัวเลข
  */
 export function PayForm({
-  docId, docNo, outstanding, compact,
+  docId, docNo, outstanding, compact, direction = 'sell',
 }: {
   docId: string;
   docNo: string;
   outstanding: number;
   compact?: boolean;
+  direction?: 'sell' | 'buy';
 }) {
+  const word = direction === 'buy' ? 'จ่าย' : 'รับ';
   const [state, action] = useActionState<FormResult, FormData>(recordPaymentAction, {});
   const [amount, setAmount] = useState(String(outstanding));
   const [method, setMethod] = useState('เงินสด');
 
   if (state.ok) {
-    return <div className="ok-msg">บันทึกการรับชำระของ {docNo} เรียบร้อย</div>;
+    return <div className="ok-msg">บันทึกการ{word}ชำระของ {docNo} เรียบร้อย</div>;
   }
 
   return (
@@ -50,7 +52,7 @@ export function PayForm({
 
       <div className="row-fields f4">
         <div className={state.field === 'amount' ? 'field bad' : 'field'}>
-          <label htmlFor={`amt-${docId}`}>จำนวนเงินที่รับ</label>
+          <label htmlFor={`amt-${docId}`}>จำนวนเงินที่{word}</label>
           <input className="in mono" id={`amt-${docId}`} name="amount" inputMode="decimal"
                  value={amount} onChange={(e) => setAmount(e.target.value)} required />
           <span className="hint">คงค้าง {baht(outstanding)} บาท</span>
@@ -65,7 +67,7 @@ export function PayForm({
         </div>
 
         <div className={state.field === 'paidOn' ? 'field bad' : 'field'}>
-          <label htmlFor={`d-${docId}`}>วันที่รับ</label>
+          <label htmlFor={`d-${docId}`}>วันที่{word}</label>
           <input className="in mono" id={`d-${docId}`} name="paidOn" type="date" defaultValue={today()} />
         </div>
 
@@ -77,7 +79,7 @@ export function PayForm({
       </div>
 
       <div className="tag-row">
-        <Submit />
+        <Submit label={`บันทึกการ${word}ชำระ`} />
         {!compact ? (
           <button className="btn" type="button" onClick={() => setAmount(String(outstanding))}>
             เต็มจำนวน

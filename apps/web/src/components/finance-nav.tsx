@@ -4,7 +4,7 @@ import Link from 'next/link';
 const TABS = [
   { key: 'sales', no: '06.1', label: 'ยอดขาย', href: '/finance/sales', ready: false },
   { key: 'ar', no: '06.2', label: 'ลูกหนี้', href: '/finance/ar', ready: true },
-  { key: 'ap', no: '06.3', label: 'เจ้าหนี้', href: '/finance/ap', ready: false },
+  { key: 'ap', no: '06.3', label: 'เจ้าหนี้', href: '/finance/ap', ready: true },
   { key: 'pl', no: '06.4', label: 'กำไรขาดทุน', href: '/finance/pl', ready: false },
 ];
 
