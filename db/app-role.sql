@@ -21,6 +21,21 @@ end $$;
 -- กันพลาด: ถ้ามี role อยู่แล้วแต่ถูกยกระดับสิทธิ์ไว้ RLS จะถูกข้ามเงียบ ๆ
 alter role dgl_app nosuperuser nobypassrls nocreatedb nocreaterole;
 
+-- เขตเวลาของกิจการ — ต้องตรงกับ SHOP_TZ ในแพ็กเกจ core
+--
+-- ค่าตั้งต้นของหลายคอลัมน์เป็น current_date และรายงานหลายตัวเทียบกับ current_date
+-- ถ้าฐานข้อมูลเป็น UTC (ค่าตั้งต้นของ Docker และเซิร์ฟเวอร์ส่วนใหญ่)
+-- ช่วงเที่ยงคืนถึงเจ็ดโมงเช้าตามเวลาไทย ฐานข้อมูลจะยังนับเป็นเมื่อวาน
+-- แล้ววันที่บนเอกสารกับวันที่ของการเคลื่อนไหวสต๊อกจะไม่ตรงกันโดยไม่มีอาการให้เห็น
+alter role dgl_app set timezone = 'Asia/Bangkok';
+
+-- ตั้งที่ระดับฐานข้อมูลด้วย เพื่อให้ทุกการเชื่อมต่อเห็นวันเดียวกัน
+-- ไม่ใช่แค่แอป — psql ที่ผู้ดูแลเปิดดู สคริปต์สำรองข้อมูล และงาน cron
+-- ถ้าตั้งเฉพาะ role ของแอป คนที่เข้ามาแก้ข้อมูลด้วยมือตอนตีสองจะลงวันที่ผิดโดยไม่รู้ตัว
+do $$ begin
+  execute format('alter database %I set timezone = %L', current_database(), 'Asia/Bangkok');
+end $$;
+
 grant usage on schema public to dgl_app;
 grant select, insert, update, delete on all tables in schema public to dgl_app;
 grant execute on all functions in schema public to dgl_app;

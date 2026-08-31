@@ -11,7 +11,31 @@ import type { Numeric } from './types.js';
 export const iso = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-export const today = (): string => iso(new Date());
+/**
+ * เขตเวลาของกิจการ
+ *
+ * โปรแกรมนี้ใช้ในไทยที่เดียว วันที่บนเอกสารคือวันที่ตามเวลาไทยเสมอ
+ * ไม่ใช่วันที่ตามเครื่องที่รันอยู่ — เซิร์ฟเวอร์ส่วนใหญ่ตั้งเป็น UTC
+ * ถ้าปล่อยให้ใช้เวลาเครื่อง ใบที่ออกตอนตีหนึ่งจะลงวันที่ของเมื่อวาน
+ * ซึ่งเป็นวันที่ผิดบนเอกสารภาษี ไม่ใช่แค่เรื่องความสวยงาม
+ */
+export const SHOP_TZ = 'Asia/Bangkok';
+
+const TZ_PARTS = new Intl.DateTimeFormat('en-US', {
+  timeZone: SHOP_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/** วันที่ตามเวลาไทยของช่วงเวลาที่ให้มา ไม่ขึ้นกับเขตเวลาของเครื่อง */
+export function isoInShopTz(d: Date): string {
+  const part: Record<string, string> = {};
+  for (const p of TZ_PARTS.formatToParts(d)) part[p.type] = p.value;
+  return `${part.year}-${part.month}-${part.day}`;
+}
+
+export const today = (): string => isoInShopTz(new Date());
 
 /** บวกวันเข้ากับวันที่รูปแบบ 'YYYY-MM-DD' */
 export function addDays(s: string, n: Numeric): string {

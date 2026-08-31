@@ -1,5 +1,6 @@
 import 'server-only';
 import pg from 'pg';
+import { SHOP_TZ, today } from '@drivegolight/core';
 
 /**
  * คอลัมน์ date (oid 1082) ต้องกลับมาเป็นสตริง 'YYYY-MM-DD'
@@ -19,6 +20,8 @@ declare global {
   var __dglPool: pg.Pool | undefined;
   // eslint-disable-next-line no-var
   var __dglRlsChecked: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var __dglTzChecked: boolean | undefined;
 }
 
 function makePool(): pg.Pool {
@@ -57,6 +60,37 @@ async function assertRlsEnforced(client: pg.PoolClient): Promise<void> {
 }
 
 /**
+ * ตรวจว่าฐานข้อมูลกับแอปเห็นวันที่ตรงกัน
+ *
+ * ค่าตั้งต้นของหลายคอลัมน์เป็น current_date และรายงานหลายตัวเทียบกับ current_date
+ * ส่วนแอปคิดวันที่ตามเวลาไทยเสมอ ถ้าฐานข้อมูลตั้งเป็น UTC (ค่าตั้งต้นของ Docker
+ * และเซิร์ฟเวอร์ส่วนใหญ่) ช่วงเที่ยงคืนถึงเจ็ดโมงเช้าสองฝั่งจะต่างกันหนึ่งวัน
+ * แล้วเอกสารกับการเคลื่อนไหวสต๊อกของงานเดียวกันจะลงคนละวัน โดยไม่มีอาการให้เห็น
+ *
+ * แก้ด้วย db/app-role.sql ซึ่งตั้ง timezone ให้ role ของแอปไว้แล้ว
+ */
+async function assertClockAgrees(client: pg.PoolClient): Promise<void> {
+  if (globalThis.__dglTzChecked) return;
+
+  const { rows } = await client.query<{ db_date: string; tz: string }>(
+    `select current_date::text as db_date, current_setting('timezone') as tz`,
+  );
+  const dbDate = rows[0]?.db_date;
+  const appDate = today();
+
+  if (dbDate !== appDate) {
+    throw new Error(
+      `ฐานข้อมูลกับแอปเห็นวันที่ไม่ตรงกัน — ฐานข้อมูลว่า ${dbDate} แอปว่า ${appDate} ` +
+      `(เขตเวลาของฐานข้อมูลคือ ${rows[0]?.tz} แอปใช้ ${SHOP_TZ})
+` +
+      'เอกสารกับการเคลื่อนไหวสต๊อกจะลงคนละวัน แก้ด้วยการรัน db/app-role.sql ' +
+      `หรือสั่ง alter role dgl_app set timezone = '${SHOP_TZ}';`,
+    );
+  }
+  globalThis.__dglTzChecked = true;
+}
+
+/**
  * รัน query ในนามของอู่หนึ่งราย
  *
  * ทุกการอ่านเขียนข้อมูลต้องผ่านฟังก์ชันนี้ ห้ามเรียก pool.query() ตรง ๆ
@@ -70,6 +104,7 @@ export async function withTenant<T>(
   const client = await pool.connect();
   try {
     await assertRlsEnforced(client);
+    await assertClockAgrees(client);
     await client.query('begin');
     await client.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
     const result = await fn(client);
@@ -91,6 +126,7 @@ export async function withoutTenant<T>(fn: (client: pg.PoolClient) => Promise<T>
   const client = await pool.connect();
   try {
     await assertRlsEnforced(client);
+    await assertClockAgrees(client);
     return await fn(client);
   } finally {
     client.release();
