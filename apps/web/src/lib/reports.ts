@@ -256,3 +256,78 @@ export async function getTaxSummary(): Promise<TaxSummary> {
     };
   });
 }
+
+/* =====================================================================
+   ส่งออกรายรับรายจ่ายเป็น CSV
+   ===================================================================== */
+
+export interface FinanceCsvRow {
+  group: string;
+  docNo: string;
+  docDate: string;
+  party: string;
+  net: number;
+  vat: number;
+  wht: number;
+  payable: number;
+  paid: number;
+  outstanding: number;
+  status: string;
+}
+
+/**
+ * รายรับและรายจ่ายทุกใบในช่วงที่เลือก ไว้ส่งให้สำนักงานบัญชี
+ *
+ * ยกคอลัมน์มาจาก exportFinanceCsv() ของรุ่น 3.6 ทั้งชุดและเรียงเหมือนเดิม
+ * สำนักงานบัญชีที่เคยรับไฟล์จากโปรแกรมเดิมจะได้ไม่ต้องแก้สูตรใน Excel ที่ทำไว้แล้ว
+ *
+ * ฝั่งขายใช้เงื่อนไขเดียวกับรายงานยอดขาย ใบเสร็จที่ออกต่อจากใบส่งมอบจึงไม่ถูกนับซ้ำ
+ */
+export async function getFinanceCsvRows(from?: string, to?: string): Promise<FinanceCsvRow[]> {
+  return query(async (c) => {
+    const params: unknown[] = [];
+    const sellRange = rangeSql(params, from, to);
+    const buyRange = rangeSql(params, from, to);
+
+    const { rows } = await c.query(
+      `with paid as (select doc_id, sum(amount) as amount from payments group by doc_id)
+       select 'ขาย' as grp, d.kind::text as kind, null::text as cat,
+              d.doc_no, d.doc_date::text as doc_date, d.party_name,
+              d.net_amount, d.vat_amount, d.wht_amount, d.payable,
+              coalesce(p.amount, 0) as paid
+         from documents d left join paid p on p.doc_id = d.id
+        where ${SALES_DOCS}${sellRange}
+       union all
+       select case when d.kind = 'PO' then 'ซื้อ' else 'ค่าใช้จ่าย' end as grp,
+              d.kind::text, d.expense_cat::text,
+              d.doc_no, d.doc_date::text, d.party_name,
+              d.net_amount, d.vat_amount, d.wht_amount, d.payable,
+              coalesce(p.amount, 0)
+         from documents d left join paid p on p.doc_id = d.id
+        where d.status <> 'void' and d.direction = 'buy'${buyRange}
+       order by doc_date, doc_no`,
+      params,
+    );
+
+    const catLabel = Object.fromEntries(EXPENSE_CATS.map((x) => [x.key, x.label]));
+
+    return rows.map((r) => {
+      const payable = n(r.payable);
+      const paid = n(r.paid);
+      const outstanding = round2(Math.max(0, payable - paid));
+      return {
+        group: r.cat ? `${r.grp} · ${catLabel[r.cat] ?? r.cat}` : r.grp,
+        docNo: r.doc_no,
+        docDate: r.doc_date,
+        party: r.party_name ?? '',
+        net: n(r.net_amount),
+        vat: n(r.vat_amount),
+        wht: n(r.wht_amount),
+        payable,
+        paid,
+        outstanding,
+        status: outstanding <= 0.004 ? 'ชำระครบแล้ว' : paid > 0.004 ? 'ชำระบางส่วน' : 'ยังไม่ชำระ',
+      };
+    });
+  });
+}

@@ -26,6 +26,16 @@ export interface SqlClient {
 export interface ImportOptions {
   /** ชื่ออู่ ถ้าไม่ระบุใช้ shop.name จากไฟล์ */
   tenantName?: string;
+  /**
+   * กู้คืนทับอู่ที่มีอยู่แล้ว แทนที่จะสร้างอู่ใหม่
+   *
+   * ผู้เรียกต้องล้างข้อมูลเดิมของอู่นั้นมาก่อน ตัวนำเข้าไม่ล้างให้
+   * และจะไม่แตะผู้ใช้งานกับการสมัครใช้บริการ — สองอย่างนี้เป็นของระบบเว็บ
+   * ไม่ได้อยู่ในไฟล์สำรอง (ไฟล์เดิมไม่มีรหัสผ่าน) ถ้าเขียนทับจะล็อกทุกคนออกจากระบบ
+   */
+  intoTenantId?: string;
+  /** ให้ผู้เรียกคุมทรานแซกชันเอง — ใช้ตอนเรียกจากในเว็บซึ่งเปิดทรานแซกชันไว้แล้ว */
+  externalTransaction?: boolean;
   /** วันที่ลงยอดสต๊อกยกมา ถ้าไม่ระบุใช้วันที่นำเข้า */
   openingStockDate?: string;
   /** เลขที่เอกสารรีเซ็ตรายเดือนหรือไม่ — ค่าตั้งต้นคือไม่รีเซ็ต ตามพฤติกรรมโปรแกรมเดิม */
@@ -96,13 +106,15 @@ export async function importBackup(
   const ctx: ShopContext = { vatRate: shop.vatRate };
   const warnings: string[] = [];
 
-  const tenantId = randomUUID();
+  const restoring = Boolean(options.intoTenantId);
+  const tenantId = options.intoTenantId ?? randomUUID();
   const openingDate = options.openingStockDate ?? new Date().toISOString().slice(0, 10);
+  const owned = !options.externalTransaction;
 
-  await client.query('begin');
+  if (owned) await client.query('begin');
   try {
     // ต้องตั้ง tenant ก่อนแทรกแถวแรก ไม่งั้น RLS ปฏิเสธทุกอย่างรวมถึงตาราง tenants เอง
-    await client.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
+    if (owned) await client.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
 
     /* ---------- ร้าน ---------- */
     const taxId = digitsOnly(shop.taxId);
@@ -114,9 +126,14 @@ export async function importBackup(
     }
 
     await client.query(
-      `insert into tenants (id, name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
-                            price_tier, proposer_name, warranty_text, ui_prefs)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      restoring
+        ? `update tenants set name=$2, tax_id=$3, addr_text=$4, tel=$5, tel2=$6,
+                  vat_rate=$7, wht_rate=$8, price_tier=$9, proposer_name=$10,
+                  warranty_text=$11, ui_prefs=$12
+             where id = $1`
+        : `insert into tenants (id, name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
+                                price_tier, proposer_name, warranty_text, ui_prefs)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         tenantId,
         options.tenantName ?? text(shop.name) ?? 'อู่',
@@ -131,23 +148,30 @@ export async function importBackup(
 
     /* ---------- ผู้ใช้งาน ---------- */
     const PERM_KEYS = ['customer', 'income', 'expense', 'stock', 'finance', 'settings'];
-    const userRows = (db.users ?? []).map((u: any) => [
+    const userRows = restoring ? [] : (db.users ?? []).map((u: any) => [
       randomUUID(), tenantId, text(u.code), text(u.name), 'staff',
       PERM_KEYS.filter((k) => u.perms?.[k]), u.active !== false, text(u.id),
     ]);
     await insertRows(client, 'users',
       ['id', 'tenant_id', 'code', 'name', 'role', 'perms', 'active', 'legacy_id'], userRows);
 
-    if (userRows.length) {
+    if (restoring) {
       warnings.push(
-        `นำเข้าผู้ใช้ ${userRows.length} คนโดยไม่เอารหัสผ่านเดิมมาด้วย ` +
-        '(ไฟล์เดิมเก็บเป็นข้อความธรรมดา) — ต้องให้ทุกคนตั้งรหัสผ่านใหม่',
+        'ผู้ใช้งานและรหัสผ่านเดิมในระบบยังอยู่เหมือนเดิม ไม่ได้เอาจากไฟล์ ' +
+        '(ไฟล์สำรองไม่มีรหัสผ่าน ถ้าเขียนทับจะเข้าระบบไม่ได้ทั้งอู่)',
       );
+    } else {
+      if (userRows.length) {
+        warnings.push(
+          `นำเข้าผู้ใช้ ${userRows.length} คนโดยไม่เอารหัสผ่านเดิมมาด้วย ` +
+          '(ไฟล์เดิมเก็บเป็นข้อความธรรมดา) — ต้องให้ทุกคนตั้งรหัสผ่านใหม่',
+        );
+      }
+      warnings.push('ยังไม่มีบัญชีเจ้าของกิจการ — สร้างด้วย --owner-email= แล้วส่งลิงก์ตั้งรหัสผ่านให้เจ้าของอู่');
     }
-    warnings.push('ยังไม่มีบัญชีเจ้าของกิจการ — สร้างด้วย --owner-email= แล้วส่งลิงก์ตั้งรหัสผ่านให้เจ้าของอู่');
 
     /* ---------- ลิขสิทธิ์ ---------- */
-    if (db.lic?.expires) {
+    if (db.lic?.expires && !restoring) {
       await client.query(
         `insert into subscriptions (tenant_id, plan, started_on, expires_on, note)
          values ($1,'light-yearly',$2,$3,$4)`,
@@ -588,7 +612,7 @@ export async function importBackup(
       .map((n) => [tenantId, n]);
     await insertRows(client, 'ignored_item_names', ['tenant_id', 'name_norm'], ignoredRows);
 
-    await client.query('commit');
+    if (owned) await client.query('commit');
 
     return {
       tenantId,
@@ -606,7 +630,7 @@ export async function importBackup(
       warnings,
     };
   } catch (err) {
-    await client.query('rollback');
+    if (owned) await client.query('rollback');
     throw err;
   }
 }

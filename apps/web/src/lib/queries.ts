@@ -1,4 +1,5 @@
 import 'server-only';
+import { docMissing } from '@drivegolight/core';
 import { query } from './auth';
 
 /** ยอดเงินจาก Postgres มาเป็นสตริง แปลงเองเพื่อไม่ให้เสียความละเอียดระหว่างทาง */
@@ -68,10 +69,12 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
        group by d.direction`,
     );
 
+    /* เงื่อนไขเดียวกับป้าย min ใน core — คงเหลือเท่ากับจุดสั่งซื้อพอดีก็นับแล้ว
+       และข้ามสินค้าที่ยังไม่ได้ตั้งจุดสั่งซื้อ ไม่งั้นของหมดสต๊อกทุกตัวจะขึ้นมาเตือน */
     const reorder = await c.query(
       `select count(*) as c
        from products p join product_stock s on s.product_id = p.id
-       where p.active and s.qty_on_hand < p.qty_min`,
+       where p.active and p.qty_min > 0 and s.qty_on_hand <= p.qty_min`,
     );
 
     const counts = await c.query(
@@ -105,6 +108,8 @@ export interface IncomeRow {
   paid: number;
   outstanding: number;
   dueDate: string | null;
+  /** ข้อมูลที่ยังขาดบนเอกสารใบนี้ — ว่างคือครบ */
+  missing: string[];
 }
 
 export interface IncomeListResult {
@@ -118,6 +123,11 @@ export async function listIncomeDocs(opts: {
   search?: string;
   kind?: string;
   page?: number;
+  /** ช่วงวันที่ของเอกสาร 'YYYY-MM-DD' */
+  from?: string;
+  to?: string;
+  /** ขอทุกแถวโดยไม่แบ่งหน้า — ใช้ตอนสั่งพิมพ์หรือส่งออก */
+  all?: boolean;
 }): Promise<IncomeListResult> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -137,6 +147,14 @@ export async function listIncomeDocs(opts: {
       const i = params.length;
       where.push(`(d.doc_no ilike $${i} or d.party_name ilike $${i} or d.vehicle_plate ilike $${i})`);
     }
+    if (opts.from) {
+      params.push(opts.from);
+      where.push(`d.doc_date >= $${params.length}`);
+    }
+    if (opts.to) {
+      params.push(opts.to);
+      where.push(`d.doc_date <= $${params.length}`);
+    }
 
     const whereSql = where.join(' and ');
 
@@ -145,17 +163,23 @@ export async function listIncomeDocs(opts: {
       params,
     );
 
-    params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+    const limitSql = opts.all
+      ? ''
+      : `limit $${params.length + 1} offset $${params.length + 2}`;
+    if (!opts.all) params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+
     const { rows } = await c.query(
       `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.party_name, d.vehicle_plate,
               d.grand_total, d.payable, d.due_date,
+              d.party_id, d.party_type::text as party_type, d.party_tax_id,
+              d.party_addr_text, d.party_addr,
               coalesce(p.paid, 0) as paid
        from documents d
        left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
               on p.doc_id = d.id
        where ${whereSql}
        order by d.doc_date desc, d.doc_no desc
-       limit $${params.length - 1} offset $${params.length}`,
+       ${limitSql}`,
       params,
     );
 
@@ -173,6 +197,15 @@ export async function listIncomeDocs(opts: {
         paid: money(r.paid),
         outstanding: Math.round((money(r.payable) - money(r.paid)) * 100) / 100,
         dueDate: r.due_date,
+        missing: docMissing({
+          kind: r.kind,
+          partyId: r.party_id,
+          partyName: r.party_name ?? '',
+          partyType: r.party_type,
+          partyTaxId: r.party_tax_id ?? '',
+          partyAddrText: r.party_addr_text ?? '',
+          partyAddr: r.party_addr,
+        }),
       })),
     };
   });
@@ -228,6 +261,8 @@ export interface DocDetail {
   warrantyText: string | null;
   receivedBy: string;
   note: string;
+  /** ข้อมูลที่ยังขาดบนเอกสารใบนี้ — ว่างคือครบ */
+  missing: string[];
   /* เฉพาะใบเสนอราคา */
   complaints: string[];
   findings: string[];
@@ -276,6 +311,15 @@ export async function getDocDetail(id: string): Promise<DocDetail | null> {
       partyTel: d.party_tel,
       partyEmail: d.party_email,
       partyAddrText: d.party_addr_text,
+      missing: docMissing({
+        kind: d.kind_text,
+        partyId: d.party_id,
+        partyName: d.party_name ?? '',
+        partyType: d.party_type,
+        partyTaxId: d.party_tax_id ?? '',
+        partyAddrText: d.party_addr_text ?? '',
+        partyAddr: d.party_addr,
+      }),
       refDocNo: d.ref_doc_no,
       vehicle: d.vehicle,
       vehiclePlate: d.vehicle_plate,

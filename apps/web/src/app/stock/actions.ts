@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
-  adjustStock, createCategory, deleteCategory, renameCategory, saveProduct,
+  adjustStock, createCategory, deleteCategory, recordStockMove, renameCategory, saveProduct,
 } from '@/lib/products';
 import {
   createProductFromPending, ignorePendingItem, linkPendingToProduct, restoreIgnoredItems,
@@ -65,6 +65,27 @@ export async function adjustStockAction(_prev: FormResult, fd: FormData): Promis
   revalidatePath(`/stock/${id}`);
   revalidatePath('/stock');
   return { ok: true };
+}
+
+export async function stockMoveAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
+  const id = str(fd, 'productId');
+  const direction = str(fd, 'direction') === 'out' ? 'out' : 'in';
+  if (!str(fd, 'qty')) return { error: 'ต้องกรอกจำนวน', field: 'qty' };
+
+  const movedOn = str(fd, 'movedOn');
+  if (!movedOn) return { error: 'ต้องกรอกวันที่', field: 'movedOn' };
+
+  try {
+    await recordStockMove({
+      productId: id, direction, qty: qty(fd, 'qty'), movedOn, note: str(fd, 'note'),
+    });
+  } catch (err) {
+    return { error: friendlyDbError(err), values: keepValues(fd) };
+  }
+
+  revalidatePath(`/stock/${id}`);
+  revalidatePath('/stock');
+  return { ok: true, values: { direction } };
 }
 
 export async function createCategoryAction(_prev: FormResult, fd: FormData): Promise<FormResult> {

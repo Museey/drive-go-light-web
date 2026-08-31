@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { today } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getProduct, listCategories, listStockMoves } from '@/lib/products';
 import { baht, thDate } from '@/lib/format';
 import { ProductForm } from '../product-form';
 import { AdjustForm } from '../adjust-form';
+import { MoveForm } from '../move-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,9 +58,24 @@ export default async function ProductPage({
         <>
           <div className="card">
             <header>
+              <h2>รับเข้า / ตัดออก</h2>
+              <div className="spacer" />
+              <span className="subtle">
+                คงเหลือตอนนี้ {product.qtyOnHand.toLocaleString('en-US')} {product.unit}
+                {product.qtyMin > 0 ? ` · Min ${product.qtyMin.toLocaleString('en-US')}` : ''}
+                {product.qtyMax > 0 ? ` · Max ${product.qtyMax.toLocaleString('en-US')}` : ''}
+              </span>
+            </header>
+            <div className="body">
+              <MoveForm productId={product.id} unit={product.unit} today={today()} />
+            </div>
+          </div>
+
+          <div className="card">
+            <header>
               <h2>ปรับยอดคงเหลือ</h2>
               <div className="spacer" />
-              <span className="subtle">คงเหลือตอนนี้ {product.qtyOnHand.toLocaleString('en-US')} {product.unit}</span>
+              <span className="subtle">ใช้ตอนตรวจนับแล้วยอดไม่ตรง — กรอกจำนวนที่นับได้จริง</span>
             </header>
             <div className="body">
               <AdjustForm productId={product.id} current={product.qtyOnHand} unit={product.unit} />

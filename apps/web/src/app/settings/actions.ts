@@ -6,6 +6,7 @@ import { issueSetupToken } from '@/lib/auth';
 import { saveShopSettings, saveStaff, promoteToOwner, nextUserCode } from '@/lib/settings';
 import { PERM_KEYS, type PermKey } from '@/lib/perms';
 import { importProductsCsv, type CsvImportResult } from '@/lib/products-csv';
+import { restoreFromBackup, type RestoreResult } from '@/lib/restore';
 import { friendlyDbError, money, str, type FormResult } from '@/lib/mutate';
 
 function describe(err: unknown, fallback: string): string {
@@ -113,6 +114,35 @@ export async function promoteAction(userId: string): Promise<FormResult> {
   }
   revalidatePath('/settings/users');
   return { ok: true };
+}
+
+/**
+ * กู้คืนข้อมูลทั้งอู่จากไฟล์สำรอง
+ *
+ * ทับของเดิมทั้งหมด จึงบังคับให้พิมพ์คำยืนยันก่อน แบบเดียวกับตอนขอลบข้อมูล
+ * เพราะกดพลาดแล้วข้อมูลที่ทับไปไม่มีทางกลับ นอกจากมีไฟล์สำรองอีกไฟล์
+ */
+export async function restoreBackupAction(
+  _prev: FormResult & { result?: RestoreResult },
+  fd: FormData,
+): Promise<FormResult & { result?: RestoreResult }> {
+  await requirePerm('settings');
+
+  const file = fd.get('file');
+  if (!(file instanceof File) || file.size === 0) return { error: 'เลือกไฟล์สำรองก่อน', field: 'file' };
+  if (file.size > 40 * 1024 * 1024) return { error: 'ไฟล์ใหญ่เกิน 40 MB', field: 'file' };
+
+  if (str(fd, 'confirm') !== 'ทับข้อมูลเดิม') {
+    return { error: 'พิมพ์คำว่า "ทับข้อมูลเดิม" ให้ตรงเพื่อยืนยัน', field: 'confirm' };
+  }
+
+  try {
+    const result = await restoreFromBackup(await file.text());
+    revalidatePath('/', 'layout');
+    return { ok: true, result };
+  } catch (err) {
+    return { error: describe(err, 'กู้คืนข้อมูลไม่สำเร็จ — ข้อมูลเดิมยังอยู่ครบ') };
+  }
 }
 
 export async function importCsvAction(_prev: FormResult, fd: FormData): Promise<FormResult & { result?: CsvImportResult }> {

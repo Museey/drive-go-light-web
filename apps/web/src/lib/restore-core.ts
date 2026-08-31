@@ -1,0 +1,78 @@
+import { importBackup, validateBackup, type BackupFile } from '@drivegolight/importer';
+
+/**
+ * แกนกลางของการกู้คืนข้อมูล — รับ client ที่เปิดทรานแซกชันและตั้งอู่ไว้แล้ว
+ *
+ * แยกจาก restore.ts ที่ผูกกับ session ของผู้ใช้ เพื่อให้ชุดทดสอบเรียกได้ตรง ๆ
+ * เรื่องนี้ต้องมีเทสต์เพราะมันลบข้อมูลจริงก่อนเขียนทับ
+ */
+
+interface SqlClient {
+  query(sql: string, params?: unknown[]): Promise<{ rows: any[]; rowCount: number | null }>;
+}
+
+/** ตารางที่ถูกล้าง เรียงตามลำดับที่ลบได้โดยไม่ติดคีย์นอก */
+export const WIPE_ORDER = [
+  'payments',
+  'stock_moves',
+  'doc_items',
+  'documents',
+  'vehicles',
+  'contacts',
+  'products',
+  'product_categories',
+  'doc_sequences',
+  'ignored_item_names',
+] as const;
+
+export function parseBackupFile(text: string): BackupFile {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('อ่านไฟล์ไม่ได้ — ไม่ใช่ไฟล์ JSON ที่ถูกต้อง เลือกไฟล์ที่ดาวน์โหลดจากเมนูสำรองข้อมูล');
+  }
+
+  const problems = validateBackup(data);
+  if (problems.length) {
+    const shown = problems.slice(0, 8).join(' · ');
+    const more = problems.length > 8 ? ` …และอีก ${problems.length - 8} จุด` : '';
+    throw new Error(`ไฟล์สำรองไม่ถูกต้อง พบปัญหา ${problems.length} จุด: ${shown}${more}`);
+  }
+
+  return data as BackupFile;
+}
+
+/**
+ * ล้างข้อมูลธุรกิจของอู่ที่ตั้งไว้ใน client — ไม่แตะผู้ใช้งานและการสมัครใช้บริการ
+ * เอกสารอ้างถึงกันเองอยู่ ต้องตัดสายก่อนถึงจะลบได้ (parent_doc_id เป็น on delete restrict)
+ */
+export async function wipeTenantData(c: SqlClient): Promise<Record<string, number>> {
+  const removed: Record<string, number> = {};
+  await c.query(`update documents set parent_doc_id = null where parent_doc_id is not null`);
+  for (const table of WIPE_ORDER) {
+    const res = await c.query(`delete from ${table}`);
+    removed[table] = res.rowCount ?? 0;
+  }
+  return removed;
+}
+
+export interface RestoreResult {
+  counts: Record<string, number>;
+  warnings: string[];
+  /** จำนวนแถวที่ลบทิ้งก่อนกู้คืน ไว้บอกผู้ใช้ว่าทับอะไรไป */
+  removed: Record<string, number>;
+}
+
+export async function restoreIntoTenant(
+  c: SqlClient,
+  tenantId: string,
+  backup: BackupFile,
+): Promise<RestoreResult> {
+  const removed = await wipeTenantData(c);
+  const result = await importBackup(c, backup, {
+    intoTenantId: tenantId,
+    externalTransaction: true,
+  });
+  return { counts: result.counts, warnings: result.warnings, removed };
+}

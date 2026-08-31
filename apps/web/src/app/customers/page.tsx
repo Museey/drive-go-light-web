@@ -40,6 +40,12 @@ export default async function CustomersPage({
     },
   });
 
+  const printQuery = new URLSearchParams({
+    ...(sp.q ? { q: sp.q } : {}),
+    ...(sp.kind ? { kind: sp.kind } : {}),
+    ...(sp.type ? { type: sp.type } : {}),
+  }).toString();
+
   const chipStyle = (on: boolean) =>
     on ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined;
 
@@ -48,7 +54,12 @@ export default async function CustomersPage({
       current="/customers"
       title="ข้อมูลลูกค้า / ผู้ขาย"
       sub={`${total.toLocaleString('en-US')} ราย`}
-      actions={<Link className="btn primary" href="/customers/new">+ เพิ่มผู้ติดต่อ</Link>}
+      actions={
+        <div className="tag-row">
+          <Link className="btn" href={`/customers/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายชื่อ</Link>
+          <Link className="btn primary" href="/customers/new">+ เพิ่มผู้ติดต่อ</Link>
+        </div>
+      }
     >
       <div className="card">
         <div className="toolbar">

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { can, requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { CsvImport } from './csv-import';
+import { RestoreForm } from './restore-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,17 @@ export default async function BackupPage() {
             ไฟล์ไม่มีรหัสผ่านของผู้ใช้อยู่ในนั้น แม้แต่แบบที่แฮชแล้ว
             เพราะไฟล์สำรองมักถูกส่งต่อกันทางแชท
           </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <header><h2>กู้คืนข้อมูลจากไฟล์สำรอง</h2></header>
+        <div className="body">
+          <p style={{ marginBottom: 14 }}>
+            นำไฟล์ที่เคยดาวน์โหลดไว้กลับเข้าระบบ ใช้ได้ทั้งไฟล์จากเว็บนี้และไฟล์จากโปรแกรมรุ่น HTML
+            ข้อมูลปัจจุบันจะถูกแทนที่ทั้งหมด
+          </p>
+          <RestoreForm />
         </div>
       </div>
 

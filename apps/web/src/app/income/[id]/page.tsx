@@ -54,9 +54,26 @@ export default async function DocPage({
         </div>
       )}
 
+      {doc.missing.length && doc.status !== 'void' ? (
+        <div className="note" style={{ marginBottom: 16 }}>
+          <b>ข้อมูลบนเอกสารยังไม่ครบ</b> — {doc.missing.join(' · ')}
+          <br />
+          {doc.kind === 'IVT'
+            ? 'ใบกำกับภาษีที่ข้อมูลผู้ซื้อไม่ครบ ลูกค้านำไปใช้เป็นภาษีซื้อไม่ได้ และต้องออกใหม่ทั้งใบ'
+            : 'เติมให้ครบก่อนออกใบกำกับภาษีต่อจากใบนี้ จะได้ไม่ต้องออกใหม่ทีหลัง'}
+        </div>
+      ) : null}
+
       <div className="grid g2">
         <div className="card">
-          <header><h2>ผู้ซื้อ</h2><div className="spacer" /><span className={`chip ${status.tone}`}>{status.text}</span></header>
+          <header>
+            <h2>ผู้ซื้อ</h2>
+            <div className="spacer" />
+            {doc.missing.length ? (
+              <span className="chip warn" title={doc.missing.join(' · ')}>ข้อมูลไม่ครบ</span>
+            ) : null}
+            <span className={`chip ${status.tone}`}>{status.text}</span>
+          </header>
           <div className="body">
             <dl className="kv">
               <dt>ชื่อ</dt><dd>{doc.partyName || '-'}</dd>

@@ -1,4 +1,5 @@
 import 'server-only';
+import { stockFlags, today, type StockFlag } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
 
@@ -27,7 +28,9 @@ export interface ProductRow {
   qtyOnHand: number;
   lastMoveOn: string | null;
   active: boolean;
-  /** ต่ำกว่าจุดสั่งซื้อ */
+  /** ป้ายสถานะ — ถึงจุดสั่งซื้อ เกินระดับสูงสุด ไม่เคลื่อนไหว */
+  flags: StockFlag[];
+  /** ถึงจุดสั่งซื้อแล้ว — ย่อจาก flags ไว้ใช้ที่เดิมที่เคยเรียก */
   needReorder: boolean;
 }
 
@@ -46,13 +49,30 @@ export async function listCategories(): Promise<Category[]> {
 
 const PAGE_SIZE = 40;
 
+/** เงื่อนไข SQL ของแต่ละป้าย — ต้องตรงกับ stockFlags() ใน core ทุกตัวอักษร */
+const FLAG_SQL: Record<StockFlag, string> = {
+  min: 'p.qty_min > 0 and s.qty_on_hand <= p.qty_min',
+  max: 'p.qty_max > 0 and s.qty_on_hand > p.qty_max',
+  dead: `(s.last_move_on is null or s.last_move_on <= current_date - interval '6 months')`,
+};
+
+export interface ProductListResult {
+  rows: ProductRow[];
+  total: number;
+  /** มูลค่าสต๊อกตามต้นทุนของ "ทุกแถวที่ตรงเงื่อนไข" ไม่ใช่เฉพาะหน้านี้ */
+  stockValue: number;
+}
+
 export async function listProducts(opts: {
   search?: string;
   categoryId?: string;
   onlyReorder?: boolean;
+  flag?: StockFlag;
   includeInactive?: boolean;
   page?: number;
-}): Promise<{ rows: ProductRow[]; total: number }> {
+  /** ขอทุกแถวโดยไม่แบ่งหน้า — ใช้ตอนสั่งพิมพ์รายการ */
+  all?: boolean;
+}): Promise<ProductListResult> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
 
@@ -71,17 +91,24 @@ export async function listProducts(opts: {
       const i = params.length;
       where.push(`(p.code ilike $${i} or p.name ilike $${i} or p.oem ilike $${i})`);
     }
-    if (opts.onlyReorder) where.push('s.qty_on_hand < p.qty_min');
+    if (opts.onlyReorder) where.push(`(${FLAG_SQL.min})`);
+    if (opts.flag) where.push(`(${FLAG_SQL[opts.flag]})`);
 
     const whereSql = where.length ? `where ${where.join(' and ')}` : '';
 
     const totalRes = await c.query(
-      `select count(*)::int as c from products p
+      `select count(*)::int as c,
+              coalesce(sum(s.qty_on_hand * p.last_cost), 0) as value
+       from products p
        join product_stock s on s.product_id = p.id ${whereSql}`,
       params,
     );
 
-    params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+    const limitSql = opts.all
+      ? ''
+      : `limit $${params.length + 1} offset $${params.length + 2}`;
+    if (!opts.all) params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+
     const { rows } = await c.query(
       `select p.*, g.name as category_name, s.qty_on_hand, s.last_move_on
        from products p
@@ -89,12 +116,13 @@ export async function listProducts(opts: {
        left join product_categories g on g.id = p.category_id
        ${whereSql}
        order by p.code
-       limit $${params.length - 1} offset $${params.length}`,
+       ${limitSql}`,
       params,
     );
 
     return {
       total: totalRes.rows[0].c,
+      stockValue: n(totalRes.rows[0].value),
       rows: rows.map(toProductRow),
     };
   });
@@ -103,6 +131,10 @@ export async function listProducts(opts: {
 function toProductRow(r: any): ProductRow {
   const onHand = n(r.qty_on_hand);
   const min = n(r.qty_min);
+  const flags = stockFlags(
+    { qtyOnHand: onHand, qtyMin: min, qtyMax: n(r.qty_max), lastMoveOn: r.last_move_on },
+    today(),
+  );
   return {
     id: r.id,
     code: r.code,
@@ -120,7 +152,8 @@ function toProductRow(r: any): ProductRow {
     qtyOnHand: onHand,
     lastMoveOn: r.last_move_on,
     active: r.active,
-    needReorder: onHand < min,
+    flags,
+    needReorder: flags.includes('min'),
   };
 }
 
@@ -248,6 +281,37 @@ export async function adjustStock(productId: string, countedQty: number, note: s
       `insert into stock_moves (tenant_id, product_id, qty_delta, reason, note, created_by)
        values (current_tenant_id(), $1, $2, 'adjust', $3, $4)`,
       [productId, delta, note || 'ปรับยอดตามที่นับได้', userId],
+    );
+  });
+}
+
+/**
+ * รับสินค้าเข้าหรือตัดออกจากสต๊อกด้วยมือ พร้อมระบุวันที่
+ *
+ * ยกมาจาก moveModal() ของรุ่น 3.6 — ต่างจากการปรับยอดตรงที่ตรงนี้บอกว่า
+ * "เข้ามาเท่าไร" หรือ "ออกไปเท่าไร" ไม่ใช่ "ตอนนี้เหลือเท่าไร"
+ * ใช้ตอนรับของที่ไม่ได้เปิดใบซื้อ หรือเบิกของไปใช้ในอู่เอง และย้อนวันที่ได้
+ *
+ * ลงเป็น reason = 'adjust' เพราะไม่มีเอกสารอ้าง — ชนิดอื่นในฐานข้อมูลบังคับให้ต้องมี doc_id
+ */
+export async function recordStockMove(input: {
+  productId: string;
+  direction: 'in' | 'out';
+  qty: number;
+  movedOn: string;
+  note: string;
+}): Promise<void> {
+  return mutate('stock', async (c, userId) => {
+    const qty = Math.abs(Math.round(input.qty * 1000) / 1000);
+    if (qty === 0) throw new Error('ระบุจำนวนมากกว่า 0');
+
+    const delta = input.direction === 'in' ? qty : -qty;
+    const fallback = input.direction === 'in' ? 'รับเข้าด้วยมือ' : 'ตัดออกด้วยมือ';
+
+    await c.query(
+      `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta, reason, note, created_by)
+       values (current_tenant_id(), $1, $2, $3, 'adjust', $4, $5)`,
+      [input.productId, input.movedOn, delta, input.note || fallback, userId],
     );
   });
 }

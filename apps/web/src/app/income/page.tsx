@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { listIncomeDocs } from '@/lib/queries';
+import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { baht, KIND_SHORT, payLabel, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -17,21 +18,32 @@ const TABS = [
 export default async function IncomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; kind?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string; kind?: string; page?: string;
+    from?: string; to?: string; month?: string; year?: string;
+  }>;
 }) {
   await requirePerm('income');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const search = sp.q ?? '';
   const kind = sp.kind ?? '';
+  const { from, to } = rangeFromParams(sp);
 
-  const { rows, total } = await listIncomeDocs({ search, kind, page });
+  const { rows, total } = await listIncomeDocs({ search, kind, page, from, to });
   const pageSize = 25;
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
+  /* ค่าที่ต้องติดไปกับทุกลิงก์ในหน้านี้ ไม่งั้นกดหน้าถัดไปแล้วตัวกรองหลุด */
+  const keep: Record<string, string> = {
+    ...(search ? { q: search } : {}),
+    ...(kind ? { kind } : {}),
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+  };
   const linkTo = (patch: Record<string, string | number>) => ({
     pathname: '/income' as const,
-    query: { ...(search ? { q: search } : {}), ...(kind ? { kind } : {}), ...patch },
+    query: { ...keep, ...patch },
   });
 
   return (
@@ -52,7 +64,7 @@ export default async function IncomePage({
             <Link
               key={t.key || 'all'}
               className="chip"
-              href={{ pathname: '/income', query: { ...(search ? { q: search } : {}), ...(t.key ? { kind: t.key } : {}) } }}
+              href={{ pathname: '/income', query: { ...keep, ...(t.key ? { kind: t.key } : { kind: undefined }) } }}
               style={t.key === kind ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}
             >
               {t.label}
@@ -63,11 +75,16 @@ export default async function IncomePage({
 
           <form action="/income" method="get" style={{ display: 'flex', gap: 6 }}>
             {kind ? <input type="hidden" name="kind" value={kind} /> : null}
+            {from ? <input type="hidden" name="from" value={from} /> : null}
+            {to ? <input type="hidden" name="to" value={to} /> : null}
             <input className="in" type="search" name="q" defaultValue={search}
                    placeholder="เลขที่เอกสาร ชื่อลูกค้า หรือทะเบียนรถ" style={{ width: 260 }} />
             <button className="btn" type="submit">ค้นหา</button>
           </form>
         </div>
+
+        <DocDateFilter base="/income" from={from} to={to}
+                       keep={{ ...(search ? { q: search } : {}), ...(kind ? { kind } : {}) }} />
 
         {rows.length === 0 ? (
           <div className="empty">ไม่พบเอกสารที่ตรงกับเงื่อนไข</div>
@@ -98,7 +115,15 @@ export default async function IncomePage({
                       </td>
                       <td>{KIND_SHORT[r.kind]}</td>
                       <td>{thDate(r.docDate)}</td>
-                      <td className="wrap">{r.partyName || '-'}</td>
+                      <td className="wrap">
+                        {r.partyName || '-'}
+                        {r.missing.length ? (
+                          <span className="chip warn" title={r.missing.join(' · ')}
+                                style={{ marginLeft: 6 }}>
+                            ข้อมูลไม่ครบ
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="mono">{r.vehiclePlate || '-'}</td>
                       <td className="num">{baht(r.payable)}</td>
                       <td className="num">{r.kind === 'QT' ? '-' : baht(r.paid)}</td>

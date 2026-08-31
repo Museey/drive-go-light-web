@@ -3,6 +3,7 @@ import { EXPENSE_CATS } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { listBuyDocs } from '@/lib/purchases';
+import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { baht, payLabel, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -18,22 +19,29 @@ const CAT_LABEL = Object.fromEntries(EXPENSE_CATS.map((c) => [c.key, c.label]));
 export default async function ExpensePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; kind?: string; cat?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string; kind?: string; cat?: string; page?: string;
+    from?: string; to?: string; month?: string; year?: string;
+  }>;
 }) {
   await requirePerm('expense');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
+  const { from, to } = rangeFromParams(sp);
 
   const { rows, total } = await listBuyDocs({
-    kind: sp.kind, cat: sp.cat, search: sp.q, page,
+    kind: sp.kind, cat: sp.cat, search: sp.q, page, from, to,
   });
   const lastPage = Math.max(1, Math.ceil(total / 25));
 
-  const keep = {
+  const keep: Record<string, string> = {
     ...(sp.q ? { q: sp.q } : {}),
     ...(sp.kind ? { kind: sp.kind } : {}),
     ...(sp.cat ? { cat: sp.cat } : {}),
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
   };
+  const printQuery = new URLSearchParams(keep).toString();
   const chipStyle = (on: boolean) =>
     on ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined;
 
@@ -44,6 +52,7 @@ export default async function ExpensePage({
       sub={`${total.toLocaleString('en-US')} รายการ`}
       actions={
         <div className="tag-row">
+          <Link className="btn" href={`/expense/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายการ</Link>
           <Link className="btn" href="/expense/new?kind=PO">+ ใบซื้อ</Link>
           <Link className="btn primary" href="/expense/new?kind=EX">+ ค่าใช้จ่าย</Link>
         </div>
@@ -53,7 +62,7 @@ export default async function ExpensePage({
         <div className="toolbar">
           {TABS.map((t) => (
             <Link key={t.key || 'all'} className="chip"
-                  href={{ pathname: '/expense', query: { ...(sp.q ? { q: sp.q } : {}), ...(t.key ? { kind: t.key } : {}) } }}
+                  href={{ pathname: '/expense', query: { ...keep, cat: undefined, ...(t.key ? { kind: t.key } : { kind: undefined }) } }}
                   style={chipStyle((sp.kind ?? '') === t.key)}>
               {t.label}
             </Link>
@@ -64,7 +73,7 @@ export default async function ExpensePage({
               <span style={{ color: 'var(--line)' }}>|</span>
               {EXPENSE_CATS.map((c) => (
                 <Link key={c.key} className="chip"
-                      href={{ pathname: '/expense', query: { kind: 'EX', ...(sp.cat === c.key ? {} : { cat: c.key }) } }}
+                      href={{ pathname: '/expense', query: { ...keep, kind: 'EX', cat: sp.cat === c.key ? undefined : c.key } }}
                       style={chipStyle(sp.cat === c.key)}>
                   {c.label}
                 </Link>
@@ -75,11 +84,21 @@ export default async function ExpensePage({
           <div className="spacer" />
           <form action="/expense" method="get" style={{ display: 'flex', gap: 6 }}>
             {sp.kind ? <input type="hidden" name="kind" value={sp.kind} /> : null}
+            {sp.cat ? <input type="hidden" name="cat" value={sp.cat} /> : null}
+            {from ? <input type="hidden" name="from" value={from} /> : null}
+            {to ? <input type="hidden" name="to" value={to} /> : null}
             <input className="in" type="search" name="q" defaultValue={sp.q ?? ''}
                    placeholder="เลขที่ ชื่อผู้ขาย หรือเลขใบกำกับ" style={{ width: 240 }} />
             <button className="btn" type="submit">ค้นหา</button>
           </form>
         </div>
+
+        <DocDateFilter base="/expense" from={from} to={to}
+                       keep={{
+                         ...(sp.q ? { q: sp.q } : {}),
+                         ...(sp.kind ? { kind: sp.kind } : {}),
+                         ...(sp.cat ? { cat: sp.cat } : {}),
+                       }} />
 
         {rows.length === 0 ? (
           <div className="empty">ไม่พบรายการที่ตรงกับเงื่อนไข</div>

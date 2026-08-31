@@ -16,7 +16,12 @@ export default async function PendingPage() {
       current="/stock"
       title="รายการค้างทำ"
       sub={`${items.length} ชื่อที่ยังไม่ได้ลงทะเบียน`}
-      actions={<Link className="btn" href="/stock">← ทะเบียนสินค้า</Link>}
+      actions={
+        <div className="tag-row">
+          <Link className="btn" href="/stock/pending/print">พิมพ์รายการ</Link>
+          <Link className="btn" href="/stock">← ทะเบียนสินค้า</Link>
+        </div>
+      }
     >
       <div className="note">
         รายการเหล่านี้คือชื่อที่พิมพ์ลงเอกสารเองโดยไม่ได้เลือกจากทะเบียนสินค้า

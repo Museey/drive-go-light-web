@@ -21,8 +21,18 @@ export default async function PLPage({
   const pct = (v: number) => (pl.revenue > 0 ? `${((v / pl.revenue) * 100).toFixed(1)}%` : '—');
   const profitColor = pl.netProfit >= 0 ? 'var(--ok)' : 'var(--due)';
 
+  const csvQuery = new URLSearchParams({
+    ...(sp.from ? { from: sp.from } : {}),
+    ...(sp.to ? { to: sp.to } : {}),
+  }).toString();
+
   return (
-    <Shell actions={<PagePrintButton />} current="/finance" title="งบกำไรขาดทุน" sub="คิดจากมูลค่าก่อนภาษีมูลค่าเพิ่ม">
+    <Shell actions={
+      <div className="tag-row">
+        <a className="btn" href={`/finance/csv${csvQuery ? `?${csvQuery}` : ''}`} download>ส่งออก CSV</a>
+        <PagePrintButton />
+      </div>
+    } current="/finance" title="งบกำไรขาดทุน" sub="คิดจากมูลค่าก่อนภาษีมูลค่าเพิ่ม">
       <FinanceNav current="pl" />
       <PrintHeader title="งบกำไรขาดทุน" range={{ from: sp.from, to: sp.to }} />
 

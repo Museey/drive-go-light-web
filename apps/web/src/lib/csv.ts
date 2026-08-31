@@ -92,3 +92,9 @@ export function csvNumber(row: string[], i?: number): number {
 
 export const csvText = (row: string[], i?: number): string =>
   i === undefined ? '' : String(row[i] ?? '').trim();
+
+/** หัวตารางของไฟล์ส่งออกรายรับรายจ่าย — เรียงตามรุ่น 3.6 */
+export const FINANCE_HEADERS = [
+  'ประเภท', 'เลขที่', 'วันที่', 'คู่ค้า', 'ก่อนภาษี', 'VAT',
+  'หัก ณ ที่จ่าย', 'ยอดสุทธิ', 'ชำระแล้ว', 'คงค้าง', 'สถานะ',
+] as const;

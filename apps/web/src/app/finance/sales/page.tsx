@@ -27,8 +27,18 @@ export default async function SalesReportPage({
   const shown = vat.filter((v) =>
     (!sp.from || v.key >= sp.from.slice(0, 7)) && (!sp.to || v.key <= sp.to.slice(0, 7)));
 
+  const csvQuery = new URLSearchParams({
+    ...(sp.from ? { from: sp.from } : {}),
+    ...(sp.to ? { to: sp.to } : {}),
+  }).toString();
+
   return (
-    <Shell actions={<PagePrintButton />} current="/finance" title="ยอดขาย" sub="มูลค่าก่อนภาษีและภาษีขายรายงวด">
+    <Shell actions={
+      <div className="tag-row">
+        <a className="btn" href={`/finance/csv${csvQuery ? `?${csvQuery}` : ''}`} download>ส่งออก CSV</a>
+        <PagePrintButton />
+      </div>
+    } current="/finance" title="ยอดขาย" sub="มูลค่าก่อนภาษีและภาษีขายรายงวด">
       <FinanceNav current="sales" />
       <PrintHeader title="รายงานยอดขายและภาษี" range={{ from: sp.from, to: sp.to }} />
 

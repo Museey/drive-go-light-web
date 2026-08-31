@@ -244,6 +244,11 @@ export async function listBuyDocs(opts: {
   cat?: string;
   search?: string;
   page?: number;
+  /** ช่วงวันที่ของเอกสาร 'YYYY-MM-DD' */
+  from?: string;
+  to?: string;
+  /** ขอทุกแถวโดยไม่แบ่งหน้า — ใช้ตอนสั่งพิมพ์หรือส่งออก */
+  all?: boolean;
 }): Promise<{ rows: BuyRow[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -265,13 +270,25 @@ export async function listBuyDocs(opts: {
       const i = params.length;
       where.push(`(d.doc_no ilike $${i} or d.party_name ilike $${i} or d.ref_doc_no ilike $${i})`);
     }
+    if (opts.from) {
+      params.push(opts.from);
+      where.push(`d.doc_date >= $${params.length}`);
+    }
+    if (opts.to) {
+      params.push(opts.to);
+      where.push(`d.doc_date <= $${params.length}`);
+    }
 
     const whereSql = where.join(' and ');
     const totalRes = await c.query(
       `select count(*)::int as c from documents d where ${whereSql}`, params,
     );
 
-    params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+    const limitSql = opts.all
+      ? ''
+      : `limit $${params.length + 1} offset $${params.length + 2}`;
+    if (!opts.all) params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+
     const { rows } = await c.query(
       `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.ref_doc_no, d.party_name,
               d.expense_cat::text as expense_cat, d.payable, d.due_date, d.goods_received,
@@ -281,7 +298,7 @@ export async function listBuyDocs(opts: {
               on p.doc_id = d.id
        where ${whereSql}
        order by d.doc_date desc, d.doc_no desc
-       limit $${params.length - 1} offset $${params.length}`,
+       ${limitSql}`,
       params,
     );
 
