@@ -1,6 +1,8 @@
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { FinanceNav } from '@/components/finance-nav';
+import { PrintHeader } from '@/components/print-header';
+import { PagePrintButton } from '@/components/print-button';
 import { DateRange } from '@/components/date-range';
 import { getSalesReport, getVatChain } from '@/lib/reports';
 import { baht, monthLabel } from '@/lib/format';
@@ -26,8 +28,9 @@ export default async function SalesReportPage({
     (!sp.from || v.key >= sp.from.slice(0, 7)) && (!sp.to || v.key <= sp.to.slice(0, 7)));
 
   return (
-    <Shell current="/finance" title="ยอดขาย" sub="มูลค่าก่อนภาษีและภาษีขายรายงวด">
+    <Shell actions={<PagePrintButton />} current="/finance" title="ยอดขาย" sub="มูลค่าก่อนภาษีและภาษีขายรายงวด">
       <FinanceNav current="sales" />
+      <PrintHeader title="รายงานยอดขายและภาษี" range={{ from: sp.from, to: sp.to }} />
 
       <div className="grid g4" style={{ marginBottom: 18 }}>
         <div className="card"><div className="body stat">

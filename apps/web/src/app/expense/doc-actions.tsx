@@ -37,6 +37,7 @@ export function BuyDocActions({ id }: { id: string }) {
   return (
     <div className="tag-row">
       <Link className="btn" href={`/expense/${id}/edit`}>แก้ไข</Link>
+      <Link className="btn" href={`/expense/${id}/print`}>พิมพ์เอกสาร</Link>
       <button className="btn danger" type="button" onClick={() => setVoiding(true)}>ยกเลิกเอกสาร</button>
     </div>
   );

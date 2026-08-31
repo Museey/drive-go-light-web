@@ -1,6 +1,8 @@
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { FinanceNav } from '@/components/finance-nav';
+import { PrintHeader } from '@/components/print-header';
+import { PagePrintButton } from '@/components/print-button';
 import { listPayables } from '@/lib/receivables';
 import { baht } from '@/lib/format';
 import { ApRow } from './ap-row';
@@ -20,8 +22,9 @@ export default async function ApPage({
     await listPayables({ search: sp.q, onlyOverdue });
 
   return (
-    <Shell current="/finance" title="เจ้าหนี้" sub="ใบซื้อและค่าใช้จ่ายที่ยังจ่ายไม่ครบ">
+    <Shell actions={<PagePrintButton />} current="/finance" title="เจ้าหนี้" sub="ใบซื้อและค่าใช้จ่ายที่ยังจ่ายไม่ครบ">
       <FinanceNav current="ap" />
+      <PrintHeader title="รายงานเจ้าหนี้คงค้าง" range={undefined} />
 
       <div className="grid g4" style={{ marginBottom: 18 }}>
         <div className="card"><div className="body stat">

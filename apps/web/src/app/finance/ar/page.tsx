@@ -1,6 +1,8 @@
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { FinanceNav } from '@/components/finance-nav';
+import { PrintHeader } from '@/components/print-header';
+import { PagePrintButton } from '@/components/print-button';
 import { listReceivables } from '@/lib/receivables';
 import { baht } from '@/lib/format';
 import { ArRow } from './ar-row';
@@ -20,8 +22,9 @@ export default async function ArPage({
     await listReceivables({ search: sp.q, onlyOverdue });
 
   return (
-    <Shell current="/finance" title="ลูกหนี้" sub="เอกสารขายที่ยังเก็บเงินไม่ครบ">
+    <Shell actions={<PagePrintButton />} current="/finance" title="ลูกหนี้" sub="เอกสารขายที่ยังเก็บเงินไม่ครบ">
       <FinanceNav current="ar" />
+      <PrintHeader title="รายงานลูกหนี้คงค้าง" range={undefined} />
 
       <div className="grid g4" style={{ marginBottom: 18 }}>
         <div className="card"><div className="body stat">

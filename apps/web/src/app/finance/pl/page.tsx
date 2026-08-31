@@ -1,6 +1,8 @@
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { FinanceNav } from '@/components/finance-nav';
+import { PrintHeader } from '@/components/print-header';
+import { PagePrintButton } from '@/components/print-button';
 import { DateRange } from '@/components/date-range';
 import { getProfitAndLoss } from '@/lib/reports';
 import { baht, monthLabel } from '@/lib/format';
@@ -20,8 +22,9 @@ export default async function PLPage({
   const profitColor = pl.netProfit >= 0 ? 'var(--ok)' : 'var(--due)';
 
   return (
-    <Shell current="/finance" title="งบกำไรขาดทุน" sub="คิดจากมูลค่าก่อนภาษีมูลค่าเพิ่ม">
+    <Shell actions={<PagePrintButton />} current="/finance" title="งบกำไรขาดทุน" sub="คิดจากมูลค่าก่อนภาษีมูลค่าเพิ่ม">
       <FinanceNav current="pl" />
+      <PrintHeader title="งบกำไรขาดทุน" range={{ from: sp.from, to: sp.to }} />
 
       <div className="card">
         <DateRange base="/finance/pl" from={sp.from} to={sp.to} />

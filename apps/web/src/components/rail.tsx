@@ -44,6 +44,9 @@ export function Rail({ session, current }: { session: Session; current: string }
       })}
 
       <div className="foot">
+        <Link href="/forms" style={{ textDecoration: 'underline', display: 'block', marginBottom: 8 }}>
+          แบบฟอร์มเปล่า
+        </Link>
         <div style={{ color: '#C6D0DA', fontSize: 12.5 }}>{session.name}</div>
         <div style={{ marginBottom: 8 }}>
           {session.role === 'owner' ? 'เจ้าของกิจการ · สิทธิ์เต็มทุกเมนู' : 'พนักงาน'}

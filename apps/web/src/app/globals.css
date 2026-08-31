@@ -298,3 +298,97 @@ textarea.in { font-family: inherit; resize: vertical; min-height: 60px; }
 
 .subtle { color: var(--ink-3); font-size: 12.5px; }
 .tag-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* =====================================================================
+   พิมพ์หน้าจอปกติ — ซ่อนส่วนที่ไม่ใช่เนื้อหา แล้วให้ตารางเต็มหน้ากระดาษ
+   ใช้กับรายงานอย่างลูกหนี้ เจ้าหนี้ และงบกำไรขาดทุน ที่ดูบนจอกับพิมพ์
+   ต้องการเนื้อหาชุดเดียวกัน ต่างแค่กรอบรอบนอก
+   ===================================================================== */
+.print-only { display: none; }
+.printhead { border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 14px; }
+.printhead h1 { margin: 0; font-size: 17px; }
+.printhead .co { font-size: 12px; color: #000; }
+.printhead .meta { font-size: 11px; color: #333; margin-top: 3px; }
+
+@media print {
+  .rail, .topbar, .toolbar, .pager, .no-print, .formbar, .printbar { display: none !important; }
+  .app { display: block; }
+  .main { display: block; }
+  .wrap { padding: 0; }
+  .print-only { display: block; }
+
+  html, body { background: #fff; font-size: 11.5px; }
+  .card {
+    border: 0; border-radius: 0; margin: 0 0 10px;
+    background: #fff; break-inside: auto;
+  }
+  .card > header { border-bottom: 1px solid #000; background: #fff; padding: 4px 0; }
+  .card > header h2 { font-size: 13px; }
+  .card .body { padding: 6px 0; }
+  .tablewrap { overflow: visible; border: 0; }
+  table.tbl { font-size: 10.5px; }
+  table.tbl th, table.tbl td { padding: 3px 5px; border-bottom: 1px solid #CCC; }
+  table.tbl th { background: #EDEFF1; }
+  table.tbl tbody tr { break-inside: avoid; }
+  .chip { border-color: #999; }
+  .grid.g4 { grid-template-columns: repeat(4, 1fr); }
+  .stat .value { font-size: 15px; }
+  a { text-decoration: none; color: #000; }
+}
+
+/* =====================================================================
+   จอเล็ก — แท็บเล็ตหน้าเคาน์เตอร์และมือถือ
+   ===================================================================== */
+@media (max-width: 1000px) {
+  .row-fields.f4 { grid-template-columns: repeat(2, 1fr); }
+  .grid.g4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 820px) {
+  .app { flex-direction: column; }
+
+  /* แถบเมนูกลายเป็นแถวเลื่อนแนวนอนด้านบน ไม่กินพื้นที่จอ */
+  .rail {
+    width: auto; flex: none;
+    flex-direction: row; align-items: center; gap: 4px;
+    overflow-x: auto; padding: 10px 12px;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .rail .brand { padding: 0 10px 0 0; flex: none; }
+  .rail .brand .shop { display: none; }
+  .rail .brand b { font-size: 14px; }
+  .navbtn { padding: 7px 10px; font-size: 13px; white-space: nowrap; flex: none; }
+  .navbtn .k { display: none; }
+  .rail .foot { margin: 0 0 0 auto; padding: 0 0 0 10px; display: flex; align-items: center; gap: 10px; }
+  .rail .foot > div { display: none; }
+
+  .topbar { padding: 12px 14px; }
+  .topbar h1 { font-size: 16px; }
+  .wrap { padding: 14px; }
+
+  .grid.g2, .grid.g4 { grid-template-columns: 1fr 1fr; }
+  .row-fields.f2, .row-fields.f3, .row-fields.f4 { grid-template-columns: 1fr 1fr; }
+
+  .totals { width: 100%; margin-left: 0; }
+  .paper { width: auto; min-height: auto; padding: 10mm; }
+}
+
+@media (max-width: 560px) {
+  body { font-size: 15px; }
+  .wrap { padding: 11px; }
+  .grid.g2, .grid.g4 { grid-template-columns: 1fr; }
+  .row-fields.f2, .row-fields.f3, .row-fields.f4 { grid-template-columns: 1fr; }
+  /* แถบเครื่องมือเรียงลงมาทีละแถวบนจอแคบ
+     ช่องค้นหาตั้งความกว้างไว้แบบ inline สำหรับจอใหญ่ ต้องใช้ !important ทับ
+     ไม่งั้นช่องล้นออกนอกจอบนมือถือ */
+  .toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .toolbar form { width: 100%; flex-wrap: wrap; }
+  .toolbar .in { flex: 1; min-width: 0; width: auto !important; }
+  .toolbar .tag-row, .toolbar > .spacer { width: 100%; }
+  .toolbar > .spacer { display: none; }
+  .card > header { flex-wrap: wrap; }
+
+  /* ปุ่มบนมือถือต้องกดโดนด้วยนิ้ว */
+  .btn { min-height: 40px; display: inline-flex; align-items: center; }
+  .in { min-height: 40px; }
+}
