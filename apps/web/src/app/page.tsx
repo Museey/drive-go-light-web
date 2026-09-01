@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { can, requireSession } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { DateRange } from '@/components/date-range';
+import { Icon } from '@/components/icon';
 import { getHomeSummary, getShop } from '@/lib/queries';
 import { getTaxSummary } from '@/lib/reports';
 import { baht, KIND_SHORT, monthLabel } from '@/lib/format';
@@ -44,58 +45,108 @@ export default async function HomePage({
         <DateRange base="/" from={sp.from} to={sp.to} />
       </div>
 
-      <div className="grid g4" style={{ marginBottom: 18 }}>
-        <div className="card"><div className="body stat">
-          <div className="label">ยอดขายก่อนภาษี{ranged ? ' (ช่วงที่เลือก)' : ' (ทั้งหมด)'}</div>
-          <div className="value">{baht(summary.salesThisYear)}</div>
-          <span className="n">
-            {summary.salesDocCount.toLocaleString('en-US')} ฉบับ · เฉลี่ยใบละ {baht(summary.salesAvg)}
-          </span>
-        </div></div>
+      {/* ---------- การ์ดสรุป ตามรุ่น 6.4 ----------
+           แต่ละใบมีปุ่มพาไปหน้าที่ทำงานต่อได้ ไม่ใช่แค่บอกตัวเลขแล้วปล่อยให้หาเอง */}
+      <div className="hgrid" style={{ marginBottom: 16 }}>
 
-        <div className="card"><div className="body stat">
-          <div className="label">รับชำระแล้ว{ranged ? ' (ช่วงที่เลือก)' : ''}</div>
-          <div className="value ok">{baht(summary.salesPaid)}</div>
-          <span className="n">จากเอกสารขายในช่วงเดียวกัน</span>
-        </div></div>
+        <div className="hcard">
+          <header>
+            <Icon name="sales" size={22} color="#1F5FBF" />
+            <h2>สรุปยอดขาย{ranged ? ' (ช่วงที่เลือก)' : ''}</h2>
+            {seesIncome ? (
+              <Link className="go" href="/income?kind=RC">ดูใบเสร็จทั้งหมด<span className="ar">→</span></Link>
+            ) : null}
+          </header>
+          <div className="body">
+            <div className="big">{baht(summary.salesThisYear)} <small>บาท ก่อนภาษี</small></div>
+            <div className="row"><span>จำนวนใบ</span><b>{summary.salesDocCount.toLocaleString('en-US')}</b></div>
+            <div className="row"><span>เฉลี่ยต่อใบ</span><b>{baht(summary.salesAvg)}</b></div>
+            <div className="row"><span>รับชำระแล้ว</span><b style={{ color: 'var(--ok)' }}>{baht(summary.salesPaid)}</b></div>
+          </div>
+        </div>
 
-        <div className="card"><div className="body stat">
-          <div className="label">รายจ่ายในช่วงเดียวกัน</div>
-          <div className="value">{baht(summary.spendTotal)}</div>
-          <span className="n">
-            ซื้อสินค้า {baht(summary.spendBuy)} · ค่าใช้จ่าย {baht(summary.spendExpense)}
-          </span>
-        </div></div>
+        <div className="hcard">
+          <header>
+            <Icon name="cart" size={22} color="#C25A18" />
+            <h2>รายจ่ายในช่วงเดียวกัน</h2>
+            {can(session, 'expense') ? (
+              <Link className="go" href="/expense">ดูรายจ่าย<span className="ar">→</span></Link>
+            ) : null}
+          </header>
+          <div className="body">
+            <div className="big">{baht(summary.spendTotal)} <small>บาท</small></div>
+            <div className="row"><span>ซื้อสินค้า</span><b>{baht(summary.spendBuy)}</b></div>
+            <div className="row"><span>ค่าใช้จ่ายกิจการ</span><b>{baht(summary.spendExpense)}</b></div>
+          </div>
+        </div>
 
-        <div className="card"><div className="body stat">
-          <div className="label">ลูกหนี้คงค้าง</div>
-          <div className={`value${summary.arOutstanding > 0 ? ' due' : ''}`}>{baht(summary.arOutstanding)}</div>
-          {seesFinance ? (
-            <Link href="/finance/ar" className="n" style={{ textDecoration: 'underline' }}>ดูรายการ</Link>
-          ) : null}
-        </div></div>
+        <div className="hcard">
+          <header>
+            <Icon name="ar" size={22} color="#1D7A5F" />
+            <h2>สรุปลูกหนี้จากการขาย</h2>
+            {seesFinance ? (
+              <Link className="go" href="/finance/ar">ไปหน้าตัดชำระ<span className="ar">→</span></Link>
+            ) : null}
+          </header>
+          <div className="body">
+            <div className="big" style={{ color: summary.arOutstanding > 0.004 ? 'var(--warn)' : undefined }}>
+              {baht(summary.arOutstanding)} <small>บาท</small>
+            </div>
+            <div className="row"><span>ยอดที่ยังเก็บไม่ได้ ณ วันนี้</span><b /></div>
+          </div>
+        </div>
 
-        <div className="card"><div className="body stat">
-          <div className="label">เจ้าหนี้คงค้าง</div>
-          <div className={`value${summary.apOutstanding > 0 ? ' warn' : ''}`}>{baht(summary.apOutstanding)}</div>
-          {seesFinance ? (
-            <Link href="/finance/ap" className="n" style={{ textDecoration: 'underline' }}>ดูรายการ</Link>
-          ) : null}
-        </div></div>
+        <div className="hcard">
+          <header>
+            <Icon name="ap" size={22} color="#C25A18" />
+            <h2>สรุปเจ้าหนี้การค้า</h2>
+            {seesFinance ? (
+              <Link className="go" href="/finance/ap">ไปหน้าตัดชำระ<span className="ar">→</span></Link>
+            ) : null}
+          </header>
+          <div className="body">
+            <div className="big" style={{ color: summary.apOutstanding > 0.004 ? 'var(--due)' : undefined }}>
+              {baht(summary.apOutstanding)} <small>บาท</small>
+            </div>
+            <div className="row"><span>ยอดที่ยังไม่ได้จ่าย ณ วันนี้</span><b /></div>
+          </div>
+        </div>
 
-        <div className="card"><div className="body stat">
-          <div className="label">สินค้าที่ต้องสั่งซื้อ</div>
-          <div className={`value${summary.reorderCount > 0 ? ' warn' : ''}`}>{summary.reorderCount}</div>
-          <span className="n">ประมาณการเงินที่ต้องใช้ {baht(summary.reorderCost)}</span>
-        </div></div>
+        <div className="hcard">
+          <header>
+            <Icon name="box" size={22} color="#2E8B3D" />
+            <h2>สินค้าที่ต้องสั่งซื้อ</h2>
+            {seesStock ? (
+              <Link className="go" href="/stock?reorder=1">ดูสต๊อกทั้งหมด<span className="ar">→</span></Link>
+            ) : null}
+          </header>
+          <div className="body">
+            <div className="big" style={{ color: summary.reorderCount > 0 ? 'var(--warn)' : undefined }}>
+              {summary.reorderCount} <small>รายการ</small>
+            </div>
+            <div className="row">
+              <span>ประมาณการเงินที่ต้องใช้</span><b>{baht(summary.reorderCost)}</b>
+            </div>
+            <div className="row"><span>สินค้าทั้งหมด</span><b>{summary.productCount.toLocaleString('en-US')}</b></div>
+          </div>
+        </div>
 
-        <div className="card"><div className="body stat">
-          <div className="label">สินค้าค้างสต๊อก ≥ 6 เดือน</div>
-          <div className={`value${summary.deadCount > 0 ? ' warn' : ''}`}>{summary.deadCount}</div>
-          <span className="n">
-            เงินจม {baht(summary.deadValue)} · จากสินค้าทั้งหมด {summary.productCount.toLocaleString('en-US')} รายการ
-          </span>
-        </div></div>
+        <div className="hcard">
+          <header>
+            <Icon name="pending" size={22} color="#B4720B" />
+            <h2>สินค้าค้างสต๊อก ≥ 6 เดือน</h2>
+            {seesStock ? (
+              <Link className="go" href="/stock?flag=dead">ดูรายการ<span className="ar">→</span></Link>
+            ) : null}
+          </header>
+          <div className="body">
+            <div className="big" style={{ color: summary.deadCount > 0 ? 'var(--warn)' : undefined }}>
+              {summary.deadCount} <small>รายการ</small>
+            </div>
+            <div className="row"><span>เงินจมในชั้นวาง</span><b>{baht(summary.deadValue)}</b></div>
+          </div>
+        </div>
+
       </div>
 
       {/* ---------- ของที่ควรสั่งก่อน ---------- */}

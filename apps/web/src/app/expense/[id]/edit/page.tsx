@@ -20,7 +20,7 @@ export default async function EditBuyPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <Shell
+    <Shell doc
       current="/expense"
       title={doc.kind === 'PO' ? 'แก้ไขใบซื้อ' : 'แก้ไขค่าใช้จ่าย'}
       sub={`เลขที่ ${meta.docNo}`}

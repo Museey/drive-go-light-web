@@ -32,7 +32,7 @@ export default async function DocPage({
   const status = payLabel(outstanding, paid);
 
   return (
-    <Shell
+    <Shell doc
       current="/income"
       title={KIND_LABEL[doc.kind] ?? doc.kind}
       sub={`เลขที่ ${doc.docNo} · ${thDateLong(doc.docDate)}`}

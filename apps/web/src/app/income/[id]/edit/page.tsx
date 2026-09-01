@@ -24,7 +24,7 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
   const initial = { ...source, id };
 
   return (
-    <Shell
+    <Shell doc
       current="/income"
       title={`แก้ไข${KIND_LABEL[source.kind]}`}
       actions={<Link className="btn" href={`/income/${id}`}>← กลับหน้าเอกสาร</Link>}

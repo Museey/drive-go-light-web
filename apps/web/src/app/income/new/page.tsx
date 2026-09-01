@@ -69,7 +69,7 @@ export default async function NewDocPage({
   }
 
   return (
-    <Shell
+    <Shell doc
       current="/income"
       title={`ออก${KIND_LABEL[kind]}`}
       sub={source ? 'คัดลอกข้อมูลจากเอกสารต้นทางมาให้แล้ว ตรวจสอบก่อนบันทึก' : undefined}

@@ -33,7 +33,7 @@ export default async function BuyDocPage({
   const cat = meta.expenseCat ? CAT[meta.expenseCat] : null;
 
   return (
-    <Shell
+    <Shell doc
       current="/expense"
       title={isPurchase ? 'ใบซื้อสินค้า' : `ค่าใช้จ่าย — ${cat?.label ?? ''}`}
       sub={`เลขที่ ${doc.docNo} · ${thDateLong(doc.docDate)}`}

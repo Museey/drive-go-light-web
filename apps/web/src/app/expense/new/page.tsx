@@ -40,7 +40,7 @@ export default async function NewBuyPage({
   };
 
   return (
-    <Shell
+    <Shell doc
       current="/expense"
       title={kind === 'PO' ? 'บันทึกใบซื้อสินค้า' : 'บันทึกค่าใช้จ่าย'}
     >
