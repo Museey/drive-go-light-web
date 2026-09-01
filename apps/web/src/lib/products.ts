@@ -1,7 +1,9 @@
 import 'server-only';
+import type pg from 'pg';
 import { stockFlags, today, type StockFlag } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
+import { consumeStock, receiveStock } from './stock-cost';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
@@ -179,14 +181,30 @@ export interface StockMoveRow {
   qtyDelta: number;
   reason: string;
   note: string;
+  /** ต้นทุนรวมของครั้งนั้น — null คือแถวที่ลงไว้ก่อนระบบคิดต้นทุน */
+  costAmount: number | null;
   docNo: string | null;
   docId: string | null;
+}
+
+export interface ProductLot {
+  qty: number;
+  unitCost: number;
+  on: string;
+}
+
+/** ล็อตคงเหลือของสินค้าหนึ่งตัว เรียงตามลำดับที่จะถูกตัดออก */
+export async function listProductLots(productId: string): Promise<ProductLot[]> {
+  return query(async (c) => {
+    const { lotsOfProduct } = await import('./stock-cost');
+    return lotsOfProduct(c, productId);
+  });
 }
 
 export async function listStockMoves(productId: string, limit = 30): Promise<StockMoveRow[]> {
   return query(async (c) => {
     const { rows } = await c.query(
-      `select m.moved_on, m.qty_delta, m.reason::text as reason, m.note,
+      `select m.moved_on, m.qty_delta, m.reason::text as reason, m.note, m.cost_amount,
               d.id as doc_id, d.doc_no
        from stock_moves m
        left join documents d on d.id = m.doc_id
@@ -200,6 +218,7 @@ export async function listStockMoves(productId: string, limit = 30): Promise<Sto
       qtyDelta: n(r.qty_delta),
       reason: r.reason,
       note: r.note,
+      costAmount: r.cost_amount === null ? null : n(r.cost_amount),
       docNo: r.doc_no,
       docId: r.doc_id,
     }));
@@ -279,12 +298,28 @@ export async function adjustStock(productId: string, countedQty: number, note: s
     const delta = Math.round((countedQty - current) * 1000) / 1000;
     if (delta === 0) return;
 
-    await c.query(
-      `insert into stock_moves (tenant_id, product_id, qty_delta, reason, note, created_by)
-       values (current_tenant_id(), $1, $2, 'adjust', $3, $4)`,
-      [productId, delta, note || 'ปรับยอดตามที่นับได้', userId],
-    );
+    const label = note || 'ปรับยอดตามที่นับได้';
+    const cost = await lastCostOf(c, productId);
+
+    /* นับได้มากกว่าที่ระบบมี = ของโผล่มา ลงเป็นล็อตใหม่ที่ต้นทุนล่าสุด
+       นับได้น้อยกว่า = ของหาย ต้องตัดตามล็อตจริงเพื่อให้รู้ว่าเสียเงินไปเท่าไร */
+    if (delta > 0) {
+      await receiveStock(c, {
+        productId, qty: delta, costAmount: delta * cost,
+        movedOn: today(), reason: 'adjust', note: label, userId,
+      });
+    } else {
+      await consumeStock(c, {
+        productId, qty: -delta, movedOn: today(),
+        reason: 'adjust', note: label, userId,
+      });
+    }
   });
+}
+
+async function lastCostOf(c: pg.PoolClient, productId: string): Promise<number> {
+  const { rows } = await c.query(`select last_cost from products where id = $1`, [productId]);
+  return n(rows[0]?.last_cost);
 }
 
 /**
@@ -298,7 +333,8 @@ export async function adjustStock(productId: string, countedQty: number, note: s
  */
 export async function recordStockMove(input: {
   productId: string;
-  direction: 'in' | 'out';
+  /** in = รับเข้า · out = ตัดออก · use = เบิกใช้ในอู่ */
+  direction: 'in' | 'out' | 'use';
   qty: number;
   movedOn: string;
   note: string;
@@ -307,14 +343,28 @@ export async function recordStockMove(input: {
     const qty = Math.abs(Math.round(input.qty * 1000) / 1000);
     if (qty === 0) throw new Error('ระบุจำนวนมากกว่า 0');
 
-    const delta = input.direction === 'in' ? qty : -qty;
-    const fallback = input.direction === 'in' ? 'รับเข้าด้วยมือ' : 'ตัดออกด้วยมือ';
+    const FALLBACK = {
+      in: 'รับเข้าด้วยมือ',
+      out: 'ตัดออกด้วยมือ',
+      use: 'เบิกใช้ในอู่',
+    } as const;
+    const note = input.note || FALLBACK[input.direction];
 
-    await c.query(
-      `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta, reason, note, created_by)
-       values (current_tenant_id(), $1, $2, $3, 'adjust', $4, $5)`,
-      [input.productId, input.movedOn, delta, input.note || fallback, userId],
-    );
+    if (input.direction === 'in') {
+      const cost = await lastCostOf(c, input.productId);
+      await receiveStock(c, {
+        productId: input.productId, qty, costAmount: qty * cost,
+        movedOn: input.movedOn, reason: 'adjust', note, userId,
+      });
+      return;
+    }
+
+    /* เบิกใช้ในอู่แยกเหตุผลจากการตัดออกเฉย ๆ เพราะงบกำไรขาดทุนนับคนละช่อง —
+       ของที่เบิกใช้เป็นค่าใช้จ่ายดำเนินงาน ไม่ใช่ต้นทุนขาย */
+    await consumeStock(c, {
+      productId: input.productId, qty, movedOn: input.movedOn,
+      reason: input.direction === 'use' ? 'use' : 'adjust', note, userId,
+    });
   });
 }
 

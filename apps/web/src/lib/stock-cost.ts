@@ -1,0 +1,191 @@
+import type pg from 'pg';
+import { fifoAdd, fifoConsume, fifoReturn, fifoValue, type Lot } from '@drivegolight/core';
+
+/**
+ * ต้นทุนสต๊อกแบบเข้าก่อนออกก่อน คิดจากบัญชี stock_moves
+ *
+ * รุ่น 6.4 เก็บล็อตเป็นอาเรย์บนตัวสินค้าแล้วตัดล็อตหน้าสุดทิ้งไปเรื่อย ๆ
+ * ได้ตัวเลขถูกแต่พอตัดแล้วประวัติหาย ตรวจย้อนไม่ได้ว่าต้นทุนมาจากการรับเข้าครั้งไหน
+ *
+ * ที่นี่ล็อตไม่ได้ถูกเก็บ แต่ถูก "เล่นซ้ำ" จากบัญชีที่เพิ่มอย่างเดียวทุกครั้งที่ต้องใช้
+ * ได้ผลเท่ากันเป๊ะ (มีชุดทดสอบเทียบกับโค้ดเดิมโดยตรง) แต่ทุกบาทตามกลับไปหาที่มาได้
+ *
+ * ต้นทุนที่คิดได้ถูกตรึงลงแถวนั้นทันที ไม่คำนวณใหม่ตอนอ่านรายงาน —
+ * ไม่งั้นการเพิ่มใบซื้อย้อนหลังจะทำให้งบของงวดที่ปิดไปแล้วเปลี่ยน
+ *
+ * ไม่มี server-only เพราะทุกฟังก์ชันรับ client เข้ามาเอง ไม่แตะ session หรือคุกกี้
+ * ชุดทดสอบจึงเรียกได้ตรง ๆ — แบบเดียวกับ restore-core.ts และ license-window.ts
+ */
+
+const n = (v: unknown): number => Number(v ?? 0);
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+type Client = pg.PoolClient | pg.Client;
+
+/** เหตุผลที่ทำให้ของเข้าคลัง — ที่เหลือคือของออก */
+const INBOUND = new Set(['opening', 'purchase', 'return', 'adjust', 'set', 'count']);
+
+interface MoveRow {
+  qty_delta: string;
+  unit_cost: string | null;
+  cost_amount: string | null;
+  moved_on: string;
+  reason: string;
+}
+
+/**
+ * ล็อตคงเหลือของสินค้าหนึ่งตัว ณ ตอนนี้
+ *
+ * เล่นบัญชีตามลำดับ (moved_on, created_at) — วันที่ก่อน แล้วค่อยลำดับที่บันทึก
+ * รายการที่ลงย้อนหลังจึงเข้าคิวตามวันที่จริง ไม่ใช่ตามเวลาที่คีย์
+ *
+ * ปริมาณจริง: สินค้าหนึ่งตัวมีการเคลื่อนไหวหลักร้อยแถวต่อหลายปี การอ่านทั้งหมด
+ * ต่อการตัดหนึ่งครั้งจึงถูกมาก และใช้ index (tenant_id, product_id, moved_on) ที่มีอยู่แล้ว
+ * ถ้าวันหนึ่งช้า ให้ลงแถว opening สรุปยอดเป็นงวดแล้วเล่นซ้ำจากจุดนั้น
+ */
+export async function lotsOfProduct(c: Client, productId: string): Promise<Lot[]> {
+  const { rows } = await c.query<MoveRow>(
+    `select qty_delta, unit_cost, cost_amount, moved_on::text as moved_on, reason::text as reason
+     from stock_moves
+     where product_id = $1
+     order by moved_on, created_at`,
+    [productId],
+  );
+
+  const fallback = await lastCostOf(c, productId);
+  let lots: Lot[] = [];
+
+  for (const m of rows) {
+    const qty = n(m.qty_delta);
+    if (qty === 0) continue;
+
+    if (qty > 0) {
+      /* ของคืนกลับเข้าหน้าแถวด้วยต้นทุนที่เคยตัดไป ของรับเข้าปกติต่อท้าย */
+      const cost = m.cost_amount !== null ? n(m.cost_amount) : qty * n(m.unit_cost);
+      lots = m.reason === 'return'
+        ? fifoReturn(lots, qty, cost, m.moved_on, fallback)
+        : fifoAdd(lots, qty, qty === 0 ? 0 : round2(cost / qty), m.moved_on);
+    } else {
+      lots = fifoConsume(lots, -qty, fallback).lots;
+    }
+  }
+
+  return lots;
+}
+
+async function lastCostOf(c: Client, productId: string): Promise<number> {
+  const { rows } = await c.query(`select last_cost from products where id = $1`, [productId]);
+  return n(rows[0]?.last_cost);
+}
+
+/** มูลค่าของที่ยังอยู่ในคลังตามต้นทุนของแต่ละล็อต */
+export async function stockValueOf(c: Client, productId: string): Promise<number> {
+  return fifoValue(await lotsOfProduct(c, productId));
+}
+
+export interface ConsumeInput {
+  productId: string;
+  /** จำนวนที่ตัดออก เป็นบวกเสมอ */
+  qty: number;
+  movedOn: string;
+  reason: 'sale' | 'use' | 'adjust' | 'count' | 'set' | 'return';
+  docId?: string | null;
+  docItemId?: string | null;
+  note?: string;
+  userId?: string | null;
+}
+
+/**
+ * ตัดของออกจากคลังพร้อมคิดต้นทุน แล้วบันทึกลงบัญชีเป็นแถวเดียว
+ * คืนต้นทุนที่คิดได้ให้ผู้เรียกเอาไปใช้ต่อ (เช่น เก็บไว้เทียบตอนยกเลิก)
+ */
+export async function consumeStock(c: Client, input: ConsumeInput): Promise<number> {
+  const qty = Math.abs(input.qty);
+  if (qty === 0) return 0;
+
+  const lots = await lotsOfProduct(c, input.productId);
+  const fallback = await lastCostOf(c, input.productId);
+  const { cost } = fifoConsume(lots, qty, fallback);
+
+  await c.query(
+    `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta,
+                              unit_cost, cost_amount, reason, doc_id, doc_item_id, note, created_by)
+     values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      input.productId, input.movedOn, -qty,
+      round2(cost / qty), round2(cost),
+      input.reason, input.docId ?? null, input.docItemId ?? null,
+      input.note ?? '', input.userId ?? null,
+    ],
+  );
+
+  return round2(cost);
+}
+
+export interface ReceiveInput {
+  productId: string;
+  qty: number;
+  /** ต้นทุนรวมของครั้งนี้ — ถ้าเป็นการคืนของ ให้ใส่ต้นทุนที่เคยตัดไป */
+  costAmount: number;
+  movedOn: string;
+  reason: 'opening' | 'purchase' | 'return' | 'adjust' | 'set' | 'count';
+  docId?: string | null;
+  note?: string;
+  userId?: string | null;
+}
+
+/** รับของเข้าคลัง — ใช้ทั้งตอนซื้อ ตอนคืนจากการยกเลิก และตอนปรับยอดขึ้น */
+export async function receiveStock(c: Client, input: ReceiveInput): Promise<void> {
+  const qty = Math.abs(input.qty);
+  if (qty === 0) return;
+
+  const cost = round2(input.costAmount);
+
+  await c.query(
+    `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta,
+                              unit_cost, cost_amount, reason, doc_id, note, created_by)
+     values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      input.productId, input.movedOn, qty,
+      round2(cost / qty), cost,
+      input.reason, input.docId ?? null, input.note ?? '', input.userId ?? null,
+    ],
+  );
+}
+
+/**
+ * คืนของที่เคยตัดจากเอกสารใบหนึ่งกลับเข้าคลัง ด้วยต้นทุนที่บันทึกไว้ตอนตัด
+ *
+ * ใช้ทั้งตอนยกเลิกเอกสารและตอนแก้เอกสารที่ตัดสต๊อกไปแล้ว
+ * ไม่ลบแถวเดิมทิ้ง เพราะบัญชีเดินสะพัดที่ลบย้อนหลังได้ก็ไม่ใช่บัญชีอีกต่อไป —
+ * ต้นทุนของใบที่ขายหลังจากนั้นคิดจากล็อตที่จะไม่มีอยู่จริง
+ */
+export async function returnDocStock(
+  c: Client,
+  docId: string,
+  opts: { movedOn: string; note: string; userId?: string | null },
+): Promise<void> {
+  const { rows } = await c.query(
+    `select product_id, qty_delta, cost_amount, unit_cost
+     from stock_moves
+     where doc_id = $1 and qty_delta < 0 and reason in ('sale','use')`,
+    [docId],
+  );
+
+  for (const m of rows) {
+    const qty = -n(m.qty_delta);
+    /* แถวเก่าก่อนมีระบบต้นทุนไม่มี cost_amount — ประมาณจากต้นทุนต่อหน่วยที่บันทึกไว้ */
+    const cost = m.cost_amount !== null ? n(m.cost_amount) : qty * n(m.unit_cost);
+
+    await receiveStock(c, {
+      productId: m.product_id,
+      qty,
+      costAmount: cost,
+      movedOn: opts.movedOn,
+      reason: 'return',
+      docId,
+      note: opts.note,
+      userId: opts.userId,
+    });
+  }
+}

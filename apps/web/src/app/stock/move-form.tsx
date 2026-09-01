@@ -5,11 +5,25 @@ import { useFormStatus } from 'react-dom';
 import { stockMoveAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 
-function Submit({ direction }: { direction: 'in' | 'out' }) {
+type Dir = 'in' | 'out' | 'use';
+
+const DIR_LABEL: Record<Dir, string> = {
+  in: 'รับเข้า',
+  out: 'ตัดออก',
+  use: 'เบิกใช้ในอู่',
+};
+
+const SUBMIT_LABEL: Record<Dir, string> = {
+  in: 'รับเข้าสต๊อก',
+  out: 'ตัดออกจากสต๊อก',
+  use: 'บันทึกการเบิกใช้',
+};
+
+function Submit({ direction }: { direction: Dir }) {
   const { pending } = useFormStatus();
   return (
     <button className={`btn ${direction === 'in' ? 'primary' : 'danger'}`} type="submit" disabled={pending}>
-      {pending ? 'กำลังบันทึก…' : direction === 'in' ? 'รับเข้าสต๊อก' : 'ตัดออกจากสต๊อก'}
+      {pending ? 'กำลังบันทึก…' : SUBMIT_LABEL[direction]}
     </button>
   );
 }
@@ -24,29 +38,31 @@ export function MoveForm({ productId, unit, today }: {
   today: string;
 }) {
   const [state, action] = useActionState<FormResult, FormData>(stockMoveAction, {});
-  const [direction, setDirection] = useState<'in' | 'out'>('in');
+  const [direction, setDirection] = useState<Dir>('in');
 
   return (
     <form className="form" action={action}>
+      {/* เบิกใช้ในอู่แยกจากตัดออกเฉย ๆ เพราะงบกำไรขาดทุนนับคนละช่อง —
+          ของที่เบิกใช้เป็นค่าใช้จ่ายดำเนินงาน ไม่ใช่ต้นทุนขาย */}
       <input type="hidden" name="productId" value={productId} />
       <input type="hidden" name="direction" value={direction} />
 
       {state.error ? <div className="err">{state.error}</div> : null}
       {state.ok ? (
         <div className="ok-msg">
-          บันทึก{state.values?.direction === 'out' ? 'การตัดออก' : 'การรับเข้า'}เรียบร้อย
+          บันทึก{DIR_LABEL[(state.values?.direction as Dir) ?? 'in']}เรียบร้อย
         </div>
       ) : null}
 
       <div className="tag-row" style={{ marginBottom: 12 }}>
-        {(['in', 'out'] as const).map((d) => (
+        {(['in', 'out', 'use'] as const).map((d) => (
           <button key={d} type="button" className="chip"
                   onClick={() => setDirection(d)}
                   aria-pressed={direction === d}
                   style={direction === d
                     ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' }
                     : undefined}>
-            {d === 'in' ? 'รับเข้า' : 'ตัดออก'}
+            {DIR_LABEL[d]}
           </button>
         ))}
       </div>
@@ -63,7 +79,10 @@ export function MoveForm({ productId, unit, today }: {
         <div className="field">
           <label htmlFor="moveNote">หมายเหตุ</label>
           <input className="in" id="moveNote" name="note"
-                 placeholder={direction === 'in' ? 'เช่น รับจากร้านอะไหล่ ใบส่งของเลขที่…' : 'เช่น เบิกใช้งาน / ของชำรุด'} />
+                 placeholder={
+                   direction === 'in' ? 'เช่น รับจากร้านอะไหล่ ใบส่งของเลขที่…'
+                   : direction === 'use' ? 'เช่น น้ำยาล้างชิ้นส่วน ใช้กับงานในอู่'
+                   : 'เช่น ของชำรุด / คืนผู้ขาย'} />
         </div>
       </div>
 

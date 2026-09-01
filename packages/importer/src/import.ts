@@ -231,10 +231,12 @@ export async function importBackup(
       .filter((p: any) => num(p.qty) !== 0)
       .map((p: any) => [
         randomUUID(), tenantId, productId.get(p.id), p.lastMove || openingDate,
-        qty(num(p.qty)), money(num(p.cost)), 'opening', 'ยอดยกมาจากโปรแกรมรุ่น HTML',
+        qty(num(p.qty)), money(num(p.cost)), money(num(p.qty) * num(p.cost)),
+        'opening', 'ยอดยกมาจากโปรแกรมรุ่น HTML',
       ]);
     await insertRows(client, 'stock_moves',
-      ['id', 'tenant_id', 'product_id', 'moved_on', 'qty_delta', 'unit_cost', 'reason', 'note'],
+      ['id', 'tenant_id', 'product_id', 'moved_on', 'qty_delta', 'unit_cost', 'cost_amount',
+       'reason', 'note'],
       stockRows);
 
     /* ---------- ผู้ติดต่อและรถ ---------- */

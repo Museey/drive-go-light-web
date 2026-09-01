@@ -19,5 +19,6 @@ export * from './vat.js';
 export * from './pl.js';
 export * from './expense-cats.js';
 export * from './stock.js';
+export * from './fifo.js';
 export * from './doc-check.js';
 export * from './bahttext.js';

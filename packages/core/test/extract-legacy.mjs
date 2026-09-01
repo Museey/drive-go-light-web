@@ -27,7 +27,17 @@ const FUNCTIONS = [
   'salesDocs', 'arTotal', 'arDue',
   'vatMonthKeys', 'vatOfMonth', 'vatChain', 'vatCarryInto',
   'bahttext',
+  /* มีเฉพาะรุ่น 6.4 ขึ้นไป ดึงเมื่อชี้ DGL_LEGACY_HTML ไปที่ไฟล์ที่มี
+     live/isVoid ต้องมาก่อน salesDocs เพราะ 6.4 เรียกใช้ข้างใน */
+  'isVoid', 'live', 'livePurchases', 'liveExpenses',
+  'lotsOf', 'lotSync', 'lotConsume', 'lotAdd', 'lotReturn', 'lotValue',
 ];
+
+/** ฟังก์ชันที่ยอมให้ไม่มีในไฟล์ต้นทาง — รุ่น 3.6 ยังไม่มีการยกเลิกเอกสารและล็อต */
+const OPTIONAL = new Set([
+  'isVoid', 'live', 'livePurchases', 'liveExpenses',
+  'lotsOf', 'lotSync', 'lotConsume', 'lotAdd', 'lotReturn', 'lotValue',
+]);
 
 /** ตัวแปรแบบบรรทัดเดียว `const ชื่อ = ...;` */
 const CONSTS = ['num', 'iso', 'today', 'isInvoice', 'isExpenseDoc'];
@@ -77,10 +87,15 @@ function sliceBalanced(src, start, open, close) {
 
 const parts = [];
 
+const missing = [];
 for (const name of FUNCTIONS) {
   const re = new RegExp(`^function ${name}\\s*\\(`, 'm');
   const m = re.exec(js);
-  if (!m) throw new Error(`ไม่พบ function ${name}() — โครงสร้างไฟล์เดิมเปลี่ยนไปแล้ว`);
+  if (!m) {
+    /* รุ่นเก่ายังไม่มีล็อต — ปล่อยผ่านแล้วให้เทสต์ข้ามเอง แต่ของที่ต้องมีห้ามหาย */
+    if (OPTIONAL.has(name)) { missing.push(name); continue; }
+    throw new Error(`ไม่พบ function ${name}() — โครงสร้างไฟล์เดิมเปลี่ยนไปแล้ว`);
+  }
   parts.push(sliceBalanced(js, m.index, '{', '}'));
 }
 
@@ -98,7 +113,10 @@ for (const name of ARRAYS) {
   parts.push(sliceBalanced(js, m.index, '[', ']') + ';');
 }
 
-const exported = [...FUNCTIONS, ...CONSTS, ...ARRAYS];
+const exported = [...FUNCTIONS.filter((f) => !missing.includes(f)), ...CONSTS, ...ARRAYS];
+if (missing.length) {
+  console.log(`ไฟล์นี้ยังไม่มี: ${missing.join(', ')} — เทสต์ที่ต้องใช้จะข้ามเอง`);
+}
 
 const out = `/* สร้างอัตโนมัติจาก drivegolight.html — ห้ามแก้ด้วยมือ
    สร้างใหม่ด้วย: node test/extract-legacy.mjs

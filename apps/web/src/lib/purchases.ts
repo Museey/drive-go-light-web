@@ -1,7 +1,8 @@
 import 'server-only';
-import { exTotals, poTotals, type VatMode } from '@drivegolight/core';
+import { exTotals, poTotals, today, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
+import { consumeStock } from './stock-cost';
 
 const n = (v: unknown): number => Number(v ?? 0);
 const money = (v: number) => (Math.round(v * 100) / 100).toFixed(2);
@@ -180,9 +181,12 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
         if (!it.productId || it.qty === 0) continue;
         await c.query(
           `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta, unit_cost,
-                                    reason, doc_id, created_by)
-           values (current_tenant_id(),$1,$2,$3,$4,'purchase',$5,$6)`,
-          [it.productId, input.docDate, it.qty, money(it.unitPrice), id, userId],
+                                    cost_amount, reason, doc_id, created_by)
+           values (current_tenant_id(),$1,$2,$3,$4,$5,'purchase',$6,$7)`,
+          [
+            it.productId, input.docDate, it.qty, money(it.unitPrice),
+            money(it.qty * it.unitPrice), id, userId,
+          ],
         );
         if (it.unitPrice > 0) {
           await c.query(`update products set last_cost = $2 where id = $1`,
@@ -202,12 +206,17 @@ export async function voidBuyDoc(id: string, reason: string): Promise<void> {
       [id],
     );
     for (const m of moves.rows) {
-      await c.query(
-        `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta, reason,
-                                  doc_id, note, created_by)
-         values (current_tenant_id(),$1,current_date,$2,'return',$3,'คืนสต๊อกจากการยกเลิกใบซื้อ',$4)`,
-        [m.product_id, -n(m.qty_delta), id, userId],
-      );
+      /* ของที่รับเข้ามาจากใบนี้ต้องออกไป และต้องคิดต้นทุนตามล็อตเหมือนการตัดอื่น ๆ
+         ไม่ใช่คืนที่ราคาซื้อ เพราะของอาจถูกขายไปแล้วบางส่วน ล็อตที่ตัดออกจึงเป็นคนละก้อน */
+      await consumeStock(c, {
+        productId: m.product_id,
+        qty: n(m.qty_delta),
+        movedOn: today(),
+        reason: 'return',
+        docId: id,
+        note: 'คืนสต๊อกจากการยกเลิกใบซื้อ',
+        userId,
+      });
     }
 
     await c.query(

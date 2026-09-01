@@ -70,7 +70,8 @@ export async function adjustStockAction(_prev: FormResult, fd: FormData): Promis
 
 export async function stockMoveAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
   const id = str(fd, 'productId');
-  const direction = str(fd, 'direction') === 'out' ? 'out' : 'in';
+  const raw = str(fd, 'direction');
+  const direction = raw === 'out' ? 'out' : raw === 'use' ? 'use' : 'in';
   if (!str(fd, 'qty')) return { error: 'ต้องกรอกจำนวน', field: 'qty' };
 
   const movedOn = str(fd, 'movedOn');

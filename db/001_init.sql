@@ -32,7 +32,11 @@ create type contact_type as enum ('person', 'company');
 
 create type expense_cat as enum ('rent', 'utility', 'salary', 'telecom', 'asset', 'other');
 
-create type stock_reason as enum ('opening', 'purchase', 'sale', 'adjust', 'return');
+-- opening = ยอดยกมา · purchase = รับจากใบซื้อ · sale = ตัดจากการขาย
+-- adjust  = ปรับยอดด้วยมือ · return = คืนของจากการยกเลิก
+-- use     = เบิกใช้ในอู่ · count = ปรับตามการตรวจนับ · set = ตั้งยอดคงเหลือ
+create type stock_reason as enum
+  ('opening', 'purchase', 'sale', 'adjust', 'return', 'use', 'count', 'set');
 
 create type member_role as enum ('owner', 'staff');
 
@@ -370,14 +374,19 @@ create table stock_moves (
   moved_on        date        not null default current_date,
   qty_delta       numeric(12,3) not null check (qty_delta <> 0),  -- บวก = รับเข้า, ลบ = ตัดออก
   unit_cost       numeric(14,2),
+  -- ต้นทุนรวมของการเคลื่อนไหวครั้งนี้ ตรึงไว้ตอนบันทึก ไม่คำนวณใหม่ตอนอ่าน
+  -- ฝั่งรับเข้า = จำนวน × ราคาที่ซื้อ · ฝั่งตัดออก = ต้นทุนที่คิดได้แบบเข้าก่อนออกก่อน
+  -- ว่างได้เฉพาะแถวที่บันทึกไว้ก่อนระบบคิดต้นทุน — รายงานประมาณให้ด้วยต้นทุนล่าสุด
+  cost_amount     numeric(14,2),
   reason          stock_reason not null,
   doc_id          uuid        references documents(id) on delete restrict,
   doc_item_id     uuid        references doc_items(id) on delete set null,
   note            text        not null default '',
   created_by      uuid        references users(id) on delete set null,
   created_at      timestamptz not null default now(),
-  -- ตัดสต๊อกจากเอกสารต้องอ้างเอกสารเสมอ ปรับยอดมือถึงจะไม่ต้องอ้าง
-  constraint stock_move_doc_ref check (reason in ('opening','adjust') or doc_id is not null)
+  -- ตัดสต๊อกจากเอกสารต้องอ้างเอกสารเสมอ ที่ทำด้วยมือถึงจะไม่ต้องอ้าง
+  constraint stock_move_doc_ref check (
+    reason in ('opening','adjust','use','count','set') or doc_id is not null)
 );
 
 create index on stock_moves (tenant_id, product_id, moved_on desc);

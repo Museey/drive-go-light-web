@@ -1,0 +1,99 @@
+import { num } from './num.js';
+import type { Numeric } from './types.js';
+
+/**
+ * ต้นทุนแบบเข้าก่อนออกก่อน
+ *
+ * พอร์ตจาก lotConsume / lotAdd / lotReturn / lotValue ของรุ่น 6.4
+ * ผลลัพธ์ต้องตรงกันทุกสตางค์ — มีชุดทดสอบ differential เทียบกับโค้ดเดิมโดยตรง
+ *
+ * ต่างจากต้นฉบับตรงที่ตรงนี้ไม่แก้ค่าที่รับเข้ามา คืนล็อตชุดใหม่กลับไปแทน
+ * เพราะฝั่งเว็บเก็บล็อตเป็นบัญชีเดินสะพัดที่เพิ่มอย่างเดียว ไม่ได้เก็บอาเรย์ที่เขียนทับตัวเอง
+ * (ดูเหตุผลใน PLAN-6.4.md ช่วงที่ 1) การคำนวณจึงต้องไม่มีผลข้างเคียง
+ */
+
+export interface Lot {
+  qty: number;
+  unitCost: number;
+  /** วันที่ของรับเข้าครั้งนั้น ใช้แสดงผลอย่างเดียว ไม่ได้ใช้เรียงตอนตัด */
+  on: string;
+}
+
+/** เศษที่เล็กกว่านี้ถือว่าล็อตหมด — ค่าเดียวกับต้นฉบับ กันเศษทศนิยมค้างเป็นล็อตผี */
+const EMPTY = 1e-9;
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * ตัดสต๊อกตามลำดับเข้าก่อนออกก่อน
+ *
+ * ถ้าล็อตหมดก่อนตัดครบ ส่วนที่เหลือคิดที่ `fallbackCost` (ต้นทุนล่าสุดของสินค้า)
+ * ตามต้นฉบับ — เกิดได้เมื่อยอดคงเหลือติดลบ ซึ่งโปรแกรมเดิมยอมให้เกิด
+ * เพราะหน้าเคาน์เตอร์ขายของที่ยังไม่ได้คีย์รับเข้าเป็นเรื่องปกติ
+ *
+ * ปัดเศษครั้งเดียวตอนท้าย ไม่ปัดระหว่างทาง — ปัดทีละล็อตแล้วผลรวมจะเพี้ยน
+ */
+export function fifoConsume(
+  lots: readonly Lot[],
+  qty: Numeric,
+  fallbackCost: Numeric = 0,
+): { cost: number; lots: Lot[] } {
+  let need = num(qty);
+  let cost = 0;
+  const rest = lots.map((l) => ({ ...l }));
+
+  while (need > 0 && rest.length) {
+    const lot = rest[0]!;
+    const take = Math.min(num(lot.qty), need);
+    cost += take * num(lot.unitCost);
+    lot.qty = num(lot.qty) - take;
+    need -= take;
+    if (lot.qty <= EMPTY) rest.shift();
+  }
+
+  if (need > 0) cost += need * num(fallbackCost);
+
+  return { cost: round2(cost), lots: rest };
+}
+
+/** รับของเข้าเป็นล็อตใหม่ต่อท้ายแถว */
+export function fifoAdd(
+  lots: readonly Lot[],
+  qty: Numeric,
+  unitCost: Numeric,
+  on: string,
+): Lot[] {
+  const q = num(qty);
+  if (q <= 0) return lots.map((l) => ({ ...l }));
+  return [...lots.map((l) => ({ ...l })), { qty: q, unitCost: num(unitCost), on }];
+}
+
+/**
+ * คืนของกลับเข้าคลังด้วยต้นทุนที่เคยตัดไป
+ *
+ * เข้า**หน้าแถว** ไม่ใช่ท้ายแถว ตามต้นฉบับ — ของที่เพิ่งคืนมาควรถูกตัดออกก่อน
+ * ไม่งั้นการยกเลิกใบเสร็จแล้วออกใหม่จะได้ต้นทุนคนละตัวกับครั้งแรก
+ */
+export function fifoReturn(
+  lots: readonly Lot[],
+  qty: Numeric,
+  totalCost: Numeric,
+  on: string,
+  fallbackCost: Numeric = 0,
+): Lot[] {
+  const q = num(qty);
+  if (q <= 0) return lots.map((l) => ({ ...l }));
+
+  const total = num(totalCost);
+  const unitCost = total > 0 ? total / q : num(fallbackCost);
+
+  return [{ qty: q, unitCost, on }, ...lots.map((l) => ({ ...l }))];
+}
+
+/** มูลค่าของล็อตที่เหลือตามต้นทุนของแต่ละล็อต */
+export const fifoValue = (lots: readonly Lot[]): number =>
+  round2(lots.reduce((s, l) => s + num(l.qty) * num(l.unitCost), 0));
+
+/** จำนวนคงเหลือรวมทุกล็อต */
+export const fifoQty = (lots: readonly Lot[]): number =>
+  lots.reduce((s, l) => s + num(l.qty), 0);

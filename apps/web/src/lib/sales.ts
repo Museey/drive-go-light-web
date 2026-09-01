@@ -1,7 +1,8 @@
 import 'server-only';
-import { recTotals, totalsOf, whtBaseOf, type VatMode } from '@drivegolight/core';
+import { recTotals, today, totalsOf, whtBaseOf, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
+import { consumeStock, returnDocStock } from './stock-cost';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
@@ -118,7 +119,15 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
 
       await c.query(`delete from doc_items where doc_id = $1`, [id]);
       await c.query(`delete from payments where doc_id = $1 and at_issue`, [id]);
-      await c.query(`delete from stock_moves where doc_id = $1`, [id]);
+
+      /* สต๊อกไม่ลบทิ้งแล้วลงใหม่ — ลงรายการคืนแล้วค่อยตัดใหม่ข้างล่าง
+         บัญชีที่ลบย้อนหลังได้ก็ไม่ใช่บัญชี ต้นทุนของใบที่ขายหลังจากนี้
+         จะอ้างล็อตที่ไม่มีอยู่จริง และประวัติการแก้ก็หายไปด้วย */
+      await returnDocStock(c, id, {
+        movedOn: input.docDate,
+        note: 'คืนสต๊อกเพราะแก้ไขเอกสาร',
+        userId,
+      });
     } else {
       const seq = await c.query(
         `select next_doc_no(current_tenant_id(), $1, '') as no`, [input.kind],
@@ -188,11 +197,16 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
     if (input.kind === 'RC') {
       for (const it of input.items) {
         if (!it.productId || it.qty === 0) continue;
-        await c.query(
-          `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta, reason, doc_id, created_by)
-           values (current_tenant_id(),$1,$2,$3,'sale',$4,$5)`,
-          [it.productId, input.docDate, -it.qty, id, userId],
-        );
+        /* ต้นทุนคิดแบบเข้าก่อนออกก่อนแล้วตรึงลงแถวนั้นเลย
+           งบกำไรขาดทุนอ่านค่านี้ ไม่ได้คำนวณใหม่ตอนเปิดรายงาน */
+        await consumeStock(c, {
+          productId: it.productId,
+          qty: it.qty,
+          movedOn: input.docDate,
+          reason: 'sale',
+          docId: id,
+          userId,
+        });
       }
     }
 
@@ -255,20 +269,14 @@ export async function voidSalesDoc(id: string, reason: string): Promise<void> {
       throw new Error(`ยกเลิกไม่ได้เพราะมีเอกสาร ${child.rows[0].doc_no} ออกต่อจากใบนี้แล้ว`);
     }
 
-    const moves = await c.query(
-      `select product_id, qty_delta, moved_on from stock_moves where doc_id = $1 and reason = 'sale'`,
-      [id],
-    );
-    for (const m of moves.rows) {
-      /* รายการคืนต้องอ้างเอกสารที่ยกเลิก — สคีมาบังคับไว้ (stock_move_doc_ref)
-         และเป็นสิ่งที่ควรทำอยู่แล้ว เพราะต้องตามได้ว่าของคืนกลับมาเพราะใบไหน */
-      await c.query(
-        `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta, reason,
-                                  doc_id, note, created_by)
-         values (current_tenant_id(),$1,current_date,$2,'return',$3,'คืนสต๊อกจากการยกเลิกเอกสาร',$4)`,
-        [m.product_id, -n(m.qty_delta), id, userId],
-      );
-    }
+    /* คืนของด้วยต้นทุนที่เคยตัดไป ไม่ใช่ต้นทุนวันนี้ — ไม่งั้นการยกเลิกใบเสร็จ
+       จะกลายเป็นกำไรหรือขาดทุนจากอากาศ รายการคืนอ้างเอกสารที่ยกเลิกเสมอ
+       ทั้งเพราะสคีมาบังคับและเพราะต้องตามได้ว่าของกลับมาเพราะใบไหน */
+    await returnDocStock(c, id, {
+      movedOn: today(),
+      note: 'คืนสต๊อกจากการยกเลิกเอกสาร',
+      userId,
+    });
 
     await c.query(
       `update documents set status='void', voided_at=now(), voided_reason=$2 where id=$1`,

@@ -53,8 +53,16 @@ export default async function PLPage({
               <span>ต้นทุนขาย</span><span />
             </div>
             <div className="row">
-              <span className="lbl">ค่าอะไหล่และวัสดุที่ซื้อเข้า <span className="subtle">{pct(pl.cogs)}</span></span>
+              <span className="lbl">
+                ต้นทุนของที่ขายออกไป <span className="subtle">{pct(pl.cogs)}</span>
+              </span>
               <span>−{baht(pl.cogs)}</span>
+            </div>
+            <div className="row">
+              <span className="lbl subtle" style={{ paddingLeft: 12 }}>
+                (ยอดซื้ออะไหล่เข้าร้านในช่วงนี้ {baht(pl.purchases)} — ไม่ได้หักตรงนี้)
+              </span>
+              <span />
             </div>
             <div className="row grand">
               <span>กำไรขั้นต้น <span className="subtle" style={{ fontWeight: 400 }}>{pct(pl.grossProfit)}</span></span>
@@ -72,15 +80,43 @@ export default async function PLPage({
                 <span>{c.amount > 0.004 ? `−${baht(c.amount)}` : '-'}</span>
               </div>
             ))}
+            {pl.writeOff.total > 0.004 || pl.writeOff.total < -0.004 ? (
+              <>
+                <div className="row">
+                  <span className="lbl" style={{ paddingLeft: 12 }}>
+                    ของที่ออกจากคลังโดยไม่ผ่านการขาย{' '}
+                    <span className="subtle">{pct(pl.writeOff.total)}</span>
+                  </span>
+                  <span>−{baht(pl.writeOff.total)}</span>
+                </div>
+                {([
+                  ['เคลม', pl.writeOff.claim],
+                  ['ปรับยอด / ตรวจนับ', pl.writeOff.adjust],
+                  ['เบิกใช้ในอู่', pl.writeOff.use],
+                ] as const).filter(([, v]) => Math.abs(v) > 0.004).map(([label, v]) => (
+                  <div className="row" key={label}>
+                    <span className="lbl subtle" style={{ paddingLeft: 24, fontSize: 12.5 }}>{label}</span>
+                    <span className="subtle" style={{ fontSize: 12.5 }}>−{baht(v)}</span>
+                  </div>
+                ))}
+              </>
+            ) : null}
+
             <div className="row" style={{ fontWeight: 600 }}>
               <span>รวมค่าใช้จ่ายดำเนินงาน</span>
-              <span>−{baht(pl.opsTotal)}</span>
+              <span>−{baht(pl.opsTotal + pl.writeOff.total)}</span>
             </div>
 
             <div className="row grand" style={{ fontSize: 17 }}>
               <span>กำไรสุทธิ <span className="subtle" style={{ fontWeight: 400 }}>{pct(pl.netProfit)}</span></span>
               <span style={{ color: profitColor }}>{baht(pl.netProfit)}</span>
             </div>
+          </div>
+
+          <div className="note" style={{ marginTop: 18, marginBottom: 0 }}>
+            <b>ต้นทุนขายคิดจากของที่ขายออกไปจริง</b> ตัดตามลำดับเข้าก่อนออกก่อน
+            ไม่ใช่ยอดที่ซื้อเข้าร้านในงวดนี้ — อู่ที่ซื้อยกล็อตเดือนหนึ่งแล้วขายไปหลายเดือน
+            สองตัวเลขนี้จะต่างกันมาก ซึ่งเป็นเรื่องปกติ
           </div>
 
           {pl.assetTotal > 0.004 ? (

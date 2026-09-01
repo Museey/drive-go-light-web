@@ -137,9 +137,13 @@ export async function importProductsCsv(text: string): Promise<CsvImportResult> 
         const opening = num(row, map.qty);
         if (opening !== 0) {
           await c.query(
-            `insert into stock_moves (tenant_id, product_id, qty_delta, unit_cost, reason, note, created_by)
-             values (current_tenant_id(), $1, $2, $3, 'opening', 'ยอดยกมาจากไฟล์ CSV', $4)`,
-            [made.rows[0].id, opening, num(row, map.cost), userId],
+            `insert into stock_moves (tenant_id, product_id, qty_delta, unit_cost, cost_amount,
+                                      reason, note, created_by)
+             values (current_tenant_id(), $1, $2, $3, $4, 'set', 'ยอดยกมาจากไฟล์ CSV', $5)`,
+            [
+              made.rows[0].id, opening, num(row, map.cost),
+              Math.round(opening * num(row, map.cost) * 100) / 100, userId,
+            ],
           );
         }
         result.created++;

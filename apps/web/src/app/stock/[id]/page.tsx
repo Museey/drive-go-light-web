@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { today } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
-import { getProduct, listCategories, listStockMoves } from '@/lib/products';
+import { getProduct, listCategories, listProductLots, listStockMoves } from '@/lib/products';
 import { baht, thDate } from '@/lib/format';
 import { ProductForm } from '../product-form';
 import { AdjustForm } from '../adjust-form';
@@ -17,6 +17,9 @@ const REASON_LABEL: Record<string, string> = {
   sale: 'ตัดออกตามใบเสร็จ',
   adjust: 'ปรับยอด',
   return: 'รับคืน',
+  use: 'เบิกใช้ในอู่',
+  count: 'ปรับตามการตรวจนับ',
+  set: 'ตั้งยอดคงเหลือ',
 };
 
 export default async function ProductPage({
@@ -36,7 +39,10 @@ export default async function ProductPage({
   ]);
   if (!isNew && !product) notFound();
 
-  const moves = product ? await listStockMoves(product.id) : [];
+  const [moves, lots] = product
+    ? await Promise.all([listStockMoves(product.id), listProductLots(product.id)])
+    : [[], []];
+  const lotValue = lots.reduce((s2, l) => s2 + l.qty * l.unitCost, 0);
 
   return (
     <Shell
@@ -84,6 +90,42 @@ export default async function ProductPage({
 
           <div className="card">
             <header>
+              <h2>ล็อตคงเหลือ</h2>
+              <div className="spacer" />
+              <span className="subtle">
+                มูลค่าตามต้นทุน {baht(lotValue)} บาท · ตัดจากล็อตบนสุดก่อน
+              </span>
+            </header>
+            {lots.length === 0 ? (
+              <div className="empty">ไม่มีของคงเหลือในคลัง</div>
+            ) : (
+              <div className="tablewrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>รับเข้าเมื่อ</th>
+                      <th className="num">คงเหลือ</th>
+                      <th className="num">ต้นทุน/หน่วย</th>
+                      <th className="num">เป็นเงิน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lots.map((l, i) => (
+                      <tr key={i}>
+                        <td>{thDate(l.on)}{i === 0 ? <span className="chip" style={{ marginLeft: 6 }}>ตัดก่อน</span> : null}</td>
+                        <td className="num">{l.qty.toLocaleString('en-US')} {product!.unit}</td>
+                        <td className="num">{baht(l.unitCost)}</td>
+                        <td className="num">{baht(l.qty * l.unitCost)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <header>
               <h2>ประวัติการเคลื่อนไหว</h2>
               <div className="spacer" />
               <span className="subtle">30 รายการล่าสุด</span>
@@ -96,6 +138,7 @@ export default async function ProductPage({
                   <thead>
                     <tr>
                       <th>วันที่</th><th>ประเภท</th><th className="num">จำนวน</th>
+                      <th className="num">ต้นทุน</th>
                       <th>เอกสาร</th><th>หมายเหตุ</th>
                     </tr>
                   </thead>
@@ -106,6 +149,9 @@ export default async function ProductPage({
                         <td>{REASON_LABEL[m.reason] ?? m.reason}</td>
                         <td className="num" style={{ color: m.qtyDelta < 0 ? 'var(--due)' : 'var(--ok)' }}>
                           {m.qtyDelta > 0 ? '+' : ''}{m.qtyDelta.toLocaleString('en-US')}
+                        </td>
+                        <td className="num" style={{ color: 'var(--ink-3)' }}>
+                          {m.costAmount === null ? '-' : baht(m.costAmount)}
                         </td>
                         <td className="mono">
                           {m.docId
