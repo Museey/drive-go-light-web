@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
+import { SubNav } from '@/components/sub-nav';
 import { listIncomeDocs } from '@/lib/queries';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { PageSize, pageSizeOf } from '@/components/page-size';
@@ -24,6 +25,11 @@ const TABS = [
 
 /** เลขเมนูเดิมของหน้าออกเอกสารใหม่ */
 const NEW_NO = { QT: '03.1', RC: '03.4' } as const;
+
+/** แท็บย่อยของ 6.4 ต่อกับตัวกรองชนิดเอกสารของเรา — ใบส่งมอบมีสองแบบแต่เป็นแท็บเดียวกัน */
+const SUB_OF: Record<string, string> = {
+  QT: 'quote', IVT: 'invoice', IV: 'invoice', RC: 'receipt',
+};
 
 export default async function IncomePage({
   searchParams,
@@ -76,6 +82,7 @@ export default async function IncomePage({
         </div>
       }
     >
+      <SubNav menu="income" current={SUB_OF[kind] ?? 'quote'}>
       <div className="card">
         <div className="toolbar">
           {TABS.map((t) => (
@@ -171,6 +178,7 @@ export default async function IncomePage({
           {page < lastPage ? <Link className="btn" href={linkTo({ page: page + 1 })}>ถัดไป</Link> : null}
         </div>
       </div>
+      </SubNav>
     </Shell>
   );
 }

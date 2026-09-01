@@ -1,6 +1,6 @@
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
-import { FinanceNav } from '@/components/finance-nav';
+import { SubNav } from '@/components/sub-nav';
 import { PrintHeader } from '@/components/print-header';
 import { PagePrintButton } from '@/components/print-button';
 import { DateRange } from '@/components/date-range';
@@ -33,7 +33,7 @@ export default async function PLPage({
         <PagePrintButton />
       </div>
     } current="/finance" title="งบกำไรขาดทุน" sub="คิดจากมูลค่าก่อนภาษีมูลค่าเพิ่ม">
-      <FinanceNav current="pl" />
+      <SubNav menu="finance" current="pl">
       <PrintHeader title="งบกำไรขาดทุน" range={{ from: sp.from, to: sp.to }} />
 
       <div className="card">
@@ -160,6 +160,7 @@ export default async function PLPage({
           </div>
         )}
       </div>
+      </SubNav>
     </Shell>
   );
 }

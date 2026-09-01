@@ -1,5 +1,6 @@
 import { requireSession } from '@/lib/auth';
-import { Rail } from './rail';
+import { MenuBar } from './menu-bar';
+import { BackFab } from './back-fab';
 
 export async function Shell({
   current, title, sub, actions, children,
@@ -13,7 +14,7 @@ export async function Shell({
   const session = await requireSession();
   return (
     <div className="app">
-      <Rail session={session} current={current} />
+      <MenuBar session={session} current={current} />
       <div className="main">
         <div className="topbar">
           <div>
@@ -25,6 +26,7 @@ export async function Shell({
         </div>
         <div className="wrap">{children}</div>
       </div>
+      <BackFab />
     </div>
   );
 }

@@ -1,15 +1,28 @@
+/* ชุดสีของรุ่น 6.4 — เขียวแทนน้ำเงินเทาของรุ่นก่อน
+   ค่าทั้งหมดยกมาจากไฟล์ต้นฉบับตรง ๆ ไม่ได้ปรับเฉด */
 :root {
   --ink: #16202B;
-  --ink-2: #46535F;
-  --ink-3: #7B8794;
-  --line: #DFE4E9;
-  --bg: #F5F7F9;
+  --ink-2: #43535F;
+  --ink-3: #7C8B96;
+  --line: #D5DDE2;
+  --line-2: #E9EEF1;
+  --bg: #F3F7F5;
   --card: #FFFFFF;
-  --brand: #16202B;
-  --accent: #C8952B;
-  --ok: #1F7A4D;
-  --warn: #B0721A;
-  --due: #A32B2B;
+
+  --steel: #1D8A5F;        /* เขียวหลัก ปุ่มและแท็บที่เลือก */
+  --steel-dk: #0F5C3E;     /* เขียวเข้ม แถบเมนูและหัวเอกสาร */
+  --steel-soft: #E9F8F0;   /* เขียวอ่อน พื้นตอนชี้เมาส์ */
+  --grn-hi: #D8F5E6;       /* เขียวสว่าง ตอนกด */
+  --navy: #1B2A4A;         /* ขอบการ์ดเมนูย่อย */
+
+  /* ชื่อเดิมยังใช้อยู่หลายที่ ชี้มาที่สีใหม่แทนการไล่แก้ทุกจุด */
+  --brand: var(--steel-dk);
+  --accent: #FFEF5B;
+
+  --ok: #1D7A5F;
+  --warn: #B4720B;
+  --due: #B3382C;
+  --danger: #B3382C;
 }
 
 * { box-sizing: border-box; }
@@ -26,43 +39,159 @@ html, body {
 
 a { color: inherit; text-decoration: none; }
 
-.app { display: flex; min-height: 100vh; }
+.app { display: block; min-height: 100vh; }
 
-/* ---------- แถบเมนูซ้าย ---------- */
+/* ---------- แถบเมนูบน ----------
+   รุ่น 6.4 ย้ายเมนูหลักจากแถบซ้ายขึ้นมาเป็นแถบบนแนวนอน
+   บนมือถือเลื่อนซ้ายขวาได้ และปุ่มหน้าแรกถูกตรึงไว้ซ้ายสุดตลอด
+   จะได้กดกลับหน้าแรกเพื่อไปเมนูอื่นได้ทันที ไม่ต้องเลื่อนแถบย้อนกลับมาเอง */
 .rail {
-  width: 232px;
-  flex: 0 0 232px;
-  background: var(--brand);
-  color: #E7ECF1;
-  padding: 20px 14px;
+  background: linear-gradient(180deg, var(--steel-dk) 0%, #0B4A32 100%);
+  color: #D7EEE2;
+  padding: 9px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 40;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  box-shadow: 0 2px 12px rgba(0,0,0,.22);
 }
-.rail .brand { padding: 0 8px 18px; }
-.rail .brand b { font-size: 17px; letter-spacing: .2px; }
-.rail .brand em { color: var(--accent); font-style: normal; }
+.rail::-webkit-scrollbar { display: none; }
+
+.rail .brand {
+  display: flex; gap: 9px; align-items: center;
+  padding: 0 16px 0 2px; flex: none;
+}
+.rail .brand b { color: #fff; font-size: 14.5px; display: block; line-height: 1.2; }
+.rail .brand em { font-style: normal; color: var(--accent); }
 .rail .shop {
-  display: block;
-  font-size: 12px;
-  color: #93A3B2;
-  margin-top: 2px;
-  overflow-wrap: anywhere;
+  display: block; font-size: 11.5px; color: #8FA3B0; line-height: 1.35; margin-top: 2px;
 }
+
 .navbtn {
-  display: block;
-  padding: 9px 10px;
-  border-radius: 6px;
-  color: #C6D0DA;
-  font-size: 13.5px;
+  display: flex; align-items: center; gap: 7px;
+  flex: none; white-space: nowrap;
+  background: none; border: 0; color: #D7EEE2;
+  padding: 9px 13px; border-radius: 7px; cursor: pointer;
+  font-size: 14px; font-family: inherit;
 }
-.navbtn:hover { background: rgba(255,255,255,.06); color: #fff; }
-.navbtn[aria-current='true'] { background: rgba(255,255,255,.12); color: #fff; font-weight: 600; }
-.navbtn .k { color: #6D7C8B; font-size: 11.5px; margin-right: 7px; font-variant-numeric: tabular-nums; }
-.rail .foot { margin-top: auto; font-size: 11.5px; color: #7C8B99; padding: 12px 8px 0; }
+.navbtn:hover { background: rgba(255,255,255,.14); color: #fff; }
+.navbtn[aria-current='true'] { background: #fff; color: var(--steel-dk); font-weight: 600; }
+.navbtn .k { font-size: 10px; color: #7E93A1; flex: none; font-variant-numeric: tabular-nums; }
+.navbtn[aria-current='true'] .k { color: var(--steel); }
+.navbtn .car { font-size: 8px; opacity: .65; transition: transform .18s ease; }
+.navbtn[aria-expanded='true'] .car { transform: rotate(180deg); opacity: 1; }
+
+.rail .spacer { flex: 1; min-width: 8px; }
+.rail .foot { display: flex; align-items: center; gap: 8px; flex: none; }
+.rail .foot .who { font-size: 11.5px; color: #8FA3B0; white-space: nowrap; }
+
+/* ---------- แผงเมนูหล่น ---------- */
+/* fixed ไม่ใช่ absolute — แถบเมนูมี overflow-x สำหรับเลื่อนบนมือถือ
+   แผงที่วางแบบ absolute ข้างในจึงถูกตัดขอบหายไป */
+.mmenu {
+  position: fixed; min-width: 270px; z-index: 200;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 7px;
+  box-shadow: 0 14px 34px -10px rgba(11,26,38,.42);
+}
+.mcards { display: grid; grid-template-columns: repeat(2, minmax(148px, 1fr)); gap: 8px; padding: 2px; }
+.mcard {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  padding: 18px 12px 15px; cursor: pointer; text-align: center;
+  position: relative; font-family: inherit; color: inherit;
+  transition: border-color .14s ease, background .14s ease;
+}
+.mcard:hover { border-color: var(--steel); background: var(--steel-soft); }
+.mcard:active { background: var(--grn-hi); }
+.mcard .t1 { font-size: 14px; font-weight: 700; color: var(--ink); line-height: 1.35; }
+.mcard .t2 { font-size: 11.5px; color: var(--ink-3); line-height: 1.45; margin-top: -4px; }
+.mcard .no {
+  position: absolute; top: 8px; left: 10px;
+  font-size: 10px; color: var(--ink-3); opacity: .75; font-variant-numeric: tabular-nums;
+}
+.mcard[aria-disabled='true'] { opacity: .45; cursor: default; }
+.mcard[aria-disabled='true']:hover { border-color: var(--line); background: #fff; }
+
+/* ---------- เมนูย่อยแนวตั้ง ---------- */
+.subwrap { display: grid; grid-template-columns: 206px 1fr; gap: 18px; align-items: start; }
+.subnav { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 5px; }
+.subnav .ttl {
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 600; padding: 0 4px 6px;
+}
+.subnav a, .subnav .item {
+  border: 1.5px solid var(--navy); background: #fff; border-radius: 10px;
+  padding: 11px 12px; cursor: pointer; font-size: 13.5px; color: var(--ink);
+  display: flex; gap: 10px; align-items: center; text-align: left; width: 100%;
+  box-shadow: 0 1px 2px rgba(22,32,43,.06);
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.subnav a:hover, .subnav .item:hover {
+  border-color: var(--steel); transform: translateX(2px);
+  background: var(--steel-soft); box-shadow: 0 6px 14px -8px rgba(15,92,62,.35);
+}
+.subnav a[aria-current='true'] {
+  border-color: var(--steel); border-width: 2px; padding: 10px 11px;
+  background: var(--steel-soft); font-weight: 600;
+}
+.subnav .si { width: 30px; min-width: 30px; height: 30px; flex: none; display: grid; place-items: center; }
+.subnav .sw { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.subnav .sl { font-size: 13px; line-height: 1.35; color: var(--ink); }
+.subnav .sd { font-size: 11px; color: var(--ink-3); line-height: 1.4; }
+.subnav u { font-size: 9.5px; color: var(--ink-3); text-decoration: none; letter-spacing: .04em; }
+.subnav .badge {
+  margin-left: 5px; background: var(--danger); color: #fff; border-radius: 99px;
+  min-width: 18px; height: 18px; padding: 0 5px; font-size: 10.5px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.subnav .todo { opacity: .45; pointer-events: none; }
+.subnav .acts {
+  display: flex; flex-direction: column; gap: 7px; margin-top: 13px;
+  border-top: 1px solid var(--line); padding-top: 13px;
+}
+
+/* จอแคบ — เมนูย่อยย้ายขึ้นบนเนื้อหาแล้วเรียงเป็นตาราง
+   ยกกติกามาจากรุ่น 6.4 ตรง ๆ ที่ 980px เท่ากัน */
+@media (max-width: 980px) {
+  .subwrap { grid-template-columns: 1fr; gap: 12px; }
+  .subnav {
+    position: static;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+  }
+  .subnav .ttl { display: none; }
+  .subnav a, .subnav .item { width: 100%; height: 100%; }
+  .subnav .sd { display: none; }
+  .subnav .acts {
+    grid-column: 1 / -1;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px; margin: 0; border: 0; padding: 0;
+  }
+}
+@media (max-width: 560px) {
+  .subnav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .subnav .acts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- ปุ่มย้อนกลับลอย ----------
+   6.4 เก็บประวัติหน้าเองเพราะทุกหน้าคือ URL เดียวกัน
+   ของเราหน้ามี URL จริง จึงเรียกประวัติของเบราว์เซอร์ได้ตรง ๆ */
+.backfab {
+  position: fixed; left: 18px; bottom: 18px; z-index: 60;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--steel-dk); color: #fff; border: 0; border-radius: 99px;
+  padding: 10px 16px; cursor: pointer; font-family: inherit; font-size: 13px;
+  box-shadow: 0 8px 22px -8px rgba(11,74,50,.7);
+}
+.backfab:hover { background: var(--steel); }
 
 /* ---------- เนื้อหา ---------- */
-.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.main { min-width: 0; display: flex; flex-direction: column; }
 .topbar {
   background: var(--card);
   border-bottom: 1px solid var(--line);

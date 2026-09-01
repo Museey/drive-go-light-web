@@ -3,8 +3,10 @@ import { STOCK_FLAG_LABEL, type StockFlag } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { getStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
+import { listPendingItems } from '@/lib/pending';
 import { ColPicker } from './col-picker';
 import { Shell } from '@/components/shell';
+import { SubNav } from '@/components/sub-nav';
 import { listCategories, listProducts } from '@/lib/products';
 import { baht, thDate } from '@/lib/format';
 import { CategoryManager } from './category-manager';
@@ -24,9 +26,10 @@ export default async function StockPage({
   const flag = (['min', 'max', 'dead'] as const).find((f) => f === sp.flag);
   const pageSize = pageSizeOf(sp.size);
 
-  const [cats, hidden, { rows, total, stockValue }] = await Promise.all([
+  const [cats, hidden, pending, { rows, total, stockValue }] = await Promise.all([
     listCategories(),
     getStockHiddenCols(),
+    listPendingItems(),
     listProducts({
       search: sp.q,
       categoryId: sp.cat,
@@ -71,6 +74,7 @@ export default async function StockPage({
         </div>
       }
     >
+      <SubNav menu="stock" current="list" badges={{ pending: pending.length }}>
       <div className="card">
         <div className="toolbar">
           <form action="/stock" method="get" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -187,6 +191,7 @@ export default async function StockPage({
         </header>
         <CategoryManager categories={cats} />
       </div>
+      </SubNav>
     </Shell>
   );
 }

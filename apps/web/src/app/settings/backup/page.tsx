@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { can, requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
+import { SubNav } from '@/components/sub-nav';
 import { CsvImport } from './csv-import';
 import { RestoreForm } from './restore-form';
 
@@ -16,6 +17,7 @@ export default async function BackupPage() {
       title="สำรองข้อมูลและไฟล์"
       actions={<Link className="btn" href="/settings">← กลับตั้งค่าร้าน</Link>}
     >
+      <SubNav menu="settings" current="import">
       <div className="card">
         <header><h2>สำรองข้อมูลทั้งหมด</h2></header>
         <div className="body">
@@ -79,6 +81,7 @@ export default async function BackupPage() {
           </div>
         </>
       ) : null}
+      </SubNav>
     </Shell>
   );
 }

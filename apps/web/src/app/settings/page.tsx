@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
+import { SubNav } from '@/components/sub-nav';
 import { getShopSettings } from '@/lib/settings';
 import { ShopForm } from './shop-form';
 
@@ -21,12 +22,14 @@ export default async function SettingsPage() {
         </div>
       }
     >
+      <SubNav menu="settings" current="shop">
       <div className="card">
         <header><h2>ข้อมูลร้าน</h2></header>
         <div className="body">
           <ShopForm shop={shop} />
         </div>
       </div>
+      </SubNav>
     </Shell>
   );
 }

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requirePerm } from '@/lib/auth';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { Shell } from '@/components/shell';
+import { SubNav } from '@/components/sub-nav';
 import { listContacts } from '@/lib/contacts';
 
 export const dynamic = 'force-dynamic';
@@ -66,6 +67,7 @@ export default async function CustomersPage({
         </div>
       }
     >
+      <SubNav menu="customer" current={sp.kind === 'vendor' ? 'vendor' : 'customer'}>
       <div className="card">
         <div className="toolbar">
           {KIND_TABS.map((t) => (
@@ -136,6 +138,7 @@ export default async function CustomersPage({
           {page < lastPage ? <Link className="btn" href={q({ page: page + 1 })}>ถัดไป</Link> : null}
         </div>
       </div>
+      </SubNav>
     </Shell>
   );
 }

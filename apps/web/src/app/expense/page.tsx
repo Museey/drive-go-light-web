@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { EXPENSE_CATS } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
+import { SubNav } from '@/components/sub-nav';
 import { listBuyDocs } from '@/lib/purchases';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { PageSize, pageSizeOf } from '@/components/page-size';
@@ -68,6 +69,7 @@ export default async function ExpensePage({
         </div>
       }
     >
+      <SubNav menu="expense" current={sp.kind === 'EX' ? 'expense' : 'purchase'}>
       <div className="card">
         <div className="toolbar">
           {TABS.map((t) => (
@@ -166,6 +168,7 @@ export default async function ExpensePage({
           {page < lastPage ? <Link className="btn" href={{ pathname: '/expense', query: { ...keep, page: page + 1 } }}>ถัดไป</Link> : null}
         </div>
       </div>
+      </SubNav>
     </Shell>
   );
 }

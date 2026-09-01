@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
+import { SubNav } from '@/components/sub-nav';
 import { countIgnoredItems, listPendingItems } from '@/lib/pending';
 import { restoreIgnoredAction } from '../actions';
 import { PendingRow } from './pending-row';
@@ -23,6 +24,7 @@ export default async function PendingPage() {
         </div>
       }
     >
+      <SubNav menu="stock" current="pending">
       <div className="note">
         รายการเหล่านี้คือชื่อที่พิมพ์ลงเอกสารเองโดยไม่ได้เลือกจากทะเบียนสินค้า
         จึงไม่มีรหัส ไม่ถูกตัดสต๊อก และไม่เข้าการคำนวณต้นทุน
@@ -64,6 +66,7 @@ export default async function PendingPage() {
           </div>
         )}
       </div>
+      </SubNav>
     </Shell>
   );
 }

@@ -1,6 +1,6 @@
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
-import { FinanceNav } from '@/components/finance-nav';
+import { SubNav } from '@/components/sub-nav';
 import { PrintHeader } from '@/components/print-header';
 import { PagePrintButton } from '@/components/print-button';
 import { DateRange } from '@/components/date-range';
@@ -39,7 +39,7 @@ export default async function SalesReportPage({
         <PagePrintButton />
       </div>
     } current="/finance" title="ยอดขาย" sub="มูลค่าก่อนภาษีและภาษีขายรายงวด">
-      <FinanceNav current="sales" />
+      <SubNav menu="finance" current="sales">
       <PrintHeader title="รายงานยอดขายและภาษี" range={{ from: sp.from, to: sp.to }} />
 
       <div className="grid g4" style={{ marginBottom: 18 }}>
@@ -148,6 +148,7 @@ export default async function SalesReportPage({
           </span>
         </div>
       </div>
+      </SubNav>
     </Shell>
   );
 }

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requirePerm } from '@/lib/auth';
 import { Shell } from '@/components/shell';
+import { SubNav } from '@/components/sub-nav';
 import { listUsers, nextUserCode } from '@/lib/settings';
 import { UserManager } from './user-manager';
 
@@ -22,6 +23,7 @@ export default async function UsersPage() {
         ลิงก์ใช้ได้ครั้งเดียวและหมดอายุใน 7 วัน ออกลิงก์ใหม่แล้วลิงก์เก่าใช้ไม่ได้ทันที
       </div>
 
+      <SubNav menu="settings" current="staff">
       <div className="card">
         <header><h2>รายชื่อผู้ใช้งาน</h2></header>
         <UserManager users={users} nextCode={nextCode} currentUserId={session.userId} />
@@ -38,6 +40,7 @@ export default async function UsersPage() {
           </ul>
         </div>
       </div>
+      </SubNav>
     </Shell>
   );
 }
