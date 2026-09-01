@@ -6,7 +6,9 @@ import { issueSetupToken } from '@/lib/auth';
 import { saveShopSettings, saveStaff, promoteToOwner, nextUserCode } from '@/lib/settings';
 import { PERM_KEYS, type PermKey } from '@/lib/perms';
 import { importProductsCsv, type CsvImportResult } from '@/lib/products-csv';
-import { restoreFromBackup, type RestoreResult } from '@/lib/restore';
+import {
+  inspectBackup, restoreFromBackup, type BackupPreview, type RestoreResult,
+} from '@/lib/restore';
 import { friendlyDbError, money, str, type FormResult } from '@/lib/mutate';
 
 function describe(err: unknown, fallback: string): string {
@@ -117,6 +119,27 @@ export async function promoteAction(userId: string): Promise<FormResult> {
 }
 
 /**
+ * ตรวจไฟล์สำรองให้ดูก่อน — ยังไม่แตะข้อมูลเดิม
+ * แยกจากการกู้คืนเพื่อให้ผู้ใช้เห็นว่าจะได้อะไรและเสียอะไรก่อนตัดสินใจ
+ */
+export async function inspectBackupAction(
+  _prev: FormResult & { preview?: BackupPreview },
+  fd: FormData,
+): Promise<FormResult & { preview?: BackupPreview }> {
+  await requirePerm('settings');
+
+  const file = fd.get('file');
+  if (!(file instanceof File) || file.size === 0) return { error: 'เลือกไฟล์สำรองก่อน', field: 'file' };
+  if (file.size > 40 * 1024 * 1024) return { error: 'ไฟล์ใหญ่เกิน 40 MB', field: 'file' };
+
+  try {
+    return { ok: true, preview: await inspectBackup(await file.text()) };
+  } catch (err) {
+    return { error: describe(err, 'อ่านไฟล์ไม่สำเร็จ'), field: 'file' };
+  }
+}
+
+/**
  * กู้คืนข้อมูลทั้งอู่จากไฟล์สำรอง
  *
  * ทับของเดิมทั้งหมด จึงบังคับให้พิมพ์คำยืนยันก่อน แบบเดียวกับตอนขอลบข้อมูล
@@ -137,7 +160,9 @@ export async function restoreBackupAction(
   }
 
   try {
-    const result = await restoreFromBackup(await file.text());
+    const result = await restoreFromBackup(await file.text(), {
+      acceptDataLoss: fd.get('acceptDataLoss') === 'on',
+    });
     revalidatePath('/', 'layout');
     return { ok: true, result };
   } catch (err) {

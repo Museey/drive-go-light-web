@@ -1,4 +1,7 @@
-import { importBackup, validateBackup, type BackupFile } from '@drivegolight/importer';
+import {
+  hasDataLoss, importBackup, unsupportedCollections, validateBackup,
+  type BackupFile, type UnsupportedGroup,
+} from '@drivegolight/importer';
 
 /**
  * แกนกลางของการกู้คืนข้อมูล — รับ client ที่เปิดทรานแซกชันและตั้งอู่ไว้แล้ว
@@ -62,6 +65,37 @@ export interface RestoreResult {
   warnings: string[];
   /** จำนวนแถวที่ลบทิ้งก่อนกู้คืน ไว้บอกผู้ใช้ว่าทับอะไรไป */
   removed: Record<string, number>;
+  /** กลุ่มข้อมูลในไฟล์ที่ระบบยังรับไม่ได้ */
+  dropped: UnsupportedGroup[];
+}
+
+/**
+ * ตรวจไฟล์โดยไม่แตะข้อมูล — ใช้บอกผู้ใช้ว่าจะได้อะไรและจะเสียอะไรก่อนกดยืนยัน
+ * ต้องเรียกก่อนเสมอ เพราะการกู้คืนลบของเดิมทิ้งแล้วย้อนไม่ได้
+ */
+export interface BackupPreview {
+  counts: Record<string, number>;
+  dropped: UnsupportedGroup[];
+  /** true = มีข้อมูลที่จะหายทั้งกลุ่ม ต้องให้ผู้ใช้ยืนยันเพิ่ม */
+  needsAcknowledgement: boolean;
+}
+
+const COUNTABLE = [
+  'products', 'customers', 'vendors', 'quotes', 'invoices',
+  'receipts', 'purchases', 'expenses',
+] as const;
+
+export function previewBackup(text: string): BackupPreview {
+  const backup = parseBackupFile(text) as unknown as Record<string, unknown>;
+  const dropped = unsupportedCollections(backup);
+
+  const counts: Record<string, number> = {};
+  for (const k of COUNTABLE) {
+    const v = backup[k];
+    if (Array.isArray(v) && v.length) counts[k] = v.length;
+  }
+
+  return { counts, dropped, needsAcknowledgement: hasDataLoss(dropped) };
 }
 
 export async function restoreIntoTenant(
@@ -69,10 +103,11 @@ export async function restoreIntoTenant(
   tenantId: string,
   backup: BackupFile,
 ): Promise<RestoreResult> {
+  const dropped = unsupportedCollections(backup);
   const removed = await wipeTenantData(c);
   const result = await importBackup(c, backup, {
     intoTenantId: tenantId,
     externalTransaction: true,
   });
-  return { counts: result.counts, warnings: result.warnings, removed };
+  return { counts: result.counts, warnings: result.warnings, removed, dropped };
 }

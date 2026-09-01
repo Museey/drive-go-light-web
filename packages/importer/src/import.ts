@@ -17,6 +17,7 @@ import {
 import type { ShopContext, VatMode } from '@drivegolight/core';
 import { addrLine, normalizeBackup, validateBackup } from './normalize.js';
 import type { BackupFile } from './normalize.js';
+import { unsupportedCollections, unsupportedWarnings } from './support.js';
 
 /** ส่วนของ pg client ที่ importer ใช้ — รับได้ทั้ง Client และ PoolClient */
 export interface SqlClient {
@@ -101,10 +102,14 @@ export async function importBackup(
     throw new Error(`ไฟล์สำรองข้อมูลไม่ถูกต้อง พบปัญหา ${problems.length} จุด:\n  - ${shown}${more}`);
   }
 
+  /* บอกก่อนว่ามีอะไรในไฟล์ที่จะไม่ตามมา — ต้องอยู่เหนือสุดของ warnings
+     เพราะเป็นเรื่องข้อมูลหาย ไม่ใช่เรื่องรายละเอียดปลีกย่อย */
+  const dropped = unsupportedCollections(raw);
+
   const db = normalizeBackup(raw);
   const shop = db.shop as Record<string, any>;
   const ctx: ShopContext = { vatRate: shop.vatRate };
-  const warnings: string[] = [];
+  const warnings: string[] = [...unsupportedWarnings(dropped)];
 
   const restoring = Boolean(options.intoTenantId);
   const tenantId = options.intoTenantId ?? randomUUID();

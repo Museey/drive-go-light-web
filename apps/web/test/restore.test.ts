@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { importBackup } from '@drivegolight/importer';
 import { exportBackupWith } from '../src/lib/backup';
-import { parseBackupFile, restoreIntoTenant } from '../src/lib/restore-core';
+import { parseBackupFile, previewBackup, restoreIntoTenant } from '../src/lib/restore-core';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -172,5 +172,35 @@ describe.skipIf(!DB_URL)('กู้คืนข้อมูลทับอู่
   it('ไฟล์ที่ไม่ใช่ไฟล์สำรองถูกปฏิเสธก่อนแตะข้อมูล', () => {
     expect(() => parseBackupFile('ไม่ใช่ JSON')).toThrow(/ไม่ใช่ไฟล์ JSON/);
     expect(() => parseBackupFile('{"shop":{}}')).toThrow(/ไฟล์สำรองไม่ถูกต้อง/);
+  });
+
+  it('ตรวจไฟล์ก่อนได้โดยไม่แตะข้อมูลเดิม', async () => {
+    const fixture = JSON.parse(readFileSync(resolve(ROOT, 'fixtures/demo-backup.json'), 'utf8'));
+    const before = await summary(target);
+
+    const p = previewBackup(JSON.stringify(fixture));
+    expect(p.counts.products).toBeGreaterThan(0);
+    expect(p.dropped).toEqual([]);
+    expect(p.needsAcknowledgement).toBe(false);
+
+    /* สำคัญ: ตรวจแล้วข้อมูลต้องเท่าเดิมทุกตาราง */
+    expect(await summary(target)).toEqual(before);
+  });
+
+  it('ไฟล์แบบ 6.4 บอกล่วงหน้าว่ากลุ่มไหนจะไม่ตามมา และต้องให้ยืนยันก่อน', () => {
+    const fixture = JSON.parse(readFileSync(resolve(ROOT, 'fixtures/demo-backup.json'), 'utf8'));
+    const v64 = {
+      ...fixture,
+      billnotes: [{ id: 'b1' }, { id: 'b2' }],
+      claims: [{ id: 'c1' }],
+      counts: [{ id: 'ct1' }],
+      moves: [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }],
+    };
+
+    const p = previewBackup(JSON.stringify(v64));
+    expect(p.dropped.map((g) => [g.key, g.count])).toEqual([
+      ['billnotes', 2], ['claims', 1], ['counts', 1], ['moves', 3],
+    ]);
+    expect(p.needsAcknowledgement).toBe(true);
   });
 });

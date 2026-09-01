@@ -1,6 +1,10 @@
 import 'server-only';
+import { requirePerm } from './auth';
 import { mutate } from './mutate';
-import { parseBackupFile, restoreIntoTenant, type RestoreResult } from './restore-core';
+import {
+  parseBackupFile, previewBackup, restoreIntoTenant,
+  type BackupPreview, type RestoreResult,
+} from './restore-core';
 
 /**
  * กู้คืนข้อมูลของอู่จากไฟล์สำรอง — ทับข้อมูลเดิมทั้งหมด
@@ -16,10 +20,28 @@ import { parseBackupFile, restoreIntoTenant, type RestoreResult } from './restor
  * ทั้งหมดอยู่ในทรานแซกชันเดียวของ mutate() ถ้าพังกลางทางข้อมูลเดิมยังอยู่ครบ
  * และอนุญาตแม้การใช้งานหมดอายุ — อู่ต้องเอาข้อมูลตัวเองเข้าออกได้เสมอ
  */
-export type { RestoreResult } from './restore-core';
+export type { BackupPreview, RestoreResult } from './restore-core';
 
-export async function restoreFromBackup(text: string): Promise<RestoreResult> {
+/** ตรวจไฟล์ให้ผู้ใช้ดูก่อนตัดสินใจ — ไม่แตะข้อมูลเดิมเลย */
+export async function inspectBackup(text: string): Promise<BackupPreview> {
+  await requirePerm('settings');
+  return previewBackup(text);
+}
+
+export async function restoreFromBackup(
+  text: string,
+  opts: { acceptDataLoss?: boolean } = {},
+): Promise<RestoreResult> {
   const backup = parseBackupFile(text);
+
+  /* กันการลบข้อมูลเดิมทิ้งไปแล้วเพิ่งมารู้ว่าของใหม่มาไม่ครบ
+     ตรวจซ้ำฝั่งเซิร์ฟเวอร์ ไม่เชื่อว่าหน้าเว็บตรวจมาแล้ว */
+  const preview = previewBackup(text);
+  if (preview.needsAcknowledgement && !opts.acceptDataLoss) {
+    throw new Error(
+      'ไฟล์นี้มีข้อมูลที่ระบบยังรองรับไม่ได้ — ต้องติ๊กรับทราบก่อนจึงจะกู้คืนได้',
+    );
+  }
 
   return mutate('settings', async (c) => {
     const { rows } = await c.query(`select id from tenants where id = current_tenant_id()`);

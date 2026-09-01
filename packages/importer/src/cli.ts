@@ -19,12 +19,14 @@
  *   --owner-name=...     ชื่อเจ้าของกิจการ
  *   --app-url=...        ที่อยู่เว็บสำหรับประกอบลิงก์ (ค่าตั้งต้น http://localhost:3100)
  *   --dry-run            ตรวจไฟล์และคำนวณยอดให้ดู แต่ไม่เขียนลงฐานข้อมูล
+ *   --accept-data-loss   ยืนยันว่ารับทราบว่าข้อมูลบางกลุ่มในไฟล์จะไม่ถูกนำเข้า
  */
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { importBackup } from './import.js';
 import { normalizeBackup, validateBackup } from './normalize.js';
 import { createOwner, setupUrl } from './owner.js';
+import { hasDataLoss, unsupportedCollections } from './support.js';
 
 function arg(name: string): string | undefined {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -66,9 +68,32 @@ if (file) {
     `ใบเสร็จ ${db.receipts.length} · ใบซื้อ ${db.purchases.length} · ค่าใช้จ่าย ${db.expenses.length}`,
   );
 
+  /* บอกก่อนเขียน ไม่ใช่บอกหลังเขียนเสร็จ — คนที่รันคำสั่งนี้ต้องเลือกได้ว่าจะหยุด */
+  const dropped = unsupportedCollections(raw);
+  if (dropped.length) {
+    console.log('\n' + '─'.repeat(66));
+    console.log('ข้อมูลในไฟล์ที่ระบบยังรองรับไม่ได้');
+    console.log('─'.repeat(66));
+    for (const g of dropped) {
+      const tag = g.kind === 'lost' ? 'จะไม่ถูกนำเข้า' : 'ยอดยังถูก แต่ประวัติหาย';
+      console.log(`  ${g.label} ${g.count.toLocaleString('en-US')} รายการ — ${tag}`);
+      console.log(`    ${g.note}`);
+    }
+    console.log('─'.repeat(66));
+  }
+
   if (process.argv.includes('--dry-run')) {
     console.log('\n--dry-run: ไฟล์ผ่านการตรวจ ไม่ได้เขียนลงฐานข้อมูล');
     process.exit(0);
+  }
+
+  if (hasDataLoss(dropped) && !process.argv.includes('--accept-data-loss')) {
+    console.error(
+      '\nหยุดไว้ก่อน — ไฟล์นี้มีข้อมูลที่จะหายไปถ้านำเข้าตอนนี้\n' +
+      'ถ้ารอให้ระบบรองรับก่อนได้ ให้รอ ข้อมูลในไฟล์ยังอยู่ครบ\n' +
+      'ถ้ายอมรับว่าส่วนนั้นจะไม่ตามมา ให้ใส่ --accept-data-loss แล้วสั่งใหม่',
+    );
+    process.exit(2);
   }
 }
 
