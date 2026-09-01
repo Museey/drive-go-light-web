@@ -28,6 +28,8 @@ export interface BackupFile {
   seq: Record<string, number>;
   lic: Record<string, unknown>;
   ignoredItems: string[];
+  /** ใบวางบิล — รูปแบบเดียวกับ DB.billnotes ของรุ่น 6.4 */
+  billnotes: unknown[];
   ui: Record<string, unknown>;
   lastExportAt: number;
 }
@@ -76,7 +78,18 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
     const pays = await c.query(`select * from payments order by doc_id, paid_on, created_at`);
     const users = await c.query(`select * from users order by code`);
     const seqs = await c.query(`select kind::text as kind, last_no from doc_sequences`);
+    const billSeq = await c.query(`select coalesce(max(last_no), 0)::int as last_no from billnote_sequences`);
     const ignored = await c.query(`select name_norm from ignored_item_names order by name_norm`);
+    const billnotes = await c.query(
+      `select b.*, b.bill_date::text as bill_date, b.due_date::text as due_date,
+              b.status::text as status,
+              coalesce(array_agg(d.id) filter (where d.id is not null), '{}') as inv_ids
+       from billnotes b
+       left join billnote_docs bd on bd.billnote_id = b.id
+       left join documents d on d.id = bd.doc_id
+       group by b.id
+       order by b.bill_date, b.no`,
+    );
     const sub = await c.query(
       `select started_on, expires_on from subscriptions
        order by expires_on desc limit 1`,
@@ -253,15 +266,39 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
           perms: Object.fromEntries((u.perms ?? []).map((p: string) => [p, true])),
         })),
 
-      seq: Object.fromEntries(
-        seqs.rows.map((r) => [SEQ_KEY[r.kind] ?? r.kind, Number(r.last_no)]),
-      ) as Record<string, number>,
+      seq: {
+        ...Object.fromEntries(
+          seqs.rows.map((r) => [SEQ_KEY[r.kind] ?? r.kind, Number(r.last_no)]),
+        ),
+        /* ตัวนับใบวางบิล — ชื่อคีย์ bn ตรงกับ DB.seq.bn ของรุ่น 6.4 */
+        bn: Number(billSeq.rows[0]?.last_no ?? 0),
+      } as Record<string, number>,
 
       lic: sub.rows[0]
         ? { installedAt: sub.rows[0].started_on, key: '', expires: sub.rows[0].expires_on }
         : { installedAt: '', key: '', expires: '' },
 
       ignoredItems: ignored.rows.map((r) => r.name_norm),
+
+      /* ใบวางบิล — รูปแบบเดียวกับ DB.billnotes ของรุ่น 6.4 เพื่อให้เปิดด้วยโปรแกรมเดิมได้
+         invIds อ้าง id ของเอกสารในไฟล์นี้ (คีย์เดียวกับที่ quotes/invoices/receipts ใช้)
+         ต่างจากรุ่นเดิมตรงที่อ้างใบเสร็จได้ด้วย เพราะเราวางบิลจากใบค้างชำระทุกชนิด */
+      billnotes: billnotes.rows.map((b) => ({
+        id: b.id,
+        no: b.no,
+        date: b.bill_date,
+        dueDate: b.due_date ?? '',
+        custId: b.party_id,
+        name: b.party_name ?? '',
+        taxId: b.party_tax_id ?? '',
+        addr: b.party_addr_text ?? '',
+        byWhom: b.by_whom ?? '',
+        note: b.note ?? '',
+        total: n(b.total_snapshot),
+        invIds: b.inv_ids ?? [],
+        ...(b.status === 'void' ? { void: true } : {}),
+      })),
+
       ui: s.ui_prefs ?? {},
       lastExportAt: Date.now(),
     };

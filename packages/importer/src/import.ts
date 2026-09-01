@@ -613,6 +613,104 @@ export async function importBackup(
       .map(([kind, key]) => [tenantId, kind, period, Math.max(0, Math.trunc(num(db.seq?.[key])))]);
     await insertRows(client, 'doc_sequences', ['tenant_id', 'kind', 'period', 'last_no'], seqRows);
 
+    /* ---------- ใบวางบิล ---------- */
+    /**
+     * ใบวางบิลอ้างเอกสารด้วย id ที่ใช้กันทั้งไฟล์ (bn.invIds)
+     *
+     * โปรแกรมเดิมอ่านจาก DB.invoices อย่างเดียว แต่ไฟล์ที่ส่งออกจากระบบใหม่
+     * อาจอ้างใบเสร็จด้วย เพราะเราวางบิลจากใบค้างชำระทุกชนิด — จึงรวมทุกกลุ่มไว้ในแมป
+     *
+     * uid() ของโปรแกรมเดิมไม่รับประกันว่าไม่ซ้ำข้ามอาเรย์ ถ้าเจอ id ซ้ำให้ยึดใบแรก
+     * แล้วเตือน ดีกว่าเดาว่าใบไหนคือใบที่ตั้งใจวางบิล
+     */
+    const uuidByLegacy = new Map<string, string>();
+    let ambiguousDocId = 0;
+    for (const d of [...db.invoices, ...db.receipts, ...db.quotes, ...db.purchases, ...db.expenses]) {
+      const uuid = docUuid.get(d);
+      const legacy = text(d?.id);
+      if (!uuid || !legacy) continue;
+      if (uuidByLegacy.has(legacy)) { ambiguousDocId++; continue; }
+      uuidByLegacy.set(legacy, uuid);
+    }
+
+    const billnoteRows: unknown[][] = [];
+    const billnoteDocRows: unknown[][] = [];
+    const takenBillNo = new Set<string>();
+    /* ใบหนึ่งอยู่ในใบวางบิลที่ยังไม่ยกเลิกได้ใบเดียว — ฐานบังคับด้วย partial unique index */
+    const docTaken = new Set<string>();
+    let missingBillDoc = 0;
+    let dupBillDoc = 0;
+    let renamedBillNo = 0;
+
+    for (const b of db.billnotes ?? []) {
+      const voided = b?.void === true;
+
+      let no = text(b?.no).trim() || `BN-นำเข้า-${String(billnoteRows.length + 1).padStart(4, '0')}`;
+      if (takenBillNo.has(no)) {
+        let suffix = 1;
+        const base = no;
+        while (takenBillNo.has(no)) { suffix++; no = `${base}-${suffix}`; }
+        renamedBillNo++;
+      }
+      takenBillNo.add(no);
+
+      const docIds: string[] = [];
+      for (const legacy of (Array.isArray(b?.invIds) ? b.invIds : [])) {
+        const uuid = uuidByLegacy.get(text(legacy));
+        if (!uuid) { missingBillDoc++; continue; }
+        if (docIds.includes(uuid)) continue;
+        if (!voided && docTaken.has(uuid)) { dupBillDoc++; continue; }
+        if (!voided) docTaken.add(uuid);
+        docIds.push(uuid);
+      }
+
+      const id = randomUUID();
+      billnoteRows.push([
+        id, tenantId, no,
+        text(b?.date) || openingDate,
+        text(b?.dueDate) || null,
+        b?.custId ? (contactId.get(text(b.custId)) ?? null) : null,
+        text(b?.name), digitsOnly(b?.taxId), text(b?.addr),
+        text(b?.byWhom), text(b?.note),
+        money(num(b?.total)),
+        voided ? 'void' : 'issued',
+        voided ? new Date().toISOString() : null,
+      ]);
+      for (const docId of docIds) billnoteDocRows.push([tenantId, id, docId, voided]);
+    }
+
+    await insertRows(client, 'billnotes',
+      ['id', 'tenant_id', 'no', 'bill_date', 'due_date', 'party_id',
+       'party_name', 'party_tax_id', 'party_addr_text', 'by_whom', 'note',
+       'total_snapshot', 'status', 'voided_at'],
+      billnoteRows);
+    await insertRows(client, 'billnote_docs',
+      ['tenant_id', 'billnote_id', 'doc_id', 'voided'], billnoteDocRows);
+    await insertRows(client, 'billnote_sequences', ['tenant_id', 'period', 'last_no'],
+      [[tenantId, '', Math.max(0, Math.trunc(num(db.seq?.bn)))]]);
+
+    if (renamedBillNo) {
+      warnings.push(`เลขที่ใบวางบิลซ้ำ ${renamedBillNo} ใบ — เติมเลขต่อท้ายให้ไม่ชน`);
+    }
+    if (missingBillDoc) {
+      warnings.push(
+        `ใบวางบิลอ้างถึงเอกสาร ${missingBillDoc} ใบที่ไม่มีในไฟล์แล้ว — ตัดออกจากใบวางบิล ` +
+        '(ยอดที่แจ้งไปตอนวางบิลยังเก็บไว้ครบ)',
+      );
+    }
+    if (dupBillDoc) {
+      warnings.push(
+        `เอกสาร ${dupBillDoc} ใบถูกวางบิลซ้ำมากกว่าหนึ่งใบ — คงไว้ในใบวางบิลใบแรก ` +
+        '(ระบบใหม่ไม่ให้ใบเดียวอยู่ในใบวางบิลที่ยังไม่ยกเลิกสองใบ ไม่งั้นจะเก็บเงินซ้ำ)',
+      );
+    }
+    if (ambiguousDocId) {
+      warnings.push(
+        `มีเอกสาร ${ambiguousDocId} ใบที่ใช้ id เดิมซ้ำกับใบอื่น — ` +
+        'ใบวางบิลที่อ้าง id เหล่านั้นยึดเอกสารใบแรกที่เจอ',
+      );
+    }
+
     /* ---------- ชื่อรายการที่สั่งไม่ให้เตือน ---------- */
     const ignoredRows = [...new Set((db.ignoredItems ?? []).map(normName))]
       .filter(Boolean)
@@ -633,6 +731,7 @@ export async function importBackup(
         documents: docRows.length,
         docItems: itemRows.length,
         payments: paymentRows.length,
+        billnotes: billnoteRows.length,
       },
       warnings,
     };

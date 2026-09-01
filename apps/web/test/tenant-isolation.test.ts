@@ -72,6 +72,25 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
       await admin.query(
         `insert into ignored_item_names (tenant_id, name_norm) values ($1, 'ค่าส่ง')`, [t],
       );
+      /* ตารางใบวางบิลที่เพิ่มในช่วงที่ 3 ต้องถูกทดสอบการแยกอู่ด้วย */
+      const bn = await admin.query(
+        `insert into billnotes (tenant_id, no, bill_date, party_name)
+         values ($1, 'BN-202603-001', '2026-03-31', 'ลูกค้าองค์กร') returning id`, [t],
+      );
+      await admin.query(
+        /* ตัวนำเข้าลงแถวตัวนับให้แล้ว — ที่นี่แค่ตั้งค่าให้แน่ว่าไม่ใช่ศูนย์ */
+        `insert into billnote_sequences (tenant_id, period, last_no) values ($1, '', 1)
+         on conflict (tenant_id, period) do update set last_no = 1`, [t],
+      );
+      const someDoc = await admin.query(
+        `select id from documents where tenant_id = $1 and kind = 'IVT' limit 1`, [t],
+      );
+      if (someDoc.rows[0]) {
+        await admin.query(
+          `insert into billnote_docs (tenant_id, billnote_id, doc_id) values ($1,$2,$3)`,
+          [t, bn.rows[0].id, someDoc.rows[0].id],
+        );
+      }
     }
 
     /* ทุกตารางที่มีคอลัมน์ tenant_id — ไล่เอาจากฐานข้อมูลจริง ไม่ใช่รายชื่อที่พิมพ์ไว้ */

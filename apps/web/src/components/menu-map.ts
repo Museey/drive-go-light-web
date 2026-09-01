@@ -73,7 +73,7 @@ export const MENU: MenuItem[] = [
       },
       {
         key: 'billing', no: '03.4', label: 'ใบวางบิล', desc: 'รวมใบค้างชำระแจ้งเก็บเงิน',
-        icon: 'bill', color: '#B4720B', href: '/income/billing', todo: true,
+        icon: 'bill', color: '#B4720B', href: '/income/billing',
       },
     ],
   },

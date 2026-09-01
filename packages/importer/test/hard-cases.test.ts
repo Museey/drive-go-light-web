@@ -16,7 +16,7 @@ import { exTotals, recTotals } from '@drivegolight/core';
 import { importBackup, normalizeBackup } from '../src/index.js';
 import type { ImportResult } from '../src/index.js';
 import {
-  duplicateDocNoBackup, emptyBackup, largeChainBackup, legacyV1Backup,
+  billnoteBackup, duplicateDocNoBackup, emptyBackup, largeChainBackup, legacyV1Backup,
   messyBackup, vatInclusiveBackup, wrongVatModeBackup,
 } from './hard-cases.js';
 
@@ -384,6 +384,54 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
     it('แทรกครบ 2,700 ใบ', async () => {
       const { rows } = await app.query(`select count(*) as c from documents`);
       expect(n(rows[0].c)).toBe(2700);
+    });
+  });
+
+  describe('ใบวางบิลจากรุ่น 6.4', () => {
+    let r: ImportResult;
+    beforeAll(async () => { r = await load(billnoteBackup()); });
+
+    it('ใบวางบิลตามมาครบทุกใบ ไม่ถูกทิ้งเงียบ ๆ', async () => {
+      expect(r.counts.billnotes).toBe(2);
+      const { rows } = await app.query(`select count(*) as c from billnotes`);
+      expect(n(rows[0].c)).toBe(2);
+    });
+
+    it('เลขที่ซ้ำถูกเติมเลขต่อท้ายให้ไม่ชน แล้วเตือนไว้', async () => {
+      const { rows } = await app.query(`select no from billnotes order by bill_date`);
+      expect(rows.map((x) => x.no)).toEqual(['BN-202601-001', 'BN-202601-001-2']);
+      expect(r.warnings.some((w) => w.includes('เลขที่ใบวางบิลซ้ำ'))).toBe(true);
+    });
+
+    it('ใบที่ถูกวางบิลซ้ำสองใบ คงไว้ในใบแรก แล้วเตือน', async () => {
+      const { rows } = await app.query(`
+        select b.no, d.doc_no
+        from billnote_docs bd
+        join billnotes b on b.id = bd.billnote_id
+        join documents d on d.id = bd.doc_id
+        order by b.bill_date, d.doc_no`);
+      expect(rows.map((x) => `${x.no} · ${x.doc_no}`)).toEqual([
+        'BN-202601-001 · IVT-202601-001',
+        'BN-202601-001 · IVT-202601-002',
+        'BN-202601-001-2 · IVT-202601-003',
+      ]);
+      expect(r.warnings.some((w) => w.includes('วางบิลซ้ำ'))).toBe(true);
+    });
+
+    it('ใบที่อ้างถึงเอกสารที่ถูกลบไปแล้วถูกตัดออก แล้วเตือน', () => {
+      expect(r.warnings.some((w) => w.includes('ไม่มีในไฟล์แล้ว'))).toBe(true);
+    });
+
+    it('ยอดที่แจ้งไปตอนวางบิลถูกเก็บไว้ตามไฟล์ ไม่คำนวณใหม่', async () => {
+      const { rows } = await app.query(
+        `select total_snapshot from billnotes order by bill_date`);
+      expect(rows.map((x) => n(x.total_snapshot))).toEqual([2140, 3210]);
+    });
+
+    it('ตัวนับเลขที่ใบวางบิลตามมาด้วย ออกใบถัดไปแล้วไม่ซ้ำของเก่า', async () => {
+      const next = await app.query(
+        `select next_billnote_no(current_tenant_id(), '') as no`);
+      expect(n(next.rows[0].no)).toBe(3);
     });
   });
 

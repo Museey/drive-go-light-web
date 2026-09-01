@@ -2,6 +2,9 @@ import 'server-only';
 import { query } from './auth';
 import { mutate } from './mutate';
 import { checkPaymentAmount } from './payment-rules';
+import { bulkPay, type BulkPaymentLine, type BulkPaymentResult } from './bulk-pay';
+
+export type { BulkPaymentLine, BulkPaymentResult };
 
 const n = (v: unknown): number => Number(v ?? 0);
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -165,6 +168,16 @@ export async function recordPayment(input: {
       [input.docId, input.paidOn, input.amount.toFixed(2), input.method, input.ref, userId],
     );
   });
+}
+
+/** ตัดชำระหลายใบพร้อมกัน — ตรวจสิทธิ์แล้วส่งต่อให้ bulkPay ในทรานแซกชันเดียว */
+export async function recordBulkPayments(input: {
+  lines: BulkPaymentLine[];
+  paidOn: string;
+  method: string;
+  ref: string;
+}): Promise<BulkPaymentResult> {
+  return mutate('finance', (c, userId) => bulkPay(c, userId, input));
 }
 
 /**

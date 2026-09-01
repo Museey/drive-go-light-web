@@ -16,6 +16,11 @@ interface SqlClient {
 
 /** ตารางที่ถูกล้าง เรียงตามลำดับที่ลบได้โดยไม่ติดคีย์นอก */
 export const WIPE_ORDER = [
+  /* ใบวางบิลต้องไปก่อนเอกสาร — billnote_docs.doc_id เป็น on delete restrict
+     ถ้าไม่ตัดสายก่อน การกู้คืนทับอู่ที่เคยวางบิลไว้จะล้มด้วย foreign key */
+  'billnote_docs',
+  'billnotes',
+  'billnote_sequences',
   'payments',
   'stock_moves',
   'doc_items',
@@ -82,7 +87,7 @@ export interface BackupPreview {
 
 const COUNTABLE = [
   'products', 'customers', 'vendors', 'quotes', 'invoices',
-  'receipts', 'purchases', 'expenses',
+  'receipts', 'purchases', 'expenses', 'billnotes',
 ] as const;
 
 export function previewBackup(text: string): BackupPreview {

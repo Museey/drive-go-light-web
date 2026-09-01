@@ -16,6 +16,8 @@ export interface BackupFile {
   customers: any[];
   /** ทะเบียนผู้ขายของรุ่นเก่า — รุ่นใหม่ย้ายเข้า customers แล้ว */
   vendors?: any[];
+  /** ใบวางบิล — มีตั้งแต่รุ่น 6.4 */
+  billnotes?: any[];
   purchases: any[];
   expenses: any[];
   quotes: any[];

@@ -5,6 +5,7 @@ import { PrintHeader } from '@/components/print-header';
 import { PagePrintButton } from '@/components/print-button';
 import { listPayables } from '@/lib/receivables';
 import { baht } from '@/lib/format';
+import { BulkPay } from '../bulk-pay';
 import { ApRow } from './ap-row';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export default async function ApPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; overdue?: string }>;
+  searchParams: Promise<{ q?: string; overdue?: string; bulk?: string }>;
 }) {
   await requirePerm('finance');
   const sp = await searchParams;
@@ -44,6 +45,15 @@ export default async function ApPage({
           <div className={`value${overdueCount > 0 ? ' warn' : ''}`}>{overdueCount}</div>
         </div></div>
       </div>
+
+      <BulkPay
+        defaultOpen={sp.bulk === '1'}
+        direction="buy"
+        rows={rows.map((r) => ({
+          id: r.id, docNo: r.docNo, partyName: r.partyName,
+          dueDate: r.dueDate, outstanding: r.outstanding, daysOverdue: r.daysOverdue,
+        }))}
+      />
 
       <div className="card">
         <div className="toolbar">

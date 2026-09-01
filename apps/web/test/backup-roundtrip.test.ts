@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { importBackup } from '@drivegolight/importer';
 import { exportBackupWith } from '../src/lib/backup';
+import { openInvoices, saveBillnote } from '../src/lib/billnotes';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -26,6 +27,8 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
   let app: pg.Client;
   let firstTenant: string;
   let secondTenant: string;
+  let billnoteTotal = 0;
+  let billnoteDocNos: string[] = [];
 
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: DB_URL });
@@ -59,8 +62,24 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     const first = await importBackup(app, fixture, { openingStockDate: '2026-08-28' });
     firstTenant = first.tenantId;
 
-    /* ส่งออกจากอู่แรก แล้วนำเข้าเป็นอู่ที่สอง */
     await app.query(`select set_config('app.tenant_id', $1, false)`, [firstTenant]);
+
+    /* วางบิลลูกค้าที่ค้างมากที่สุดไว้หนึ่งใบ ไฟล์สำรองจะได้มีใบวางบิลให้พิสูจน์ */
+    const open = await openInvoices(app);
+    const topParty = open[0]!.partyId ?? null;
+    const picked = open
+      .filter((v) => (v.partyId ?? null) === topParty)
+      .slice(0, 4);
+    billnoteTotal = Math.round(picked.reduce((t, v) => t + v.outstanding, 0) * 100) / 100;
+    billnoteDocNos = picked.map((v) => v.docNo).sort();
+    await saveBillnote(app, {
+      billDate: '2026-08-28', dueDate: '2026-09-15',
+      partyId: topParty, partyName: picked[0]!.partyName,
+      partyTaxId: '', partyAddrText: '', byWhom: 'สมชาย', note: '',
+      docIds: picked.map((v) => v.id),
+    }, null);
+
+    /* ส่งออกจากอู่แรก แล้วนำเข้าเป็นอู่ที่สอง */
     const exported = await exportBackupWith(app);
 
     const second = await importBackup(app, exported as never, { openingStockDate: '2026-08-28' });
@@ -149,6 +168,51 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
       return Object.fromEntries(rows.map((r) => [r.kind, n(r.last_no)]));
     };
     expect(await seqs(secondTenant)).toEqual(await seqs(firstTenant));
+  });
+
+  /**
+   * ใบวางบิลถูกถอดออกจากรายการ "ยังรองรับไม่ได้" แล้ว แปลว่าตัวนำเข้าต้องรับได้จริง
+   * ถ้ารับไม่ได้ อู่ที่ย้ายเข้ามาจะเสียใบวางบิลไปเงียบ ๆ โดยไม่มีคำเตือนใด ๆ
+   */
+  it('ใบวางบิลตามมาครบ ทั้งยอดที่แจ้งและใบที่รวมไว้', async () => {
+    const read = async (tenantId: string) => {
+      const { rows } = await admin.query(
+        `select b.no, b.bill_date::text as bill_date, b.due_date::text as due_date,
+                b.by_whom, b.total_snapshot,
+                (select array_agg(d.doc_no order by d.doc_no)
+                   from billnote_docs bd join documents d on d.id = bd.doc_id
+                  where bd.billnote_id = b.id) as docs
+         from billnotes b where b.tenant_id = $1 order by b.no`,
+        [tenantId],
+      );
+      return rows;
+    };
+
+    const a = await read(firstTenant);
+    const b = await read(secondTenant);
+
+    expect(a).toHaveLength(1);
+    expect(n(a[0].total_snapshot)).toBe(billnoteTotal);
+    expect(a[0].docs.slice().sort()).toEqual(billnoteDocNos);
+
+    expect(b).toHaveLength(1);
+    expect(b[0].no).toBe(a[0].no);
+    expect(b[0].bill_date).toBe(a[0].bill_date);
+    expect(b[0].due_date).toBe(a[0].due_date);
+    expect(b[0].by_whom).toBe(a[0].by_whom);
+    expect(n(b[0].total_snapshot)).toBe(n(a[0].total_snapshot));
+    expect(b[0].docs.slice().sort()).toEqual(billnoteDocNos);
+  });
+
+  it('ตัวนับเลขที่ใบวางบิลตามมาด้วย ออกใบใหม่แล้วไม่ซ้ำของเก่า', async () => {
+    const last = async (tenantId: string) => {
+      const { rows } = await admin.query(
+        `select last_no from billnote_sequences where tenant_id = $1`, [tenantId],
+      );
+      return rows[0] ? n(rows[0].last_no) : null;
+    };
+    expect(await last(secondTenant)).toBe(await last(firstTenant));
+    expect(await last(firstTenant)).toBeGreaterThan(0);
   });
 
   it('ไฟล์สำรองไม่มีรหัสผ่านติดไปด้วย', async () => {
