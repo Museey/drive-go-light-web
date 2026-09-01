@@ -91,6 +91,21 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
           [t, bn.rows[0].id, someDoc.rows[0].id],
         );
       }
+
+      /* ตารางใบเคลมที่เพิ่มในช่วงที่ 4 */
+      const cl = await admin.query(
+        `insert into claims (tenant_id, no, side, kind, claim_date, party_name, reason)
+         values ($1,'CL-202603-001','customer','warranty','2026-03-15','ลูกค้าเคลม','รับประกัน')
+         returning id`, [t],
+      );
+      const someProduct = await admin.query(
+        `select id from products where tenant_id = $1 limit 1`, [t],
+      );
+      await admin.query(
+        `insert into claim_items (tenant_id, claim_id, line_no, product_id, name, qty, unit_cost)
+         values ($1,$2,1,$3,'อะไหล่ที่เคลม',1,100)`,
+        [t, cl.rows[0].id, someProduct.rows[0]?.id ?? null],
+      );
     }
 
     /* ทุกตารางที่มีคอลัมน์ tenant_id — ไล่เอาจากฐานข้อมูลจริง ไม่ใช่รายชื่อที่พิมพ์ไว้ */

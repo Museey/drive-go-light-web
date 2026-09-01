@@ -12,7 +12,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
-import { consumeStock, lotsOfProduct, receiveStock } from '../src/lib/stock-cost';
+import { consumeStock, lotsOfProduct, receiveStock, returnDocStock } from '../src/lib/stock-cost';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -167,6 +167,34 @@ describe.skipIf(!DB_URL)('ต้นทุนเข้าก่อนออกก
       `select count(*)::int as c from stock_moves where product_id = $1`, [productId],
     );
     expect(rows[0].c).toBe(5);
+  });
+
+  /**
+   * แก้เอกสารเดิมสองรอบ — รอบที่สองต้องคืนเฉพาะที่ยังค้างอยู่จริง
+   *
+   * ใบหนึ่งมีทั้งแถวตัดและแถวคืนปนกันหลังแก้รอบแรก ถ้าการคืนไล่ทีละแถวที่ตัดออก
+   * โดยไม่หักกับแถวที่คืนไปแล้ว รอบที่สองจะคืนของมากกว่าที่เคยเอาออก
+   * แล้วสต๊อกจะงอกขึ้นทุกครั้งที่ผู้ใช้กดแก้เอกสาร
+   */
+  it('แก้เอกสารเดิมซ้ำหลายรอบแล้วสต๊อกไม่งอก', async () => {
+    await twoLots();                       // มีของ 20 ชิ้น
+
+    /* รอบแรก: ขาย 10 */
+    await consumeStock(app, { productId, qty: 10, movedOn: '2026-03-01', reason: 'sale', docId });
+
+    /* แก้เป็น 6 — คืนของเดิมก่อนแล้วตัดใหม่ แบบเดียวกับที่ saveSalesDoc ทำ */
+    await returnDocStock(app, docId, { movedOn: '2026-03-02', note: 'แก้ไขเอกสาร' });
+    await consumeStock(app, { productId, qty: 6, movedOn: '2026-03-02', reason: 'sale', docId });
+
+    /* แก้อีกรอบเป็น 4 */
+    await returnDocStock(app, docId, { movedOn: '2026-03-03', note: 'แก้ไขเอกสาร' });
+    await consumeStock(app, { productId, qty: 4, movedOn: '2026-03-03', reason: 'sale', docId });
+
+    const { rows } = await admin.query(
+      `select coalesce(sum(qty_delta), 0) as q from stock_moves where product_id = $1`,
+      [productId],
+    );
+    expect(Number(rows[0].q)).toBe(16);    // 20 − 4 ไม่ใช่ 20 − 4 + ของที่งอกมา
   });
 
   it('รายการที่ลงย้อนหลังเข้าคิวตามวันที่จริง ไม่ใช่ตามเวลาที่คีย์', async () => {

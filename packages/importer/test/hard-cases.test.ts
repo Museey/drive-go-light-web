@@ -16,7 +16,7 @@ import { exTotals, recTotals } from '@drivegolight/core';
 import { importBackup, normalizeBackup } from '../src/index.js';
 import type { ImportResult } from '../src/index.js';
 import {
-  billnoteBackup, duplicateDocNoBackup, emptyBackup, largeChainBackup, legacyV1Backup,
+  billnoteBackup, claimBackup, duplicateDocNoBackup, emptyBackup, largeChainBackup, legacyV1Backup,
   messyBackup, vatInclusiveBackup, wrongVatModeBackup,
 } from './hard-cases.js';
 
@@ -432,6 +432,111 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
       const next = await app.query(
         `select next_billnote_no(current_tenant_id(), '') as no`);
       expect(n(next.rows[0].no)).toBe(3);
+    });
+  });
+
+  describe('ใบเคลมจากรุ่น 6.4', () => {
+    let r: ImportResult;
+    beforeAll(async () => { r = await load(claimBackup()); });
+
+    /**
+     * ข้อสำคัญที่สุดของกลุ่มนี้ — พลาดแล้วสินค้าทุกตัวที่เคยเคลมจะติดลบทันทีที่นำเข้าเสร็จ
+     */
+    it('ไม่สร้างแถวตัดสต๊อกจากใบเคลม ยอดคงเหลือเท่าที่อยู่ในไฟล์เป๊ะ', async () => {
+      const moves = await app.query(
+        `select count(*)::int as c from stock_moves where claim_id is not null`);
+      expect(n(moves.rows[0].c)).toBe(0);
+
+      const { rows } = await app.query(
+        `select qty_on_hand from product_stock s
+         join products p on p.id = s.product_id where p.code = 'BRK-001'`);
+      expect(n(rows[0].qty_on_hand)).toBe(8);
+    });
+
+    it('ใบเคลมตามมาครบทั้งสองทิศทาง', async () => {
+      expect(r.counts.claims).toBe(4);
+      const { rows } = await app.query(
+        `select side::text as side, count(*)::int as c from claims group by 1 order by 1`);
+      expect(rows).toEqual([
+        { side: 'customer', c: 3 },
+        { side: 'vendor', c: 1 },
+      ]);
+    });
+
+    it('เลขที่ซ้ำถูกเติมเลขต่อท้าย แล้วเตือนไว้', async () => {
+      const { rows } = await app.query(
+        `select no from claims where side = 'customer' order by claim_date`);
+      expect(rows.map((x) => x.no)).toEqual([
+        'CL-202601-001', 'CL-202601-001-2', 'CL-202602-009',
+      ]);
+      expect(r.warnings.some((w) => w.includes('เลขที่ใบเคลมซ้ำ'))).toBe(true);
+    });
+
+    it('ประเภทที่ระบบใหม่ไม่รู้จักถูกตั้งเป็น "อื่น ๆ" แล้วเตือน', async () => {
+      const { rows } = await app.query(
+        `select kind from claims where no = 'CL-202601-001-2'`);
+      expect(rows[0].kind).toBe('other');
+      expect(r.warnings.some((w) => w.includes('ระบบใหม่ไม่รู้จัก'))).toBe(true);
+    });
+
+    it('เหตุผลที่เว้นว่างถูกเติมข้อความแทน เพราะฐานใหม่บังคับให้มี', async () => {
+      const { rows } = await app.query(
+        `select reason from claims where no = 'CL-202601-001-2'`);
+      expect(rows[0].reason).toContain('ไม่ได้ระบุเหตุผล');
+    });
+
+    it('บรรทัดที่อ้างสินค้าที่ถูกลบไปแล้วยังเก็บชื่อและต้นทุนไว้ แล้วเตือน', async () => {
+      const { rows } = await app.query(
+        `select i.product_id, i.name, i.qty, i.unit_cost
+         from claim_items i join claims c on c.id = i.claim_id
+         where c.no = 'CL-202601-001-2'`);
+      expect(rows[0].product_id).toBeNull();
+      expect(rows[0].name).toBe('ผ้าเบรกหน้า');
+      expect(n(rows[0].unit_cost)).toBe(250);
+      expect(r.warnings.some((w) => w.includes('ไม่มีในทะเบียนแล้ว'))).toBe(true);
+    });
+
+    it('ต้นทุนที่ติดมากับใบ (cogs) ถูกเก็บไว้ให้งบย้อนหลังยังตรง', async () => {
+      const { rows } = await app.query(
+        `select i.cost_amount from claim_items i join claims c on c.id = i.claim_id
+         where c.no = 'CL-202601-001'`);
+      expect(n(rows[0].cost_amount)).toBe(460);
+    });
+
+    it('ใบที่ถูกยกเลิกเข้ามาเป็น void พร้อมเหตุผลเดิม', async () => {
+      const { rows } = await app.query(
+        `select status::text as status, voided_at is not null as stamped, voided_reason
+         from claims where no = 'CL-202602-009'`);
+      expect(rows[0].status).toBe('void');
+      expect(rows[0].stamped).toBe(true);
+      expect(rows[0].voided_reason).toBe('เปิดใบผิด');
+    });
+
+    it('ฝั่งผู้ขายไม่มีรถติดมา', async () => {
+      const { rows } = await app.query(
+        `select vehicle, vehicle_plate from claims where side = 'vendor'`);
+      expect(rows[0].vehicle).toBeNull();
+      expect(rows[0].vehicle_plate).toBe('');
+    });
+
+    it('ฝั่งลูกค้าเก็บรถและทะเบียนไว้ครบ', async () => {
+      const { rows } = await app.query(
+        `select vehicle, vehicle_plate from claims where no = 'CL-202601-001'`);
+      expect(rows[0].vehicle.brand).toBe('Toyota');
+      expect(rows[0].vehicle_plate).toBe('กข 1234');
+    });
+
+    it('ตัวนับเลขที่เดินคนละชุดต่อทิศทาง ออกใบถัดไปแล้วไม่ทับของเก่า', async () => {
+      const cl = await app.query(
+        `select next_claim_no(current_tenant_id(), 'customer', '') as no`);
+      const vc = await app.query(
+        `select next_claim_no(current_tenant_id(), 'vendor', '') as no`);
+      expect(n(cl.rows[0].no)).toBe(4);
+      expect(n(vc.rows[0].no)).toBe(2);
+    });
+
+    it('บอกผู้ใช้ตรง ๆ ว่าใบเคลมเข้ามาโดยไม่ตัดสต๊อกซ้ำ', () => {
+      expect(r.warnings.some((w) => w.includes('ไม่ตัดสต๊อกซ้ำ'))).toBe(true);
     });
   });
 

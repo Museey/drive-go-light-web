@@ -711,6 +711,123 @@ export async function importBackup(
       );
     }
 
+    /* ---------- ใบเคลมสินค้า ---------- */
+    /**
+     * **ไม่สร้างแถวสต๊อกจากใบเคลมที่นำเข้า**
+     *
+     * ยอดคงเหลือในไฟล์เป็นยอดหลังหักเคลมไปแล้ว ตัวนำเข้าลงเป็นยอดยกมาตามนั้น
+     * ถ้าสร้างแถวตัดสต๊อกตามใบเคลมอีก ของจะถูกหักสองรอบ แล้วสินค้าทุกตัวที่เคยเคลม
+     * จะติดลบทันทีที่นำเข้าเสร็จ
+     *
+     * ต้นทุนที่ติดมากับใบ (it.cogs ของรุ่นเดิม) ถูกเก็บลง claim_items.cost_amount
+     * งบกำไรขาดทุนอ่านจากคอลัมน์นั้นเมื่อไม่มีแถวในบัญชีสต๊อก ประวัติค่าใช้จ่ายจึงไม่หาย
+     */
+    const CLAIM_KIND: Record<string, string[]> = {
+      customer: ['warranty', 'supplier', 'damage', 'other'],
+      vendor: ['defect', 'wrong', 'damaged', 'return', 'other'],
+    };
+
+    const claimRows: unknown[][] = [];
+    const claimItemRows: unknown[][] = [];
+    const takenClaimNo = new Set<string>();
+    const claimSeen = { customer: 0, vendor: 0 };
+    let renamedClaimNo = 0;
+    let fixedClaimKind = 0;
+    let claimMissingProduct = 0;
+
+    for (const cl of db.claims ?? []) {
+      const side = cl?.side === 'vendor' ? 'vendor' : 'customer';
+      claimSeen[side]++;
+
+      let kind = text(cl?.kind);
+      if (!CLAIM_KIND[side]!.includes(kind)) { kind = 'other'; fixedClaimKind++; }
+
+      const prefix = side === 'vendor' ? 'VC' : 'CL';
+      let no = text(cl?.no).trim()
+        || `${prefix}-นำเข้า-${String(claimRows.length + 1).padStart(4, '0')}`;
+      if (takenClaimNo.has(no)) {
+        const b = no;
+        let suffix = 1;
+        while (takenClaimNo.has(no)) { suffix++; no = `${b}-${suffix}`; }
+        renamedClaimNo++;
+      }
+      takenClaimNo.add(no);
+
+      const voided = cl?.void != null;
+      const veh = (cl?.veh && typeof cl.veh === 'object') ? cl.veh as Record<string, unknown> : {};
+      const plate = [veh.plateA, veh.plateB].map(text).filter(Boolean).join(' ');
+      const hasVeh = side === 'customer'
+        && Object.values(veh).some((v) => text(v).trim() !== '');
+
+      const id = randomUUID();
+      claimRows.push([
+        id, tenantId, no, side, kind,
+        text(cl?.date) || openingDate,
+        cl?.custId ? (contactId.get(text(cl.custId)) ?? null) : null,
+        text(cl?.name), text(cl?.tel), text(cl?.refNo),
+        hasVeh ? JSON.stringify(veh) : null,
+        side === 'customer' ? plate : '',
+        /* ฐานบังคับว่าต้องมีเหตุผล ไฟล์เก่าเว้นว่างได้ */
+        text(cl?.reason).trim() || 'ไม่ได้ระบุเหตุผลไว้ในไฟล์เดิม',
+        text(cl?.byWhom), text(cl?.note),
+        voided ? 'void' : 'issued',
+        voided ? new Date().toISOString() : null,
+        voided ? text((cl.void as Record<string, unknown>)?.reason) : null,
+      ]);
+
+      const items = Array.isArray(cl?.items) ? cl.items : [];
+      let line = 0;
+      for (const it of items) {
+        const q = num(it?.qty);
+        if (!(q > 0)) continue;                      // ฐานบังคับ qty > 0
+        const pid = it?.pid ? (productId.get(text(it.pid)) ?? null) : null;
+        if (it?.pid && !pid) claimMissingProduct++;
+        const cogs = num(it?.cogs);
+        claimItemRows.push([
+          randomUUID(), tenantId, id, ++line, pid,
+          text(it?.code), text(it?.oem), text(it?.name), text(it?.unit),
+          qty(q), money(num(it?.cost)),
+          cogs > 0 ? money(cogs) : null,
+        ]);
+      }
+    }
+
+    await insertRows(client, 'claims',
+      ['id', 'tenant_id', 'no', 'side', 'kind', 'claim_date', 'party_id',
+       'party_name', 'party_tel', 'ref_no', 'vehicle', 'vehicle_plate',
+       'reason', 'by_whom', 'note', 'status', 'voided_at', 'voided_reason'],
+      claimRows);
+    await insertRows(client, 'claim_items',
+      ['id', 'tenant_id', 'claim_id', 'line_no', 'product_id',
+       'code', 'oem', 'name', 'unit', 'qty', 'unit_cost', 'cost_amount'],
+      claimItemRows);
+    await insertRows(client, 'claim_sequences', ['tenant_id', 'side', 'period', 'last_no'], [
+      [tenantId, 'customer', '', Math.max(0, Math.trunc(num(db.seq?.cl)), claimSeen.customer)],
+      [tenantId, 'vendor', '', Math.max(0, Math.trunc(num(db.seq?.vc)), claimSeen.vendor)],
+    ]);
+
+    if (renamedClaimNo) {
+      warnings.push(`เลขที่ใบเคลมซ้ำ ${renamedClaimNo} ใบ — เติมเลขต่อท้ายให้ไม่ชน`);
+    }
+    if (fixedClaimKind) {
+      warnings.push(
+        `ใบเคลม ${fixedClaimKind} ใบมีประเภทที่ระบบใหม่ไม่รู้จัก — ตั้งเป็น "อื่น ๆ" ให้ ` +
+        '(เหตุผลที่กรอกไว้ยังอยู่ครบ)',
+      );
+    }
+    if (claimMissingProduct) {
+      warnings.push(
+        `บรรทัดในใบเคลม ${claimMissingProduct} รายการอ้างถึงสินค้าที่ไม่มีในทะเบียนแล้ว — ` +
+        'บันทึกเป็นรายการที่ไม่ผูกทะเบียน (ชื่อ จำนวน และต้นทุนยังอยู่ครบ)',
+      );
+    }
+    if (claimRows.length) {
+      warnings.push(
+        `ใบเคลม ${claimRows.length} ใบถูกนำเข้าโดย**ไม่ตัดสต๊อกซ้ำ** — ` +
+        'ยอดคงเหลือที่ยกมาเป็นยอดหลังหักเคลมไปแล้ว มูลค่าที่จ่ายออกยังขึ้นในงบตามเดิม',
+      );
+    }
+
     /* ---------- ชื่อรายการที่สั่งไม่ให้เตือน ---------- */
     const ignoredRows = [...new Set((db.ignoredItems ?? []).map(normName))]
       .filter(Boolean)
@@ -732,6 +849,7 @@ export async function importBackup(
         docItems: itemRows.length,
         payments: paymentRows.length,
         billnotes: billnoteRows.length,
+        claims: claimRows.length,
       },
       warnings,
     };

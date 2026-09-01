@@ -30,6 +30,8 @@ export interface BackupFile {
   ignoredItems: string[];
   /** ใบวางบิล — รูปแบบเดียวกับ DB.billnotes ของรุ่น 6.4 */
   billnotes: unknown[];
+  /** ใบเคลมสินค้าทั้งสองทิศทาง — รูปแบบเดียวกับ DB.claims ของรุ่น 6.4 */
+  claims: unknown[];
   ui: Record<string, unknown>;
   lastExportAt: number;
 }
@@ -79,6 +81,23 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
     const users = await c.query(`select * from users order by code`);
     const seqs = await c.query(`select kind::text as kind, last_no from doc_sequences`);
     const billSeq = await c.query(`select coalesce(max(last_no), 0)::int as last_no from billnote_sequences`);
+    const claimSeq = await c.query(
+      `select side::text as side, max(last_no)::int as last_no
+       from claim_sequences group by side`,
+    );
+    const claims = await c.query(
+      `select c.*, c.claim_date::text as claim_date, c.side::text as side,
+              c.status::text as status,
+              coalesce(json_agg(json_build_object(
+                'pid', i.product_id, 'code', i.code, 'oem', i.oem, 'name', i.name,
+                'unit', i.unit, 'qty', i.qty::float8, 'cost', i.unit_cost::float8,
+                'cogs', i.cost_amount::float8
+              ) order by i.line_no) filter (where i.id is not null), '[]') as items
+       from claims c
+       left join claim_items i on i.claim_id = c.id
+       group by c.id
+       order by c.claim_date, c.no`,
+    );
     const ignored = await c.query(`select name_norm from ignored_item_names order by name_norm`);
     const billnotes = await c.query(
       `select b.*, b.bill_date::text as bill_date, b.due_date::text as due_date,
@@ -272,6 +291,9 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         ),
         /* ตัวนับใบวางบิล — ชื่อคีย์ bn ตรงกับ DB.seq.bn ของรุ่น 6.4 */
         bn: Number(billSeq.rows[0]?.last_no ?? 0),
+        /* ตัวนับใบเคลม — cl ฝั่งลูกค้า vc ฝั่งผู้ขาย เหมือนรุ่น 6.4 */
+        cl: Number(claimSeq.rows.find((r) => r.side === 'customer')?.last_no ?? 0),
+        vc: Number(claimSeq.rows.find((r) => r.side === 'vendor')?.last_no ?? 0),
       } as Record<string, number>,
 
       lic: sub.rows[0]
@@ -297,6 +319,31 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         total: n(b.total_snapshot),
         invIds: b.inv_ids ?? [],
         ...(b.status === 'void' ? { void: true } : {}),
+      })),
+
+      /* ใบเคลม — รูปแบบเดียวกับ DB.claims ของรุ่น 6.4 เพื่อให้เปิดด้วยโปรแกรมเดิมได้
+         veh เก็บทั้งก้อนเหมือนเดิม ฝั่งผู้ขายไม่มีรถจึงเป็นออบเจกต์ว่าง
+         deducted เป็น true เมื่อใบยังไม่ถูกยกเลิก ตรงกับความหมายของธงในรุ่นเดิม */
+      claims: claims.rows.map((r) => ({
+        id: r.id,
+        no: r.no,
+        side: r.side,
+        kind: r.kind,
+        date: r.claim_date,
+        custId: r.party_id,
+        name: r.party_name ?? '',
+        tel: r.party_tel ?? '',
+        refNo: r.ref_no ?? '',
+        veh: {
+          ...(r.vehicle ?? {}),
+          ...(r.vehicle_plate ? { plateB: r.vehicle_plate } : {}),
+        },
+        reason: r.reason ?? '',
+        byWhom: r.by_whom ?? '',
+        note: r.note ?? '',
+        items: r.items,
+        deducted: r.status !== 'void',
+        ...(r.status === 'void' ? { void: true } : {}),
       })),
 
       ui: s.ui_prefs ?? {},

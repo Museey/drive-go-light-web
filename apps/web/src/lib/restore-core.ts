@@ -22,7 +22,12 @@ export const WIPE_ORDER = [
   'billnotes',
   'billnote_sequences',
   'payments',
+  /* stock_moves ต้องไปก่อน claims เพราะ stock_moves.claim_id เป็น on delete restrict
+     และไปก่อน products/documents ด้วยเหตุผลเดียวกัน — บัญชีสต๊อกอ้างถึงทุกอย่าง */
   'stock_moves',
+  'claim_items',
+  'claims',
+  'claim_sequences',
   'doc_items',
   'documents',
   'vehicles',
@@ -87,7 +92,7 @@ export interface BackupPreview {
 
 const COUNTABLE = [
   'products', 'customers', 'vendors', 'quotes', 'invoices',
-  'receipts', 'purchases', 'expenses', 'billnotes',
+  'receipts', 'purchases', 'expenses', 'billnotes', 'claims',
 ] as const;
 
 export function previewBackup(text: string): BackupPreview {

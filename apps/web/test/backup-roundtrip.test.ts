@@ -14,6 +14,7 @@ import pg from 'pg';
 import { importBackup } from '@drivegolight/importer';
 import { exportBackupWith } from '../src/lib/backup';
 import { openInvoices, saveBillnote } from '../src/lib/billnotes';
+import { saveClaim } from '../src/lib/claims';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -29,6 +30,8 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
   let secondTenant: string;
   let billnoteTotal = 0;
   let billnoteDocNos: string[] = [];
+  const claimNos: string[] = [];
+  let claimCost = 0;
 
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: DB_URL });
@@ -78,6 +81,37 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
       partyTaxId: '', partyAddrText: '', byWhom: 'สมชาย', note: '',
       docIds: picked.map((v) => v.id),
     }, null);
+
+    /* เคลมสินค้าออกไปหนึ่งใบต่อทิศทาง ไฟล์สำรองจะได้มีใบเคลมให้พิสูจน์ */
+    const prod = await admin.query(
+      `select p.id, p.code, p.name, p.unit from products p
+       join product_stock s on s.product_id = p.id
+       where p.tenant_id = $1 and s.qty_on_hand > 5 limit 1`,
+      [firstTenant],
+    );
+    const part = prod.rows[0];
+    const line = (q: number) => [{
+      productId: part.id as string, code: part.code as string, oem: '',
+      name: part.name as string, unit: part.unit as string, qty: q, unitCost: 0,
+    }];
+    const cl = await saveClaim(app, {
+      side: 'customer', kind: 'warranty', claimDate: '2026-08-28',
+      partyId: null, partyName: 'ลูกค้าเคลม', partyTel: '08x-xxx-xxxx',
+      refNo: 'RC-อ้างอิง-001', vehicleId: null,
+      vehicle: { brand: 'Toyota', model: 'Vios' }, vehiclePlate: 'กข 1234',
+      reason: 'อยู่ในระยะรับประกัน', byWhom: 'สมชาย', note: 'ทดสอบ',
+      items: line(2),
+    }, null);
+    claimNos.push(cl.no);
+    claimCost = cl.cost;
+    const vc = await saveClaim(app, {
+      side: 'vendor', kind: 'defect', claimDate: '2026-08-28',
+      partyId: null, partyName: 'ร้านอะไหล่', partyTel: '',
+      refNo: 'PO-อ้างอิง-001', vehicleId: null, vehicle: null, vehiclePlate: '',
+      reason: 'ชำรุดจากโรงงาน', byWhom: '', note: '',
+      items: line(1),
+    }, null);
+    claimNos.push(vc.no);
 
     /* ส่งออกจากอู่แรก แล้วนำเข้าเป็นอู่ที่สอง */
     const exported = await exportBackupWith(app);
@@ -213,6 +247,65 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     };
     expect(await last(secondTenant)).toBe(await last(firstTenant));
     expect(await last(firstTenant)).toBeGreaterThan(0);
+  });
+
+  /**
+   * ใบเคลมถูกถอดออกจากรายการ "ยังรองรับไม่ได้" แล้ว ตัวนำเข้าจึงต้องรับได้จริง
+   * และต้อง **ไม่ตัดสต๊อกซ้ำ** — ยอดคงเหลือที่ส่งออกไปเป็นยอดหลังหักเคลมแล้ว
+   */
+  it('ใบเคลมตามมาครบทั้งสองทิศทาง พร้อมต้นทุนที่ตรึงไว้', async () => {
+    const read = async (tenantId: string) => {
+      const { rows } = await admin.query(
+        `select c.no, c.side::text as side, c.kind, c.claim_date::text as claim_date,
+                c.party_name, c.ref_no, c.reason, c.vehicle_plate,
+                coalesce(sum(i.cost_amount), 0) as cost
+         from claims c left join claim_items i on i.claim_id = c.id
+         where c.tenant_id = $1 group by c.id order by c.no`,
+        [tenantId],
+      );
+      return rows;
+    };
+
+    const a = await read(firstTenant);
+    const b = await read(secondTenant);
+
+    expect(a.map((r) => r.no).sort()).toEqual([...claimNos].sort());
+    expect(b.map((r) => r.no).sort()).toEqual([...claimNos].sort());
+
+    for (const [i, row] of a.entries()) {
+      expect(b[i].no).toBe(row.no);
+      expect(b[i].side).toBe(row.side);
+      expect(b[i].kind).toBe(row.kind);
+      expect(b[i].claim_date).toBe(row.claim_date);
+      expect(b[i].party_name).toBe(row.party_name);
+      expect(b[i].ref_no).toBe(row.ref_no);
+      expect(b[i].reason).toBe(row.reason);
+      expect(b[i].vehicle_plate).toBe(row.vehicle_plate);
+      expect(n(b[i].cost)).toBe(n(row.cost));
+    }
+    expect(claimCost).toBeGreaterThan(0);
+  });
+
+  it('อู่ที่นำเข้ามาไม่ถูกตัดสต๊อกซ้ำจากใบเคลม', async () => {
+    const moves = await admin.query(
+      `select count(*)::int as c from stock_moves
+       where tenant_id = $1 and claim_id is not null`,
+      [secondTenant],
+    );
+    expect(moves.rows[0].c).toBe(0);
+  });
+
+  it('ตัวนับเลขที่ใบเคลมตามมาแยกตามทิศทาง', async () => {
+    const read = async (tenantId: string) => {
+      const { rows } = await admin.query(
+        `select side::text as side, last_no from claim_sequences
+         where tenant_id = $1 order by side`,
+        [tenantId],
+      );
+      return rows.map((r) => [r.side, n(r.last_no)]);
+    };
+    expect(await read(secondTenant)).toEqual(await read(firstTenant));
+    expect(await read(firstTenant)).toEqual([['customer', 1], ['vendor', 1]]);
   });
 
   it('ไฟล์สำรองไม่มีรหัสผ่านติดไปด้วย', async () => {

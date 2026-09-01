@@ -18,6 +18,8 @@ export interface BackupFile {
   vendors?: any[];
   /** ใบวางบิล — มีตั้งแต่รุ่น 6.4 */
   billnotes?: any[];
+  /** ใบเคลมสินค้าทั้งสองทิศทาง — มีตั้งแต่รุ่น 6.4 */
+  claims?: any[];
   purchases: any[];
   expenses: any[];
   quotes: any[];

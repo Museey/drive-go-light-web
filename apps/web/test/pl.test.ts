@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { consumeStock, receiveStock } from '../src/lib/stock-cost';
+import { profitAndLossWith } from '../src/lib/reports-pl';
+import { saveClaim, voidClaim, type ClaimInput } from '../src/lib/claims';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -63,6 +65,9 @@ describe.skipIf(!DB_URL)('งบกำไรขาดทุนกับต้น
 
   beforeEach(async () => {
     await admin.query(`delete from stock_moves where tenant_id = $1`, [tenantId]);
+    await admin.query(`delete from claim_items where tenant_id = $1`, [tenantId]);
+    await admin.query(`delete from claims where tenant_id = $1`, [tenantId]);
+    await admin.query(`delete from claim_sequences where tenant_id = $1`, [tenantId]);
     await admin.query(`delete from doc_items where tenant_id = $1`, [tenantId]);
     await admin.query(`delete from documents where tenant_id = $1`, [tenantId]);
     await admin.query(`delete from products where tenant_id = $1`, [tenantId]);
@@ -175,5 +180,94 @@ describe.skipIf(!DB_URL)('งบกำไรขาดทุนกับต้น
     );
     /* 4 × 500 — งบใช้ค่านี้เมื่อไม่มีแถวตัดสต๊อกให้อ่าน */
     expect(n(rows[0].est)).toBe(2000);
+  });
+
+  /* ---------------------------------------------------------------
+     ใบเคลม — ของหายจากคลัง ไม่ใช่ต้นทุนขาย
+     --------------------------------------------------------------- */
+
+  const claim = (over: Partial<ClaimInput> = {}): ClaimInput => ({
+    side: 'customer', kind: 'warranty', claimDate: '2026-03-20',
+    partyId: null, partyName: 'ลูกค้าเคลม', partyTel: '',
+    refNo: '', vehicleId: null, vehicle: null, vehiclePlate: '',
+    reason: 'อยู่ในระยะรับประกัน', byWhom: 'สมชาย', note: '',
+    items: [{ productId, code: 'OIL-001', oem: '', name: 'น้ำมันเครื่อง',
+              unit: 'ลิตร', qty: 2, unitCost: 500 }],
+    ...over,
+  });
+
+  /**
+   * ข้อสำคัญที่สุดของช่วงนี้
+   *
+   * ถ้าต้นทุนของที่เคลมไปหลุดเข้าต้นทุนขาย กำไรขั้นต้นจะเลิกบอกความจริง
+   * ว่าขายของแล้วได้กี่เปอร์เซ็นต์ — ซึ่งเป็นตัวเลขที่อู่ใช้ตั้งราคา
+   */
+  it('เคลมไม่เข้าต้นทุนขาย เข้าบรรทัดเคลม และกำไรขั้นต้นไม่ขยับ', async () => {
+    await receiveStock(app, {
+      productId, qty: 10, costAmount: 5000, movedOn: '2026-01-15', reason: 'set',
+    });
+    await sell('RC-010', '2026-03-10', 4, 900);
+
+    const before = await profitAndLossWith(app);
+    await saveClaim(app, claim(), null);
+    const after = await profitAndLossWith(app);
+
+    expect(after.writeOff.claim).toBe(1000);          // 2 × 500
+    expect(after.cogs).toBe(before.cogs);             // ต้นทุนขายไม่ขยับ
+    expect(after.grossProfit).toBe(before.grossProfit);
+    expect(after.netProfit).toBe(before.netProfit - 1000);
+  });
+
+  it('เคลมฝั่งผู้ขายก็นับเป็นของหายจากคลังเหมือนกัน — ตามรุ่น 6.4', async () => {
+    await receiveStock(app, {
+      productId, qty: 10, costAmount: 5000, movedOn: '2026-01-15', reason: 'set',
+    });
+    await saveClaim(app, claim({ side: 'vendor', kind: 'defect' }), null);
+
+    const pl = await profitAndLossWith(app);
+    expect(pl.writeOff.claim).toBe(1000);
+  });
+
+  it('ยกเลิกใบเคลมแล้วยอดกลับเป็นศูนย์ ไม่ค้างอยู่ในงบ', async () => {
+    await receiveStock(app, {
+      productId, qty: 10, costAmount: 5000, movedOn: '2026-01-15', reason: 'set',
+    });
+    const r = await saveClaim(app, claim(), null);
+    await voidClaim(app, r.id, '', null);
+
+    const pl = await profitAndLossWith(app);
+    expect(pl.writeOff.claim).toBe(0);
+  });
+
+  /**
+   * ใบเคลมที่ย้ายเข้ามาไม่มีแถวในบัญชีสต๊อก เพราะยอดคงเหลือที่นำเข้าเป็นยอดหลังหักเคลมแล้ว
+   * ถ้าไม่มีทางลัดให้งบอ่านจากตัวใบ ประวัติค่าใช้จ่ายของอู่ที่ย้ายมาจะหายไปทั้งก้อน
+   */
+  it('ใบเคลมที่ย้ายเข้ามา (ไม่มีแถวสต๊อก) ยังขึ้นในงบตามต้นทุนที่ติดมากับใบ', async () => {
+    const c2 = await admin.query(
+      `insert into claims (tenant_id, no, side, kind, claim_date, party_name, reason)
+       values ($1,'CL-เก่า-001','customer','warranty','2026-03-20','ลูกค้าเก่า','รับประกัน')
+       returning id`,
+      [tenantId],
+    );
+    await admin.query(
+      `insert into claim_items (tenant_id, claim_id, line_no, product_id, name,
+                                qty, unit_cost, cost_amount)
+       values ($1,$2,1,$3,'น้ำมันเครื่อง',2,500,900)`,
+      [tenantId, c2.rows[0].id, productId],
+    );
+
+    const pl = await profitAndLossWith(app);
+    expect(pl.writeOff.claim).toBe(900);      // ใช้ต้นทุนที่ติดมา ไม่ใช่ 2 × 500
+  });
+
+  it('ใบเคลมที่ตัดสต๊อกแล้วไม่ถูกนับซ้ำจากทางลัดของใบที่ย้ายเข้ามา', async () => {
+    await receiveStock(app, {
+      productId, qty: 10, costAmount: 5000, movedOn: '2026-01-15', reason: 'set',
+    });
+    await saveClaim(app, claim(), null);
+
+    const pl = await profitAndLossWith(app);
+    expect(pl.writeOff.claim).toBe(1000);     // ไม่ใช่ 2000
   });
 });

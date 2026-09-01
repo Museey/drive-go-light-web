@@ -105,11 +105,11 @@ export const MENU: MenuItem[] = [
       },
       {
         key: 'claim', no: '05.3', label: 'ใบเคลมสินค้า (ลูกค้า)', desc: 'จ่ายของออกให้ลูกค้าฟรี',
-        icon: 'claim', color: '#B3382C', href: '/stock/claim', todo: true,
+        icon: 'claim', color: '#B3382C', href: '/stock/claim',
       },
       {
         key: 'vclaim', no: '05.4', label: 'เคลมสินค้า (ผู้ขาย)', desc: 'ส่งของชำรุดคืนผู้ขาย',
-        icon: 'buy', color: '#C25A18', href: '/stock/vclaim', todo: true,
+        icon: 'buy', color: '#C25A18', href: '/stock/vclaim',
       },
       {
         key: 'count', no: '05.5', label: 'ตรวจนับสต๊อก', desc: 'นับของจริงแล้วปรับยอดให้ตรง',

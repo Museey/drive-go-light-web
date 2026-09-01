@@ -88,9 +88,12 @@ export interface ConsumeInput {
   /** จำนวนที่ตัดออก เป็นบวกเสมอ */
   qty: number;
   movedOn: string;
-  reason: 'sale' | 'use' | 'adjust' | 'count' | 'set' | 'return';
+  reason: 'sale' | 'use' | 'adjust' | 'count' | 'set' | 'return' | 'claim';
   docId?: string | null;
   docItemId?: string | null;
+  /** ใบเคลมไม่ได้อยู่ใน documents จึงมีสายของตัวเอง — ฐานบังคับให้อ้างอย่างใดอย่างหนึ่ง */
+  claimId?: string | null;
+  claimItemId?: string | null;
   note?: string;
   userId?: string | null;
 }
@@ -109,12 +112,14 @@ export async function consumeStock(c: Client, input: ConsumeInput): Promise<numb
 
   await c.query(
     `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta,
-                              unit_cost, cost_amount, reason, doc_id, doc_item_id, note, created_by)
-     values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                              unit_cost, cost_amount, reason, doc_id, doc_item_id,
+                              claim_id, claim_item_id, note, created_by)
+     values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
     [
       input.productId, input.movedOn, -qty,
       round2(cost / qty), round2(cost),
       input.reason, input.docId ?? null, input.docItemId ?? null,
+      input.claimId ?? null, input.claimItemId ?? null,
       input.note ?? '', input.userId ?? null,
     ],
   );
@@ -130,6 +135,8 @@ export interface ReceiveInput {
   movedOn: string;
   reason: 'opening' | 'purchase' | 'return' | 'adjust' | 'set' | 'count';
   docId?: string | null;
+  /** คืนของจากใบเคลมที่ถูกยกเลิก — แถวคืนต้องชี้กลับไปที่ใบเดิม */
+  claimId?: string | null;
   note?: string;
   userId?: string | null;
 }
@@ -143,39 +150,52 @@ export async function receiveStock(c: Client, input: ReceiveInput): Promise<void
 
   await c.query(
     `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta,
-                              unit_cost, cost_amount, reason, doc_id, note, created_by)
-     values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                              unit_cost, cost_amount, reason, doc_id, claim_id, note, created_by)
+     values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [
       input.productId, input.movedOn, qty,
       round2(cost / qty), cost,
-      input.reason, input.docId ?? null, input.note ?? '', input.userId ?? null,
+      input.reason, input.docId ?? null, input.claimId ?? null,
+      input.note ?? '', input.userId ?? null,
     ],
   );
 }
 
 /**
- * คืนของที่เคยตัดจากเอกสารใบหนึ่งกลับเข้าคลัง ด้วยต้นทุนที่บันทึกไว้ตอนตัด
+ * คืนของที่เคยตัดจากใบหนึ่งกลับเข้าคลัง ด้วยต้นทุนที่บันทึกไว้ตอนตัด
  *
- * ใช้ทั้งตอนยกเลิกเอกสารและตอนแก้เอกสารที่ตัดสต๊อกไปแล้ว
+ * ใช้ทั้งตอนยกเลิกเอกสาร ตอนแก้เอกสารที่ตัดสต๊อกไปแล้ว และตอนยกเลิกใบเคลม
  * ไม่ลบแถวเดิมทิ้ง เพราะบัญชีเดินสะพัดที่ลบย้อนหลังได้ก็ไม่ใช่บัญชีอีกต่อไป —
  * ต้นทุนของใบที่ขายหลังจากนั้นคิดจากล็อตที่จะไม่มีอยู่จริง
+ *
+ * คืนตามแถวที่ยัง "ค้างอยู่" เท่านั้น — ถ้าคืนไปแล้วรอบหนึ่ง แถวคืนเก่าจะหักลบกัน
+ * ทำให้เรียกซ้ำแล้วของไม่งอกขึ้นมาจากอากาศ
  */
-export async function returnDocStock(
+async function returnStockOf(
   c: Client,
-  docId: string,
+  key: { docId: string } | { claimId: string },
   opts: { movedOn: string; note: string; userId?: string | null },
 ): Promise<void> {
+  const isDoc = 'docId' in key;
+  const id = isDoc ? key.docId : key.claimId;
+  const col = isDoc ? 'doc_id' : 'claim_id';
+
+  /* cost_amount เก็บเป็นค่าบวกเสมอทั้งขาเข้าและขาออก เครื่องหมายอยู่ที่ qty_delta
+     จึงต้องใส่เครื่องหมายกลับเข้าไปก่อนบวกกัน ไม่งั้นแถวคืนจะไปเพิ่มยอดแทนที่จะหักออก */
   const { rows } = await c.query(
-    `select product_id, qty_delta, cost_amount, unit_cost
+    `select product_id,
+            sum(qty_delta) as qty_delta,
+            sum(sign(qty_delta) * coalesce(cost_amount, abs(qty_delta) * unit_cost)) as cost_amount
      from stock_moves
-     where doc_id = $1 and qty_delta < 0 and reason in ('sale','use')`,
-    [docId],
+     where ${col} = $1
+     group by product_id
+     having sum(qty_delta) < 0`,
+    [id],
   );
 
   for (const m of rows) {
     const qty = -n(m.qty_delta);
-    /* แถวเก่าก่อนมีระบบต้นทุนไม่มี cost_amount — ประมาณจากต้นทุนต่อหน่วยที่บันทึกไว้ */
-    const cost = m.cost_amount !== null ? n(m.cost_amount) : qty * n(m.unit_cost);
+    const cost = -n(m.cost_amount);
 
     await receiveStock(c, {
       productId: m.product_id,
@@ -183,9 +203,24 @@ export async function returnDocStock(
       costAmount: cost,
       movedOn: opts.movedOn,
       reason: 'return',
-      docId,
+      docId: isDoc ? id : null,
+      claimId: isDoc ? null : id,
       note: opts.note,
       userId: opts.userId,
     });
   }
 }
+
+/** คืนของที่เคยตัดจากเอกสารใบหนึ่ง — ดู returnStockOf */
+export const returnDocStock = (
+  c: Client,
+  docId: string,
+  opts: { movedOn: string; note: string; userId?: string | null },
+) => returnStockOf(c, { docId }, opts);
+
+/** คืนของที่เคยตัดจากใบเคลมใบหนึ่ง — ใช้ตอนยกเลิกใบเคลม */
+export const returnClaimStock = (
+  c: Client,
+  claimId: string,
+  opts: { movedOn: string; note: string; userId?: string | null },
+) => returnStockOf(c, { claimId }, opts);

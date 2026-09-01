@@ -11,7 +11,7 @@ import {
 
 const v64 = {
   shop: {}, products: [], customers: [],
-  /* ใบวางบิลรองรับเต็มรูปแบบแล้วตั้งแต่ช่วงที่ 3 จึงต้องไม่ถูกเตือน */
+  /* ใบวางบิลรองรับตั้งแต่ช่วงที่ 3 ใบเคลมตั้งแต่ช่วงที่ 4 — ทั้งคู่ต้องไม่ถูกเตือน */
   billnotes: [{ id: 'b1' }, { id: 'b2' }],
   claims: [{ id: 'c1' }],
   counts: [{ id: 'ct1' }, { id: 'ct2' }, { id: 'ct3' }],
@@ -22,13 +22,13 @@ describe('ตรวจข้อมูลที่ยังรองรับไ�
   it('เจอครบทุกกลุ่มพร้อมจำนวนที่ถูกต้อง', () => {
     const g = unsupportedCollections(v64);
     expect(g.map((x) => [x.key, x.count])).toEqual([
-      ['claims', 1], ['counts', 3], ['moves', 2],
+      ['counts', 3], ['moves', 2],
     ]);
   });
 
   it('กลุ่มที่หายทั้งก้อนขึ้นก่อนกลุ่มที่หายแค่ประวัติ', () => {
     const g = unsupportedCollections(v64);
-    expect(g.map((x) => x.kind)).toEqual(['lost', 'lost', 'partial']);
+    expect(g.map((x) => x.kind)).toEqual(['lost', 'partial']);
   });
 
   it('ไฟล์จากรุ่นเดิมที่ไม่มีกลุ่มใหม่เลย ไม่ต้องเตือนอะไร', () => {
@@ -51,18 +51,22 @@ describe('ตรวจข้อมูลที่ยังรองรับไ�
     expect(unsupportedCollections({ billnotes: [{ id: 'b1' }] })).toEqual([]);
   });
 
-  it('มีใบเคลมถือว่าข้อมูลหาย ต้องให้ผู้ใช้ยืนยันก่อน', () => {
-    expect(hasDataLoss(unsupportedCollections({ claims: [{ id: 'c1' }] }))).toBe(true);
+  it('ใบเคลมไม่ถูกเตือนแล้ว เพราะตัวนำเข้ารองรับเต็มรูปแบบ', () => {
+    expect(unsupportedCollections({ claims: [{ id: 'c1' }] })).toEqual([]);
+  });
+
+  it('มีใบตรวจนับถือว่าข้อมูลหาย ต้องให้ผู้ใช้ยืนยันก่อน', () => {
+    expect(hasDataLoss(unsupportedCollections({ counts: [{ id: 'ct1' }] }))).toBe(true);
   });
 
   it('คำเตือนบอกทั้งชื่อกลุ่ม จำนวน และสิ่งที่เสียไปจริง', () => {
     const w = unsupportedWarnings(unsupportedCollections(v64));
-    expect(w[0]).toContain('ใบเคลมสินค้า');
-    expect(w[0]).toContain('1');
+    expect(w[0]).toContain('ใบตรวจนับสต๊อก');
+    expect(w[0]).toContain('3');
     expect(w[0]).toContain('จะไม่ถูกนำเข้า');
     /* กลุ่มที่ยอดยังถูกต้องห้ามเขียนว่า "จะไม่ถูกนำเข้า" เพราะจะทำให้เข้าใจผิด */
-    expect(w[2]).toContain('ยอดคงเหลือของสินค้าทุกตัวยังถูกต้อง');
-    expect(w[2]).not.toContain('จะไม่ถูกนำเข้า');
+    expect(w[1]).toContain('ยอดคงเหลือของสินค้าทุกตัวยังถูกต้อง');
+    expect(w[1]).not.toContain('จะไม่ถูกนำเข้า');
   });
 
   it('ไฟล์ที่ไม่ใช่ออบเจกต์ไม่ทำให้พัง', () => {

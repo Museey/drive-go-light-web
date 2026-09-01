@@ -16,6 +16,7 @@ const COUNT_LABEL: Record<string, string> = {
   purchases: 'ใบซื้อ',
   expenses: 'ค่าใช้จ่าย',
   billnotes: 'ใบวางบิล',
+  claims: 'ใบเคลมสินค้า',
   categories: 'หมวดหมู่',
   stockMoves: 'การเคลื่อนไหวสต๊อก',
   contacts: 'ผู้ติดต่อ',

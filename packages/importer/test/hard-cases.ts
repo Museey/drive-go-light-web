@@ -348,3 +348,59 @@ export function billnoteBackup(): any {
     seq: { q: 0, r: 0, c: 0, p: 0, v: 0, e: 0, iv: 0, ivt: 3, bn: 2 },
   });
 }
+
+/* =====================================================================
+   เคสใบเคลมจากรุ่น 6.4
+
+   ข้อที่สำคัญที่สุดคือ **ห้ามสร้างแถวตัดสต๊อกจากใบเคลมที่นำเข้า**
+   ยอดคงเหลือในไฟล์เป็นยอดหลังหักเคลมไปแล้ว ตัดซ้ำแล้วสินค้าทุกตัวที่เคยเคลมจะติดลบ
+
+   ที่เหลือคือความไม่สะอาดที่รุ่นเดิมปล่อยผ่าน — เลขที่ซ้ำ ประเภทที่ไม่รู้จัก
+   อ้างสินค้าที่ถูกลบไปแล้ว และเหตุผลที่เว้นว่างไว้ (ฐานใหม่บังคับให้มี)
+   ===================================================================== */
+export function claimBackup(): any {
+  const item = (o: Record<string, any> = {}) => ({
+    pid: 'p1', code: 'BRK-001', oem: '', name: 'ผ้าเบรกหน้า', unit: 'ชุด',
+    qty: 2, cost: 250, cogs: 460, ...o,
+  });
+
+  return emptyBackup({
+    products: [{
+      id: 'p1', code: 'BRK-001', oem: '', name: 'ผ้าเบรกหน้า', unit: 'ชุด',
+      cat: '', qty: 8, cost: 250, priceA: 500, priceB: 480, priceC: 450,
+      min: 0, max: 0, lastMove: '2026-01-20',
+    }],
+    claims: [
+      {
+        id: 'cl-1', no: 'CL-202601-001', side: 'customer', kind: 'warranty',
+        date: '2026-01-20', custId: null, name: 'นายลูกค้า', tel: '08x-xxx-xxxx',
+        refNo: 'RC-202601-005', veh: { brand: 'Toyota', model: 'Vios', plateA: 'กข', plateB: '1234' },
+        reason: 'ผ้าเบรกสึกผิดปกติ', byWhom: 'สมชาย', note: '',
+        items: [item()], deducted: true,
+      },
+      /* เลขซ้ำใบแรก · ประเภทที่ระบบใหม่ไม่รู้จัก · ไม่มีเหตุผล · อ้างสินค้าที่ถูกลบไปแล้ว */
+      {
+        id: 'cl-2', no: 'CL-202601-001', side: 'customer', kind: 'ประเภทที่ไม่มีแล้ว',
+        date: '2026-02-02', custId: null, name: '', tel: '', refNo: '', veh: {},
+        reason: '', byWhom: '', note: '',
+        items: [item({ pid: 'ไม่มีสินค้านี้', qty: 1, cogs: 0 })], deducted: true,
+      },
+      /* ฝั่งผู้ขาย — เลขคนละชุด และไม่มีรถ */
+      {
+        id: 'vc-1', no: 'VC-202601-001', side: 'vendor', kind: 'defect',
+        date: '2026-02-10', custId: null, name: 'ร้านอะไหล่', tel: '', refNo: 'PO-202601-003',
+        veh: {}, reason: 'ชำรุดจากโรงงาน', byWhom: '', note: '',
+        items: [item({ qty: 3, cogs: 690 })], deducted: true,
+      },
+      /* ใบที่ถูกยกเลิก — ต้องเข้ามาเป็น void และไม่นับในยอดของหายจากคลัง */
+      {
+        id: 'cl-3', no: 'CL-202602-009', side: 'customer', kind: 'damage',
+        date: '2026-02-20', custId: null, name: '', tel: '', refNo: '', veh: {},
+        reason: 'ของแตกในร้าน', byWhom: '', note: '',
+        items: [item({ qty: 5, cogs: 1150 })], deducted: false,
+        void: { at: '2026-02-21T00:00:00.000Z', by: 'สมชาย', reason: 'เปิดใบผิด' },
+      },
+    ],
+    seq: { q: 0, r: 0, c: 0, p: 0, v: 0, e: 0, iv: 0, ivt: 0, cl: 3, vc: 1 },
+  });
+}
