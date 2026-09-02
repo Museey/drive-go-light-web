@@ -28,6 +28,11 @@ export const WIPE_ORDER = [
   'claim_items',
   'claims',
   'claim_sequences',
+  /* ใบตรวจนับล็อกสินค้าไว้ผ่าน product_id ที่เป็น on delete restrict
+     ต้องล้างก่อนถึงลบ products ได้ */
+  'stock_count_items',
+  'stock_counts',
+  'stock_count_sequences',
   'doc_items',
   'documents',
   'vehicles',
@@ -92,7 +97,7 @@ export interface BackupPreview {
 
 const COUNTABLE = [
   'products', 'customers', 'vendors', 'quotes', 'invoices',
-  'receipts', 'purchases', 'expenses', 'billnotes', 'claims',
+  'receipts', 'purchases', 'expenses', 'billnotes', 'claims', 'counts',
 ] as const;
 
 export function previewBackup(text: string): BackupPreview {

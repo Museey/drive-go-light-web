@@ -17,6 +17,8 @@ export interface ProductRow {
   id: string;
   code: string;
   oem: string;
+  /** บาร์โค้ด Code 39 สำหรับยิงเข้าใบตรวจนับ — ว่างได้ */
+  barcode: string;
   name: string;
   unit: string;
   categoryId: string | null;
@@ -143,6 +145,7 @@ function toProductRow(r: any): ProductRow {
     id: r.id,
     code: r.code,
     oem: r.oem,
+    barcode: r.barcode ?? '',
     name: r.name,
     unit: r.unit,
     categoryId: r.category_id,
@@ -233,6 +236,7 @@ export interface ProductInput {
   id?: string;
   code: string;
   oem: string;
+  barcode: string;
   name: string;
   unit: string;
   categoryId: string | null;
@@ -253,23 +257,24 @@ export async function saveProduct(input: ProductInput): Promise<string> {
       await c.query(
         `update products set code=$2, oem=$3, name=$4, unit=$5, category_id=$6,
                 last_cost=$7, price_a=$8, price_b=$9, price_c=$10,
-                qty_min=$11, qty_max=$12, active=$13
+                qty_min=$11, qty_max=$12, active=$13, barcode=$14
          where id=$1`,
         [input.id, input.code, input.oem, input.name, input.unit, input.categoryId,
          input.lastCost, input.priceA, input.priceB, input.priceC,
-         input.qtyMin, input.qtyMax, input.active],
+         input.qtyMin, input.qtyMax, input.active, input.barcode.trim() || null],
       );
       return input.id;
     }
 
     const { rows } = await c.query(
       `insert into products (tenant_id, code, oem, name, unit, category_id,
-                             last_cost, price_a, price_b, price_c, qty_min, qty_max, active)
-       values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                             last_cost, price_a, price_b, price_c, qty_min, qty_max,
+                             active, barcode)
+       values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        returning id`,
       [input.code, input.oem, input.name, input.unit, input.categoryId,
        input.lastCost, input.priceA, input.priceB, input.priceC,
-       input.qtyMin, input.qtyMax, input.active],
+       input.qtyMin, input.qtyMax, input.active, input.barcode.trim() || null],
     );
     const id = rows[0].id;
 

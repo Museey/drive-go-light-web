@@ -106,6 +106,21 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
          values ($1,$2,1,$3,'อะไหล่ที่เคลม',1,100)`,
         [t, cl.rows[0].id, someProduct.rows[0]?.id ?? null],
       );
+
+      /* ตารางใบตรวจนับที่เพิ่มในช่วงที่ 5 */
+      const ct = await admin.query(
+        `insert into stock_counts (tenant_id, no, count_date, note)
+         values ($1,'CT-202603-001','2026-03-20','ตรวจนับประจำเดือน') returning id`, [t],
+      );
+      await admin.query(
+        `insert into stock_count_items (tenant_id, count_id, line_no, product_id, counted_qty)
+         values ($1,$2,1,$3,5)`,
+        [t, ct.rows[0].id, someProduct.rows[0].id],
+      );
+      await admin.query(
+        `insert into stock_count_sequences (tenant_id, period, last_no) values ($1,'',1)
+         on conflict (tenant_id, period) do update set last_no = 1`, [t],
+      );
     }
 
     /* ทุกตารางที่มีคอลัมน์ tenant_id — ไล่เอาจากฐานข้อมูลจริง ไม่ใช่รายชื่อที่พิมพ์ไว้ */

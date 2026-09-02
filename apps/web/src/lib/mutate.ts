@@ -80,6 +80,8 @@ export function friendlyDbError(err: unknown, labels: Record<string, string> = {
 
   if (e.code === '23505') {
     const c = e.constraint ?? '';
+    /* barcode ต้องมาก่อน code เพราะชื่อ constraint ของมันมีคำว่า code อยู่ข้างใน */
+    if (c.includes('barcode')) return labels.barcode ?? 'บาร์โค้ดนี้ถูกใช้กับสินค้าตัวอื่นแล้ว';
     if (c.includes('code')) return labels.code ?? 'รหัสนี้มีอยู่แล้ว ใช้รหัสอื่น';
     if (c.includes('email')) return 'อีเมลนี้ถูกใช้ไปแล้ว';
     if (c.includes('name')) return 'ชื่อนี้มีอยู่แล้ว';

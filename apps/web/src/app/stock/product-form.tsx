@@ -1,8 +1,9 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
+import { genBarcode } from '@drivegolight/core';
 import { saveProductAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 import type { Category, ProductRow } from '@/lib/products';
@@ -30,6 +31,8 @@ export function ProductForm({
   const v = (name: string, fallback: string | number | undefined) =>
     state.values?.[name] ?? (fallback === undefined ? '' : String(fallback));
 
+  const [barcode, setBarcode] = useState(v('barcode', product?.barcode));
+
   return (
     <form className="form" action={action}>
       {product ? <input type="hidden" name="id" value={product.id} /> : null}
@@ -51,6 +54,27 @@ export function ProductForm({
           <label htmlFor="unit">หน่วยนับ</label>
           <input className="in" id="unit" name="unit" defaultValue={v('unit', product?.unit)}
                  placeholder="ชิ้น · ชุด · ลิตร" />
+        </div>
+      </div>
+
+      <div className="row-fields f3">
+        <div className={bad('barcode')}>
+          <label htmlFor="barcode">บาร์โค้ด</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input className="in mono" id="barcode" name="barcode" value={barcode}
+                   onChange={(e) => setBarcode(e.target.value.toUpperCase())}
+                   placeholder="ว่างได้ — ใช้ยิงเข้าใบตรวจนับ" />
+            <button className="btn" type="button" onClick={() => setBarcode(genBarcode())}>
+              สร้างให้
+            </button>
+          </div>
+          <span className="hint">
+            {product && barcode
+              ? <a href={`/stock/${product.id}/barcode`} style={{ textDecoration: 'underline' }}>
+                  พิมพ์ฉลากบาร์โค้ด
+                </a>
+              : 'ยิงเข้าใบตรวจนับได้ทันทีเมื่อมีบาร์โค้ด'}
+          </span>
         </div>
       </div>
 

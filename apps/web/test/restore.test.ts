@@ -125,6 +125,19 @@ describe.skipIf(!DB_URL)('กู้คืนข้อมูลทับอู่
       [target, tgtProduct.rows[0].id, tgtClaim.rows[0].id, tgtItem.rows[0].id],
     );
 
+    /* ปลายทางเคยตรวจนับไว้ — stock_count_items.product_id เป็น on delete restrict
+       ถ้าลำดับการล้างไม่ตัดสายใบตรวจนับก่อน การกู้คืนจะล้มตอนลบ products */
+    const tgtCount = await admin.query(
+      `insert into stock_counts (tenant_id, no, count_date, note)
+       values ($1,'CT-ปลายทาง-001','2026-08-05','ตรวจนับของเก่า') returning id`,
+      [target],
+    );
+    await admin.query(
+      `insert into stock_count_items (tenant_id, count_id, line_no, product_id, counted_qty)
+       values ($1,$2,1,$3,4)`,
+      [target, tgtCount.rows[0].id, tgtProduct.rows[0].id],
+    );
+
     /* ต้นทางก็มีใบวางบิลของตัวเอง ไว้ดูว่าตามมาครบ */
     await app.query(`select set_config('app.tenant_id', $1, false)`, [source]);
     const srcDocs = await admin.query(
@@ -233,6 +246,15 @@ describe.skipIf(!DB_URL)('กู้คืนข้อมูลทับอู่
     expect(moves.rows[0].c).toBe(0);
   });
 
+  it('ใบตรวจนับเดิมของปลายทางถูกล้างทิ้ง', async () => {
+    const { rows } = await admin.query(
+      `select count(*)::int as c from stock_counts
+       where tenant_id = $1 and no = 'CT-ปลายทาง-001'`,
+      [target],
+    );
+    expect(rows[0].c).toBe(0);
+  });
+
   it('ผู้ใช้งานและรหัสผ่านไม่ถูกแตะ — ไม่งั้นอู่เข้าระบบไม่ได้หลังกู้', async () => {
     const { rows } = await admin.query(
       `select code, email, role::text as role, password_hash from users where id = $1`,
@@ -288,13 +310,13 @@ describe.skipIf(!DB_URL)('กู้คืนข้อมูลทับอู่
     };
 
     const p = previewBackup(JSON.stringify(v64));
-    /* ใบวางบิลรองรับตั้งแต่ช่วงที่ 3 ใบเคลมตั้งแต่ช่วงที่ 4 จึงไม่อยู่ในรายการที่จะหาย */
-    expect(p.dropped.map((g) => [g.key, g.count])).toEqual([
-      ['counts', 1], ['moves', 3],
-    ]);
-    expect(p.needsAcknowledgement).toBe(true);
+    /* ใบวางบิล ใบเคลม และใบตรวจนับรองรับหมดแล้ว เหลือแค่ประวัติการเคลื่อนไหว */
+    expect(p.dropped.map((g) => [g.key, g.count])).toEqual([['moves', 3]]);
+    /* ไม่มีกลุ่มไหนหายทั้งก้อนแล้ว จึงไม่ต้องให้ยืนยันเพิ่ม */
+    expect(p.needsAcknowledgement).toBe(false);
     /* และต้องนับให้ผู้ใช้เห็นว่ากลุ่มที่รองรับแล้วมีกี่รายการ */
     expect(p.counts.billnotes).toBe(2);
     expect(p.counts.claims).toBe(1);
+    expect(p.counts.counts).toBe(1);
   });
 });

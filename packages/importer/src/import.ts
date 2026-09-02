@@ -197,6 +197,10 @@ export async function importBackup(
     const productRows: unknown[][] = [];
     const seenCode = new Map<string, number>();
 
+    /* บาร์โค้ดห้ามซ้ำในตารางใหม่ แต่รุ่นเดิมไม่ได้บังคับ — ตัวหลังกลายเป็นค่าว่างแล้วเตือน */
+    const seenBarcode = new Set<string>();
+    let dupBarcode = 0;
+
     for (const p of db.products) {
       const id = randomUUID();
       productId.set(p.id, id);
@@ -214,15 +218,25 @@ export async function importBackup(
         seenCode.set(code, 1);
       }
 
+      let barcode: string | null = text(p.barcode).trim().toUpperCase() || null;
+      if (barcode && seenBarcode.has(barcode)) { barcode = null; dupBarcode++; }
+      if (barcode) seenBarcode.add(barcode);
+
       productRows.push([
-        id, tenantId, code, text(p.oem), text(p.name), text(p.unit),
+        id, tenantId, code, text(p.oem), barcode, text(p.name), text(p.unit),
         p.cat ? (catId.get(p.cat) ?? null) : null,
         money(num(p.cost)), money(num(p.pA)), money(num(p.pB)), money(num(p.pC)),
         qty(num(p.min)), qty(num(p.max)), text(p.id),
       ]);
     }
+    if (dupBarcode) {
+      warnings.push(
+        `บาร์โค้ดซ้ำกัน ${dupBarcode} รายการ — เว้นว่างไว้ให้ตัวที่ซ้ำ ` +
+        '(ตั้งใหม่ได้ที่หน้าสินค้า กดปุ่มสร้างให้)',
+      );
+    }
     await insertRows(client, 'products',
-      ['id', 'tenant_id', 'code', 'oem', 'name', 'unit', 'category_id',
+      ['id', 'tenant_id', 'code', 'oem', 'barcode', 'name', 'unit', 'category_id',
        'last_cost', 'price_a', 'price_b', 'price_c', 'qty_min', 'qty_max', 'legacy_id'],
       productRows);
 
@@ -828,6 +842,94 @@ export async function importBackup(
       );
     }
 
+    /* ---------- ใบตรวจนับสต๊อก ---------- */
+    /**
+     * **ไม่สร้างแถวสต๊อกจากใบตรวจนับที่นำเข้า** ด้วยเหตุผลเดียวกับใบเคลม —
+     * ยอดคงเหลือในไฟล์เป็นยอดหลังปรับตามผลตรวจนับไปแล้ว ปรับซ้ำจะเพี้ยนสองรอบ
+     *
+     * บรรทัดที่อ้างสินค้าที่ถูกลบไปแล้วต้องตัดทิ้ง เพราะ product_id เป็น not null
+     * — การนับของที่ไม่มีในทะเบียนไม่มีความหมาย ต่างจากใบเคลมที่ยังเก็บชื่อไว้ได้
+     */
+    const countRows: unknown[][] = [];
+    const countItemRows: unknown[][] = [];
+    const takenCountNo = new Set<string>();
+    let renamedCountNo = 0;
+    let countMissingProduct = 0;
+    let countDupProduct = 0;
+
+    for (const ct of db.counts ?? []) {
+      let no = text(ct?.no).trim()
+        || `CT-นำเข้า-${String(countRows.length + 1).padStart(4, '0')}`;
+      if (takenCountNo.has(no)) {
+        const b = no;
+        let suffix = 1;
+        while (takenCountNo.has(no)) { suffix++; no = `${b}-${suffix}`; }
+        renamedCountNo++;
+      }
+      takenCountNo.add(no);
+
+      const applied = ct?.applied === true;
+      const id = randomUUID();
+      countRows.push([
+        id, tenantId, no,
+        text(ct?.date) || openingDate,
+        text(ct?.note),
+        applied ? 'applied' : 'draft',
+        applied ? new Date().toISOString() : null,
+      ]);
+
+      const seenProduct = new Set<string>();
+      let line = 0;
+      for (const it of (Array.isArray(ct?.items) ? ct.items : [])) {
+        const pid = it?.pid ? productId.get(text(it.pid)) : null;
+        if (!pid) { countMissingProduct++; continue; }
+        if (seenProduct.has(pid)) { countDupProduct++; continue; }
+        seenProduct.add(pid);
+
+        /* ช่องว่างต้องยังเป็นช่องว่าง ไม่ใช่ศูนย์ — ความต่างนี้คือทั้งหมดของโมดูลนี้ */
+        const raw = it?.cnt;
+        const counted = (raw === null || raw === undefined || String(raw).trim() === '')
+          ? null : qty(num(raw));
+
+        countItemRows.push([
+          randomUUID(), tenantId, id, ++line, pid, counted,
+          applied ? qty(num(it?.sys)) : null,
+          applied ? money(num(it?.cost)) : null,
+        ]);
+      }
+    }
+
+    await insertRows(client, 'stock_counts',
+      ['id', 'tenant_id', 'no', 'count_date', 'note', 'status', 'applied_at'],
+      countRows);
+    await insertRows(client, 'stock_count_items',
+      ['id', 'tenant_id', 'count_id', 'line_no', 'product_id',
+       'counted_qty', 'system_qty', 'unit_cost'],
+      countItemRows);
+    await insertRows(client, 'stock_count_sequences', ['tenant_id', 'period', 'last_no'],
+      [[tenantId, '', Math.max(0, Math.trunc(num(db.seq?.ct)), countRows.length)]]);
+
+    if (renamedCountNo) {
+      warnings.push(`เลขที่ใบตรวจนับซ้ำ ${renamedCountNo} ใบ — เติมเลขต่อท้ายให้ไม่ชน`);
+    }
+    if (countMissingProduct) {
+      warnings.push(
+        `บรรทัดในใบตรวจนับ ${countMissingProduct} รายการอ้างถึงสินค้าที่ไม่มีในทะเบียนแล้ว — ` +
+        'ตัดออกจากใบ (การนับของที่ไม่มีในทะเบียนไม่มีความหมาย)',
+      );
+    }
+    if (countDupProduct) {
+      warnings.push(
+        `สินค้าตัวเดียวถูกนับซ้ำในใบเดียวกัน ${countDupProduct} รายการ — คงไว้บรรทัดแรก`,
+      );
+    }
+    if (countRows.length) {
+      warnings.push(
+        `ใบตรวจนับ ${countRows.length} ใบถูกนำเข้าโดย**ไม่ปรับสต๊อกซ้ำ** — ` +
+        'ยอดคงเหลือที่ยกมาเป็นยอดหลังปรับตามผลตรวจนับไปแล้ว',
+      );
+    }
+
     /* ---------- ชื่อรายการที่สั่งไม่ให้เตือน ---------- */
     const ignoredRows = [...new Set((db.ignoredItems ?? []).map(normName))]
       .filter(Boolean)
@@ -850,6 +952,7 @@ export async function importBackup(
         payments: paymentRows.length,
         billnotes: billnoteRows.length,
         claims: claimRows.length,
+        counts: countRows.length,
       },
       warnings,
     };

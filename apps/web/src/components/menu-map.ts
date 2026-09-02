@@ -113,7 +113,7 @@ export const MENU: MenuItem[] = [
       },
       {
         key: 'count', no: '05.5', label: 'ตรวจนับสต๊อก', desc: 'นับของจริงแล้วปรับยอดให้ตรง',
-        icon: 'tally', color: '#1F5FBF', href: '/stock/count', todo: true,
+        icon: 'tally', color: '#1F5FBF', href: '/stock/count',
       },
     ],
   },

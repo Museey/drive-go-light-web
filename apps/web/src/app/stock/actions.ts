@@ -29,6 +29,7 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
       code,
       name,
       oem: str(fd, 'oem'),
+      barcode: str(fd, 'barcode'),
       unit: str(fd, 'unit'),
       categoryId: str(fd, 'categoryId') || null,
       lastCost: money(fd, 'lastCost'),
@@ -42,7 +43,10 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
     });
   } catch (err) {
     return {
-      error: friendlyDbError(err, { code: `รหัสสินค้า "${code}" มีอยู่แล้ว ใช้รหัสอื่น` }),
+      error: friendlyDbError(err, {
+        code: `รหัสสินค้า "${code}" มีอยู่แล้ว ใช้รหัสอื่น`,
+        barcode: `บาร์โค้ด "${str(fd, 'barcode')}" ถูกใช้กับสินค้าตัวอื่นแล้ว`,
+      }),
       field: 'code',
       values: kept,
     };

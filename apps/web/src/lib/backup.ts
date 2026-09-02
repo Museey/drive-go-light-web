@@ -32,6 +32,8 @@ export interface BackupFile {
   billnotes: unknown[];
   /** ใบเคลมสินค้าทั้งสองทิศทาง — รูปแบบเดียวกับ DB.claims ของรุ่น 6.4 */
   claims: unknown[];
+  /** ใบตรวจนับสต๊อก — รูปแบบเดียวกับ DB.counts ของรุ่น 6.4 */
+  counts: unknown[];
   ui: Record<string, unknown>;
   lastExportAt: number;
 }
@@ -84,6 +86,24 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
     const claimSeq = await c.query(
       `select side::text as side, max(last_no)::int as last_no
        from claim_sequences group by side`,
+    );
+    const countSeq = await c.query(
+      `select coalesce(max(last_no), 0)::int as last_no from stock_count_sequences`,
+    );
+    const counts = await c.query(
+      `select ct.*, ct.count_date::text as count_date, ct.status::text as status,
+              coalesce(json_agg(json_build_object(
+                'pid', i.product_id, 'code', p.code, 'name', p.name, 'unit', p.unit,
+                'sys', coalesce(i.system_qty, s.qty_on_hand, 0)::float8,
+                'cnt', i.counted_qty::float8,
+                'cost', coalesce(i.unit_cost, p.last_cost)::float8
+              ) order by i.line_no) filter (where i.id is not null), '[]') as items
+       from stock_counts ct
+       left join stock_count_items i on i.count_id = ct.id
+       left join products p on p.id = i.product_id
+       left join product_stock s on s.product_id = i.product_id
+       group by ct.id
+       order by ct.count_date, ct.no`,
     );
     const claims = await c.query(
       `select c.*, c.claim_date::text as claim_date, c.side::text as side,
@@ -200,7 +220,8 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
       categories: cats.rows.map((r) => r.name),
 
       products: prods.rows.map((p) => ({
-        id: p.id, code: p.code, oem: p.oem, name: p.name, unit: p.unit,
+        id: p.id, code: p.code, oem: p.oem, barcode: p.barcode ?? '',
+        name: p.name, unit: p.unit,
         cat: p.category_id ? (catName.get(p.category_id) ?? '') : '',
         cost: n(p.last_cost), pA: n(p.price_a), pB: n(p.price_b), pC: n(p.price_c),
         qty: n(p.qty), min: n(p.qty_min), max: n(p.qty_max),
@@ -294,6 +315,8 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         /* ตัวนับใบเคลม — cl ฝั่งลูกค้า vc ฝั่งผู้ขาย เหมือนรุ่น 6.4 */
         cl: Number(claimSeq.rows.find((r) => r.side === 'customer')?.last_no ?? 0),
         vc: Number(claimSeq.rows.find((r) => r.side === 'vendor')?.last_no ?? 0),
+        /* ตัวนับใบตรวจนับ — ชื่อคีย์ ct ตรงกับ DB.seq.ct ของรุ่น 6.4 */
+        ct: Number(countSeq.rows[0]?.last_no ?? 0),
       } as Record<string, number>,
 
       lic: sub.rows[0]
@@ -344,6 +367,17 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         items: r.items,
         deducted: r.status !== 'void',
         ...(r.status === 'void' ? { void: true } : {}),
+      })),
+
+      /* ใบตรวจนับ — รูปแบบเดียวกับ DB.counts ของรุ่น 6.4
+         cnt เป็น null ได้ แปลว่ายังไม่ได้กรอก ต่างจาก 0 ที่แปลว่านับแล้วไม่เจอ */
+      counts: counts.rows.map((r) => ({
+        id: r.id,
+        no: r.no,
+        date: r.count_date,
+        note: r.note ?? '',
+        applied: r.status === 'applied',
+        items: r.items,
       })),
 
       ui: s.ui_prefs ?? {},

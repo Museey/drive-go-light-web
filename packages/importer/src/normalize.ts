@@ -20,6 +20,8 @@ export interface BackupFile {
   billnotes?: any[];
   /** ใบเคลมสินค้าทั้งสองทิศทาง — มีตั้งแต่รุ่น 6.4 */
   claims?: any[];
+  /** ใบตรวจนับสต๊อก — มีตั้งแต่รุ่น 6.4 */
+  counts?: any[];
   purchases: any[];
   expenses: any[];
   quotes: any[];

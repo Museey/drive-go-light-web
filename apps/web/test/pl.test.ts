@@ -14,6 +14,9 @@ import pg from 'pg';
 import { consumeStock, receiveStock } from '../src/lib/stock-cost';
 import { profitAndLossWith } from '../src/lib/reports-pl';
 import { saveClaim, voidClaim, type ClaimInput } from '../src/lib/claims';
+import {
+  addCountItems, applyCount, createCount, getCount, setCountedQty,
+} from '../src/lib/stock-counts';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -68,6 +71,9 @@ describe.skipIf(!DB_URL)('งบกำไรขาดทุนกับต้น
     await admin.query(`delete from claim_items where tenant_id = $1`, [tenantId]);
     await admin.query(`delete from claims where tenant_id = $1`, [tenantId]);
     await admin.query(`delete from claim_sequences where tenant_id = $1`, [tenantId]);
+    await admin.query(`delete from stock_count_items where tenant_id = $1`, [tenantId]);
+    await admin.query(`delete from stock_counts where tenant_id = $1`, [tenantId]);
+    await admin.query(`delete from stock_count_sequences where tenant_id = $1`, [tenantId]);
     await admin.query(`delete from doc_items where tenant_id = $1`, [tenantId]);
     await admin.query(`delete from documents where tenant_id = $1`, [tenantId]);
     await admin.query(`delete from products where tenant_id = $1`, [tenantId]);
@@ -269,5 +275,46 @@ describe.skipIf(!DB_URL)('งบกำไรขาดทุนกับต้น
 
     const pl = await profitAndLossWith(app);
     expect(pl.writeOff.claim).toBe(1000);     // ไม่ใช่ 2000
+  });
+
+  /* ---------------------------------------------------------------
+     ตรวจนับสต๊อก — ส่วนต่างเข้าบรรทัดปรับยอด ไม่ใช่ต้นทุนขาย
+     --------------------------------------------------------------- */
+
+  /** เปิดใบตรวจนับแล้วปรับยอดสินค้าตัวเดียวไปที่จำนวนที่กำหนด */
+  async function countTo(qty: number) {
+    const { id } = await createCount(app, { countDate: '2026-03-20' }, null);
+    await addCountItems(app, id, [productId]);
+    const got = await getCount(app, id);
+    await setCountedQty(app, got!.items[0]!.id, qty);
+    return applyCount(app, id, null);
+  }
+
+  it('ของขาดจากการตรวจนับเข้าบรรทัดปรับยอด ไม่เข้าต้นทุนขาย', async () => {
+    await receiveStock(app, {
+      productId, qty: 10, costAmount: 5000, movedOn: '2026-01-15', reason: 'set',
+    });
+    await sell('RC-020', '2026-03-10', 4, 900);
+
+    const before = await profitAndLossWith(app);
+    await countTo(4);                       // เหลือ 6 นับได้ 4 → หาย 2 ที่ 500
+
+    const after = await profitAndLossWith(app);
+    expect(after.writeOff.adjust).toBe(before.writeOff.adjust + 1000);
+    expect(after.writeOff.claim).toBe(0);
+    expect(after.cogs).toBe(before.cogs);
+    expect(after.grossProfit).toBe(before.grossProfit);
+    expect(after.netProfit).toBe(before.netProfit - 1000);
+  });
+
+  it('ของเกินจากการตรวจนับหักกลบยอดของหายจากคลัง', async () => {
+    await receiveStock(app, {
+      productId, qty: 10, costAmount: 5000, movedOn: '2026-01-15', reason: 'set',
+    });
+    const before = await profitAndLossWith(app);
+    await countTo(13);                      // เกินมา 3 ที่ 500
+
+    const after = await profitAndLossWith(app);
+    expect(after.writeOff.adjust).toBe(before.writeOff.adjust - 1500);
   });
 });

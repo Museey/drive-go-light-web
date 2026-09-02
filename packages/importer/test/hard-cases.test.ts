@@ -16,7 +16,7 @@ import { exTotals, recTotals } from '@drivegolight/core';
 import { importBackup, normalizeBackup } from '../src/index.js';
 import type { ImportResult } from '../src/index.js';
 import {
-  billnoteBackup, claimBackup, duplicateDocNoBackup, emptyBackup, largeChainBackup, legacyV1Backup,
+  billnoteBackup, claimBackup, countBackup, duplicateDocNoBackup, emptyBackup, largeChainBackup, legacyV1Backup,
   messyBackup, vatInclusiveBackup, wrongVatModeBackup,
 } from './hard-cases.js';
 
@@ -537,6 +537,112 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
 
     it('บอกผู้ใช้ตรง ๆ ว่าใบเคลมเข้ามาโดยไม่ตัดสต๊อกซ้ำ', () => {
       expect(r.warnings.some((w) => w.includes('ไม่ตัดสต๊อกซ้ำ'))).toBe(true);
+    });
+  });
+
+  describe('ใบตรวจนับจากรุ่น 6.4', () => {
+    let r: ImportResult;
+    beforeAll(async () => { r = await load(countBackup()); });
+
+    /**
+     * ข้อสำคัญที่สุดของกลุ่มนี้ — ยอดในไฟล์เป็นยอดหลังปรับไปแล้ว
+     */
+    it('ไม่ปรับสต๊อกซ้ำ ยอดคงเหลือเท่าที่อยู่ในไฟล์เป๊ะ', async () => {
+      const { rows } = await app.query(
+        `select count(*)::int as c from stock_moves where reason = 'count'`);
+      expect(n(rows[0].c)).toBe(0);
+
+      const stock = await app.query(
+        `select p.code, s.qty_on_hand from products p
+         join product_stock s on s.product_id = p.id order by p.code`);
+      expect(stock.rows.map((x) => n(x.qty_on_hand))).toEqual([12, 12, 12]);
+    });
+
+    it('ใบตรวจนับตามมาครบ แยกร่างกับที่ปรับแล้ว', async () => {
+      expect(r.counts.counts).toBe(3);
+      const { rows } = await app.query(
+        `select status::text as status, count(*)::int as c
+         from stock_counts group by 1 order by 1`);
+      expect(rows).toEqual([
+        { status: 'applied', c: 1 },
+        { status: 'draft', c: 2 },
+      ]);
+    });
+
+    /**
+     * ความต่างระหว่างช่องว่างกับศูนย์คือทั้งหมดของโมดูลนี้ —
+     * ถ้าตัวนำเข้าตีค่าว่างเป็นศูนย์ ใบร่างที่ยกมาจะสั่งตัดสต๊อกเป็นศูนย์ตอนกดปรับยอด
+     */
+    it('ช่องที่ยังไม่ได้กรอกยังเป็นค่าว่าง ไม่ใช่ศูนย์', async () => {
+      const { rows } = await app.query(
+        `select p.code, i.counted_qty
+         from stock_count_items i
+         join stock_counts c on c.id = i.count_id
+         join products p on p.id = i.product_id
+         where c.no = 'CT-202602-001' order by i.line_no`);
+      expect(rows[0].counted_qty).toBeNull();          // cnt: '' → ยังไม่ได้กรอก
+      expect(n(rows[1].counted_qty)).toBe(0);          // cnt: 0  → นับแล้วไม่เจอ
+    });
+
+    it('ใบที่ปรับแล้วเก็บยอดระบบและต้นทุนที่ตรึงไว้ ใบร่างไม่เก็บ', async () => {
+      const applied = await app.query(
+        `select i.system_qty, i.unit_cost from stock_count_items i
+         join stock_counts c on c.id = i.count_id
+         join products p on p.id = i.product_id
+         where c.no = 'CT-202601-001' and p.code = 'AAA-001'`);
+      expect(n(applied.rows[0].system_qty)).toBe(15);
+      expect(n(applied.rows[0].unit_cost)).toBe(100);
+
+      const draft = await app.query(
+        `select i.system_qty from stock_count_items i
+         join stock_counts c on c.id = i.count_id
+         where c.no = 'CT-202602-001' limit 1`);
+      expect(draft.rows[0].system_qty).toBeNull();     // ร่างอ่านสดตอนเปิดใบ
+    });
+
+    it('บรรทัดที่อ้างสินค้าที่หายไปถูกตัดทิ้งพร้อมคำเตือน', async () => {
+      const { rows } = await app.query(
+        `select count(*)::int as c from stock_count_items i
+         join stock_counts c on c.id = i.count_id where c.no = 'CT-202601-001'`);
+      expect(n(rows[0].c)).toBe(2);                    // จาก 3 บรรทัด ตัดไป 1
+      expect(r.warnings.some((w) => w.includes('ไม่มีในทะเบียนแล้ว'))).toBe(true);
+    });
+
+    it('สินค้าตัวเดียวนับซ้ำในใบเดียว คงไว้บรรทัดแรกแล้วเตือน', async () => {
+      const { rows } = await app.query(
+        `select count(*)::int as c from stock_count_items i
+         join stock_counts c on c.id = i.count_id where c.no = 'CT-202602-001'`);
+      expect(n(rows[0].c)).toBe(2);                    // จาก 3 บรรทัด ตัดซ้ำไป 1
+      expect(r.warnings.some((w) => w.includes('นับซ้ำในใบเดียวกัน'))).toBe(true);
+    });
+
+    it('เลขที่ซ้ำถูกเติมเลขต่อท้าย', async () => {
+      const { rows } = await app.query(`select no from stock_counts order by count_date`);
+      expect(rows.map((x) => x.no)).toEqual([
+        'CT-202601-001', 'CT-202602-001', 'CT-202601-001-2',
+      ]);
+      expect(r.warnings.some((w) => w.includes('เลขที่ใบตรวจนับซ้ำ'))).toBe(true);
+    });
+
+    it('บาร์โค้ดซ้ำ ตัวหลังเป็นค่าว่าง ไม่ล้มทั้งไฟล์', async () => {
+      const { rows } = await app.query(
+        `select code, barcode from products order by code`);
+      expect(rows.map((x) => [x.code, x.barcode])).toEqual([
+        ['AAA-001', 'DGAAA001'],
+        ['BBB-002', null],
+        ['CCC-003', null],
+      ]);
+      expect(r.warnings.some((w) => w.includes('บาร์โค้ดซ้ำ'))).toBe(true);
+    });
+
+    it('ตัวนับเลขที่ใบตรวจนับตามมา ออกใบถัดไปแล้วไม่ทับของเก่า', async () => {
+      const { rows } = await app.query(
+        `select next_count_no(current_tenant_id(), '') as no`);
+      expect(n(rows[0].no)).toBe(4);
+    });
+
+    it('บอกผู้ใช้ตรง ๆ ว่าใบตรวจนับเข้ามาโดยไม่ปรับสต๊อกซ้ำ', () => {
+      expect(r.warnings.some((w) => w.includes('ไม่ปรับสต๊อกซ้ำ'))).toBe(true);
     });
   });
 

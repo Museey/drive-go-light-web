@@ -31,12 +31,14 @@ const FUNCTIONS = [
      live/isVoid ต้องมาก่อน salesDocs เพราะ 6.4 เรียกใช้ข้างใน */
   'isVoid', 'live', 'livePurchases', 'liveExpenses',
   'lotsOf', 'lotSync', 'lotConsume', 'lotAdd', 'lotReturn', 'lotValue',
+  'barcodeSVG', 'genBarcode',
 ];
 
 /** ฟังก์ชันที่ยอมให้ไม่มีในไฟล์ต้นทาง — รุ่น 3.6 ยังไม่มีการยกเลิกเอกสารและล็อต */
 const OPTIONAL = new Set([
   'isVoid', 'live', 'livePurchases', 'liveExpenses',
   'lotsOf', 'lotSync', 'lotConsume', 'lotAdd', 'lotReturn', 'lotValue',
+  'barcodeSVG', 'genBarcode',
 ]);
 
 /** ตัวแปรแบบบรรทัดเดียว `const ชื่อ = ...;` */
@@ -44,6 +46,10 @@ const CONSTS = ['num', 'iso', 'today', 'isInvoice', 'isExpenseDoc'];
 
 /** อาเรย์หลายบรรทัด `const ชื่อ = [ ... ];` */
 const ARRAYS = ['EXPENSE_CATS'];
+
+/** ออบเจกต์หลายบรรทัด `const ชื่อ = { ... };` — มีเฉพาะรุ่น 6.4 ขึ้นไป */
+const OBJECTS = ['C39'];
+const OPTIONAL_OBJECTS = new Set(['C39']);
 
 const html = readFileSync(SOURCE, 'utf8');
 
@@ -113,7 +119,21 @@ for (const name of ARRAYS) {
   parts.push(sliceBalanced(js, m.index, '[', ']') + ';');
 }
 
-const exported = [...FUNCTIONS.filter((f) => !missing.includes(f)), ...CONSTS, ...ARRAYS];
+const foundObjects = [];
+for (const name of OBJECTS) {
+  const re = new RegExp(`^const ${name}\\s*=\\s*\\{`, 'm');
+  const m = re.exec(js);
+  if (!m) {
+    if (OPTIONAL_OBJECTS.has(name)) { missing.push(name); continue; }
+    throw new Error(`ไม่พบ const ${name} — โครงสร้างไฟล์เดิมเปลี่ยนไปแล้ว`);
+  }
+  parts.push(sliceBalanced(js, m.index, '{', '}') + ';');
+  foundObjects.push(name);
+}
+
+const exported = [
+  ...FUNCTIONS.filter((f) => !missing.includes(f)), ...CONSTS, ...ARRAYS, ...foundObjects,
+];
 if (missing.length) {
   console.log(`ไฟล์นี้ยังไม่มี: ${missing.join(', ')} — เทสต์ที่ต้องใช้จะข้ามเอง`);
 }

@@ -15,6 +15,9 @@ import { importBackup } from '@drivegolight/importer';
 import { exportBackupWith } from '../src/lib/backup';
 import { openInvoices, saveBillnote } from '../src/lib/billnotes';
 import { saveClaim } from '../src/lib/claims';
+import {
+  addCountItems, applyCount, createCount, getCount, setCountedQty,
+} from '../src/lib/stock-counts';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -32,6 +35,8 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
   let billnoteDocNos: string[] = [];
   const claimNos: string[] = [];
   let claimCost = 0;
+  let countNo = '';
+  let countedTo = 0;
 
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: DB_URL });
@@ -112,6 +117,18 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
       items: line(1),
     }, null);
     claimNos.push(vc.no);
+
+    /* ตั้งบาร์โค้ดให้สินค้าตัวนั้น ไฟล์สำรองจะได้มีบาร์โค้ดให้พิสูจน์ */
+    await admin.query(`update products set barcode = 'DGROUND01' where id = $1`, [part.id]);
+
+    /* ตรวจนับหนึ่งใบและปรับยอดจริง ไฟล์สำรองจะได้มีใบตรวจนับให้พิสูจน์ */
+    const ct = await createCount(app, { countDate: '2026-08-28', note: 'ตรวจนับก่อนส่งออก' }, null);
+    await addCountItems(app, ct.id, [part.id as string]);
+    const opened = await getCount(app, ct.id);
+    countedTo = Math.max(0, (opened!.items[0]!.systemQty ?? 0) - 2);
+    await setCountedQty(app, opened!.items[0]!.id, countedTo);
+    await applyCount(app, ct.id, null);
+    countNo = ct.no;
 
     /* ส่งออกจากอู่แรก แล้วนำเข้าเป็นอู่ที่สอง */
     const exported = await exportBackupWith(app);
@@ -306,6 +323,63 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     };
     expect(await read(secondTenant)).toEqual(await read(firstTenant));
     expect(await read(firstTenant)).toEqual([['customer', 1], ['vendor', 1]]);
+  });
+
+  /**
+   * ใบตรวจนับถูกถอดออกจากรายการ "ยังรองรับไม่ได้" แล้ว ตัวนำเข้าจึงต้องรับได้จริง
+   * และต้อง **ไม่ปรับสต๊อกซ้ำ** — ยอดที่ส่งออกไปเป็นยอดหลังปรับแล้ว
+   */
+  it('ใบตรวจนับตามมาครบ พร้อมยอดระบบและต้นทุนที่ตรึงไว้', async () => {
+    const read = async (tenantId: string) => {
+      const { rows } = await admin.query(
+        `select c.no, c.count_date::text as count_date, c.note, c.status::text as status,
+                i.counted_qty, i.system_qty, i.unit_cost
+         from stock_counts c
+         join stock_count_items i on i.count_id = c.id
+         where c.tenant_id = $1 order by c.no, i.line_no`,
+        [tenantId],
+      );
+      return rows;
+    };
+
+    const a = await read(firstTenant);
+    const b = await read(secondTenant);
+
+    expect(a).toHaveLength(1);
+    expect(a[0].no).toBe(countNo);
+    expect(a[0].status).toBe('applied');
+    expect(n(a[0].counted_qty)).toBe(countedTo);
+
+    expect(b).toHaveLength(1);
+    expect(b[0].no).toBe(a[0].no);
+    expect(b[0].count_date).toBe(a[0].count_date);
+    expect(b[0].note).toBe(a[0].note);
+    expect(b[0].status).toBe(a[0].status);
+    expect(n(b[0].counted_qty)).toBe(n(a[0].counted_qty));
+    expect(n(b[0].system_qty)).toBe(n(a[0].system_qty));
+    expect(n(b[0].unit_cost)).toBe(n(a[0].unit_cost));
+  });
+
+  it('อู่ที่นำเข้ามาไม่ถูกปรับสต๊อกซ้ำจากใบตรวจนับ', async () => {
+    const { rows } = await admin.query(
+      `select count(*)::int as c from stock_moves
+       where tenant_id = $1 and reason = 'count'`,
+      [secondTenant],
+    );
+    expect(rows[0].c).toBe(0);
+  });
+
+  it('บาร์โค้ดของสินค้าตามไปด้วย ผูกกับสินค้าตัวเดิม', async () => {
+    const read = async (tenantId: string) => {
+      const { rows } = await admin.query(
+        `select code, barcode from products
+         where tenant_id = $1 and barcode is not null order by code`, [tenantId],
+      );
+      return rows.map((r) => [r.code, r.barcode]);
+    };
+    const a = await read(firstTenant);
+    expect(a).toEqual([[expect.any(String), 'DGROUND01']]);
+    expect(await read(secondTenant)).toEqual(a);
   });
 
   it('ไฟล์สำรองไม่มีรหัสผ่านติดไปด้วย', async () => {

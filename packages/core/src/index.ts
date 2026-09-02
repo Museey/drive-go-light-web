@@ -22,3 +22,4 @@ export * from './stock.js';
 export * from './fifo.js';
 export * from './doc-check.js';
 export * from './bahttext.js';
+export * from './barcode.js';

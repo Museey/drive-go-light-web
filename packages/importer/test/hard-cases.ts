@@ -404,3 +404,63 @@ export function claimBackup(): any {
     seq: { q: 0, r: 0, c: 0, p: 0, v: 0, e: 0, iv: 0, ivt: 0, cl: 3, vc: 1 },
   });
 }
+
+/* =====================================================================
+   เคสใบตรวจนับจากรุ่น 6.4
+
+   ข้อที่สำคัญที่สุดคือ **ห้ามปรับสต๊อกซ้ำจากใบตรวจนับที่นำเข้า**
+   ยอดในไฟล์เป็นยอดหลังปรับไปแล้ว ปรับซ้ำแล้วสินค้าที่เคยนับจะเพี้ยนสองรอบ
+
+   รองลงมาคือ **ช่องว่างต้องยังเป็นช่องว่าง ไม่ใช่ศูนย์** ซึ่งเป็นความต่าง
+   ที่โมดูลนี้ทั้งโมดูลตั้งอยู่บนมัน
+   ===================================================================== */
+export function countBackup(): any {
+  const prod = (id: string, code: string, o: Record<string, any> = {}) => ({
+    id, code, oem: `OEM-${code}`, name: `สินค้า ${code}`, unit: 'ชิ้น',
+    cat: '', qty: 12, cost: 100, priceA: 200, priceB: 190, priceC: 180,
+    min: 0, max: 0, lastMove: '2026-01-20', ...o,
+  });
+
+  return emptyBackup({
+    products: [
+      prod('p1', 'AAA-001', { barcode: 'DGAAA001' }),
+      prod('p2', 'BBB-002', { barcode: 'DGAAA001' }),   // บาร์โค้ดซ้ำกับตัวแรก
+      prod('p3', 'CCC-003', { barcode: '' }),
+    ],
+    counts: [
+      {
+        id: 'ct-1', no: 'CT-202601-001', date: '2026-01-31',
+        note: 'ตรวจนับประจำเดือน', applied: true,
+        items: [
+          { pid: 'p1', code: 'AAA-001', name: 'สินค้า AAA-001', unit: 'ชิ้น',
+            sys: 15, cnt: 12, cost: 100 },
+          { pid: 'p2', code: 'BBB-002', name: 'สินค้า BBB-002', unit: 'ชิ้น',
+            sys: 12, cnt: 12, cost: 100 },
+          /* อ้างสินค้าที่ถูกลบไปแล้ว — ต้องตัดทิ้งเพราะ product_id เป็น not null */
+          { pid: 'ไม่มีสินค้านี้', code: 'ZZZ', name: 'ของที่หายไป',
+            unit: 'ชิ้น', sys: 3, cnt: 0, cost: 50 },
+        ],
+      },
+      /* ใบร่างที่ยังกรอกไม่ครบ — ช่องว่างต้องยังเป็นช่องว่าง */
+      {
+        id: 'ct-2', no: 'CT-202602-001', date: '2026-02-15', note: '', applied: false,
+        items: [
+          { pid: 'p1', code: 'AAA-001', name: 'สินค้า AAA-001', unit: 'ชิ้น',
+            sys: 12, cnt: '', cost: 100 },
+          { pid: 'p3', code: 'CCC-003', name: 'สินค้า CCC-003', unit: 'ชิ้น',
+            sys: 12, cnt: 0, cost: 100 },
+          /* สินค้าตัวเดียวกันโผล่สองบรรทัด — ตารางใหม่บังคับว่าห้ามซ้ำ */
+          { pid: 'p3', code: 'CCC-003', name: 'สินค้า CCC-003', unit: 'ชิ้น',
+            sys: 12, cnt: 7, cost: 100 },
+        ],
+      },
+      /* เลขซ้ำกับใบแรก */
+      {
+        id: 'ct-3', no: 'CT-202601-001', date: '2026-03-01', note: '', applied: false,
+        items: [{ pid: 'p1', code: 'AAA-001', name: 'สินค้า AAA-001',
+                  unit: 'ชิ้น', sys: 12, cnt: 12, cost: 100 }],
+      },
+    ],
+    seq: { q: 0, r: 0, c: 0, p: 0, v: 0, e: 0, iv: 0, ivt: 0, ct: 3 },
+  });
+}
