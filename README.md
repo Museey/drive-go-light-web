@@ -114,6 +114,9 @@ node packages/importer/dist/cli.js --tenant=<uuid> --owner-email=owner@example.c
 รายละเอียดอยู่ใน [`db/mapping.md`](db/mapping.md) · [`packages/core/README.md`](packages/core/README.md) ·
 [`packages/importer/README.md`](packages/importer/README.md)
 
+**เปิดอู่ใหม่และให้สิทธิ์เข้าใช้งาน** — ตั้งแต่รัน importer จนพนักงานเข้าระบบได้
+พร้อมคำอธิบายว่าลิขสิทธิ์กับบัญชีผู้ใช้ต่างกันอย่างไร อยู่ใน [`ONBOARDING.md`](ONBOARDING.md)
+
 ## ที่ยังไม่ได้ทำ
 
 - เมนู 08 ลิขสิทธิ์ ยังไม่ได้ทำ
