@@ -1,0 +1,51 @@
+# systemd unit สำหรับเว็บ DriveGoLight!
+#
+# ติดตั้ง
+#   sudo cp deploy/drivegolight.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now drivegolight
+#
+# ดูสถานะและ log
+#   systemctl status drivegolight
+#   journalctl -u drivegolight -f
+
+[Unit]
+Description=DriveGoLight! web
+# ต้องรอฐานข้อมูลก่อน ไม่งั้นตอนเครื่องบูตแอปจะขึ้นก่อนแล้วตายทันที
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=dgl
+Group=dgl
+WorkingDirectory=/srv/drivegolight/apps/web
+
+# ค่าลับอยู่ในไฟล์ที่อ่านได้เฉพาะผู้ใช้ dgl (chmod 600) ไม่ใช่ในไฟล์ unit นี้
+# เพราะไฟล์ unit อ่านได้ทั้งเครื่องและมักถูกคัดลอกไปแปะเวลาถามปัญหา
+EnvironmentFile=/etc/drivegolight/env
+Environment=NODE_ENV=production
+Environment=PORT=3100
+
+ExecStart=/usr/bin/npm run start
+
+# ตายแล้วขึ้นใหม่เสมอ แต่ไม่วนถี่จนกินเครื่องถ้าพังเพราะตั้งค่าผิด
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+# จำกัดสิทธิ์เท่าที่จำเป็น — เว็บที่ถูกเจาะแล้วต้องทำอะไรกับเครื่องได้น้อยที่สุด
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# .next/cache ต้องเขียนได้ ที่เหลืออ่านอย่างเดียว
+ReadWritePaths=/srv/drivegolight/apps/web/.next
+
+[Install]
+WantedBy=multi-user.target

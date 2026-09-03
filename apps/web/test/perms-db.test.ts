@@ -73,8 +73,13 @@ describe('ทุกเส้นทางที่ส่งข้อมูลอ�
     const missing: string[] = [];
     for (const p of routes) {
       const src = readFileSync(p, 'utf8');
-      /* logout ไม่ได้ส่งข้อมูลออก ยกเว้นได้ */
-      if (rel(p) === '/logout/route.ts') continue;
+      /* ยกเว้นได้เฉพาะที่ไม่ได้ส่งข้อมูลของอู่ออกไปเลย — เพิ่มเข้ารายการนี้
+         ต้องมีเหตุผลกำกับเสมอ ไม่ใช่เพิ่มเพื่อให้เทสต์เขียว
+           logout   แค่ลบ session
+           healthz  ตอบ ok/ไม่ ok กับชื่อการตรวจที่ตก ไม่มีข้อมูลของอู่
+                    และต้องเรียกได้โดยไม่ล็อกอิน เพราะระบบเฝ้าระวังเรียกจากข้างนอก */
+      const EXEMPT = ['/logout/route.ts', '/healthz/route.ts'];
+      if (EXEMPT.includes(rel(p))) continue;
       if (!/require(Export|Cost)\(/.test(src)) missing.push(rel(p));
     }
     expect(missing, 'route เหล่านี้ยังไม่ได้กันการส่งออก').toEqual([]);

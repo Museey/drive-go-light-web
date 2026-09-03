@@ -1,0 +1,17 @@
+# สำรองฐานข้อมูล DriveGoLight! ทุกวันตีสาม
+#
+# ติดตั้ง
+#   sudo cp deploy/backup.cron /etc/cron.d/drivegolight-backup
+#   sudo chmod 644 /etc/cron.d/drivegolight-backup
+#
+# ตรวจว่าทำงานจริง — ต้องมีไฟล์เกิดขึ้นสองวันติดกันก่อนถือว่าใช้ได้
+#   ls -l /srv/dgl-backups/
+#
+# **ไฟล์สำรองที่อยู่บนเครื่องเดียวกับฐานข้อมูลไม่ช่วยอะไรตอนดิสก์พัง**
+# ต้องคัดลอกออกไปเก็บที่อื่นด้วย บรรทัดที่สองคือตัวอย่างการส่งขึ้นที่เก็บนอกเครื่อง
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+0 3 * * * dgl DATABASE_URL=postgresql://postgres@127.0.0.1/dgl BACKUP_DIR=/srv/dgl-backups /srv/drivegolight/tools/backup-db.sh >> /var/log/dgl-backup.log 2>&1
+# 30 3 * * * dgl rclone copy /srv/dgl-backups remote:dgl-backups >> /var/log/dgl-backup.log 2>&1

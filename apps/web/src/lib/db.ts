@@ -112,9 +112,42 @@ export async function withTenant<T>(
     return result;
   } catch (err) {
     await client.query('rollback').catch(() => {});
+    await noteFailure(client, err, tenantId);
     throw err;
   } finally {
     client.release();
+  }
+}
+
+/**
+ * บันทึกข้อผิดพลาดที่หลุดออกจากการทำงานกับฐานข้อมูล
+ *
+ * ที่นี่คือจุดคอขวดที่แคบที่สุดของฝั่งเซิร์ฟเวอร์ — ทุกหน้า ทุก action
+ * และทุก route ที่ทำงานจริงต้องผ่านทางนี้ ดักที่เดียวจึงครอบคลุมเกือบทั้งหมด
+ * โดยไม่ต้องไปแก้ทุกจุดแล้วลืมจุดใดจุดหนึ่ง
+ *
+ * (เคยลองใช้ instrumentation.ts ของ Next ซึ่งเป็นที่ที่ควรใช้ที่สุด แต่ไฟล์นั้น
+ *  ถูกรวมเข้าไปในทุก runtime ที่ Next รองรับ การ import ตัวต่อฐานข้อมูลจึงทำให้
+ *  ทั้งแอป bundle ไม่ผ่าน เพราะ pg ต้องการโมดูล fs ที่ runtime อื่นไม่มี)
+ *
+ * ห้ามโยนต่อไม่ว่าเกิดอะไรขึ้น — ตัวบันทึกที่พังแล้วกลบข้อผิดพลาดตัวจริงทิ้ง
+ * คือของที่ทำให้ไล่ปัญหาไม่ได้เลย
+ */
+async function noteFailure(
+  client: pg.PoolClient, err: unknown, tenantId: string | null,
+): Promise<void> {
+  try {
+    const { recordErrorWith } = await import('./ops-core');
+    const e = err as Error & { digest?: string };
+    await recordErrorWith(client, {
+      kind: 'server',
+      message: e?.message ?? String(err),
+      stack: e?.stack ?? null,
+      digest: e?.digest ?? null,
+      tenantId,
+    });
+  } catch {
+    /* เงียบไว้ */
   }
 }
 

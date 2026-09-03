@@ -1,0 +1,38 @@
+# Caddy — ตัวรับ HTTPS หน้าเว็บ DriveGoLight!
+#
+# เลือก Caddy แทน nginx เพราะขอและต่ออายุใบรับรอง HTTPS ให้เอง
+# ข้อ "HTTPS ใช้ได้และเปลี่ยนเส้นทางจาก HTTP อัตโนมัติ" ในรายการตรวจก่อนเปิดใช้
+# จึงไม่มีทางพลาดเพราะลืมตั้ง certbot
+#
+# ติดตั้ง
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+
+app.example.com {
+	reverse_proxy 127.0.0.1:3100
+
+	encode zstd gzip
+
+	header {
+		# บังคับ HTTPS หนึ่งปี รวมโดเมนย่อย
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# กันหน้าเว็บถูกฝังใน iframe ของเว็บอื่นเพื่อหลอกให้กดปุ่ม
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		# ไม่ต้องบอกใครว่าเบื้องหลังเป็นอะไร
+		-Server
+		-X-Powered-By
+	}
+
+	# ตัวตรวจสุขภาพไม่ต้องเก็บ log ปนกับคำขอจริง ไม่งั้น log เต็มไปด้วยมัน
+	@health path /healthz
+	log_skip @health
+
+	log {
+		output file /var/log/caddy/drivegolight.log {
+			roll_size 20MiB
+			roll_keep 14
+		}
+	}
+}
