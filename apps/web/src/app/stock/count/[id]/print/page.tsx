@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { query, requirePerm } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
 import { getCount } from '@/lib/stock-counts';
 import { getShop } from '@/lib/queries';
 import { PrintButton } from '../../../../income/[id]/print/print-button';
@@ -16,7 +16,7 @@ export default async function CountPrintPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ sys?: string }>;
 }) {
-  await requirePerm('stock');
+  await requireTab('stock', 'count');
   const { id } = await params;
   const sp = await searchParams;
 

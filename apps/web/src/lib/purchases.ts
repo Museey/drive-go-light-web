@@ -196,7 +196,7 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
     }
 
     return { id: id!, docNo };
-  });
+  }, { sub: 'purchase' });
 }
 
 export async function voidBuyDoc(id: string, reason: string): Promise<void> {
@@ -223,7 +223,7 @@ export async function voidBuyDoc(id: string, reason: string): Promise<void> {
       `update documents set status='void', voided_at=now(), voided_reason=$2 where id=$1`,
       [id, reason || 'ยกเลิกโดยผู้ใช้'],
     );
-  });
+  }, { sub: 'purchase' });
 }
 
 /* =====================================================================

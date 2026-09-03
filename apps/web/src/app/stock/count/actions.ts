@@ -33,7 +33,7 @@ export async function createCountAction(_prev: FormResult, fd: FormData): Promis
   let made: { id: string };
   try {
     made = await mutate('stock', (c, userId) =>
-      createCount(c, { countDate, note: str(fd, 'note') }, userId));
+      createCount(c, { countDate, note: str(fd, 'note') }, userId), { sub: 'count' });
   } catch (err) {
     return { error: describe(err, 'เปิดใบตรวจนับไม่สำเร็จ') };
   }
@@ -46,7 +46,7 @@ export async function saveCountHeadAction(
 ): Promise<FormResult> {
   await requirePerm('stock');
   try {
-    await mutate('stock', (c) => saveCountHead(c, id, { countDate, note }));
+    await mutate('stock', (c) => saveCountHead(c, id, { countDate, note }), { sub: 'count' });
   } catch (err) {
     return { error: describe(err, 'บันทึกไม่สำเร็จ') };
   }
@@ -57,7 +57,7 @@ export async function saveCountHeadAction(
 export async function addCountItemsAction(id: string, productIds: string[]): Promise<FormResult> {
   await requirePerm('stock');
   try {
-    await mutate('stock', (c) => addCountItems(c, id, productIds));
+    await mutate('stock', (c) => addCountItems(c, id, productIds), { sub: 'count' });
   } catch (err) {
     return { error: describe(err, 'ดึงสินค้าไม่สำเร็จ') };
   }
@@ -71,7 +71,7 @@ export async function scanAction(
 ): Promise<{ result?: ScanResult; error?: string }> {
   await requirePerm('stock');
   try {
-    const result = await mutate('stock', (c) => scanIntoCount(c, id, term));
+    const result = await mutate('stock', (c) => scanIntoCount(c, id, term), { sub: 'count' });
     paths(id);
     return { result };
   } catch (err) {
@@ -88,7 +88,7 @@ export async function setCountedAction(itemId: string, raw: string): Promise<For
   const value = text === '' ? null : qty(fd, 'q');
 
   try {
-    await mutate('stock', (c) => setCountedQty(c, itemId, value));
+    await mutate('stock', (c) => setCountedQty(c, itemId, value), { sub: 'count' });
   } catch (err) {
     return { error: describe(err, 'บันทึกจำนวนไม่สำเร็จ') };
   }
@@ -98,7 +98,7 @@ export async function setCountedAction(itemId: string, raw: string): Promise<For
 export async function removeCountItemAction(itemId: string, id: string): Promise<FormResult> {
   await requirePerm('stock');
   try {
-    await mutate('stock', (c) => removeCountItem(c, itemId));
+    await mutate('stock', (c) => removeCountItem(c, itemId), { sub: 'count' });
   } catch (err) {
     return { error: describe(err, 'เอารายการออกไม่สำเร็จ') };
   }
@@ -109,7 +109,7 @@ export async function removeCountItemAction(itemId: string, id: string): Promise
 export async function applyCountAction(id: string): Promise<FormResult> {
   await requirePerm('stock');
   try {
-    const r = await mutate('stock', (c, userId) => applyCount(c, id, userId));
+    const r = await mutate('stock', (c, userId) => applyCount(c, id, userId), { sub: 'count' });
     paths(id);
     return {
       ok: true,
@@ -126,7 +126,7 @@ export async function applyCountAction(id: string): Promise<FormResult> {
 export async function deleteCountAction(id: string): Promise<FormResult> {
   await requirePerm('stock');
   try {
-    await mutate('stock', (c) => deleteCount(c, id));
+    await mutate('stock', (c) => deleteCount(c, id), { sub: 'count' });
   } catch (err) {
     return { error: describe(err, 'ลบใบตรวจนับไม่สำเร็จ') };
   }

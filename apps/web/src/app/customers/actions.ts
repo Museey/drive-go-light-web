@@ -57,8 +57,10 @@ export async function saveContactAction(_prev: FormResult, fd: FormData): Promis
   redirect(`/customers/${savedId}?saved=1`);
 }
 
-export async function deleteContactAction(id: string): Promise<void> {
-  const result = await deleteContact(id);
+export async function deleteContactAction(
+  id: string, kind: 'customer' | 'vendor' = 'customer',
+): Promise<void> {
+  const result = await deleteContact(id, kind);
   if (!result.ok) {
     redirect(`/customers/${id}?error=${encodeURIComponent(result.reason ?? 'ลบไม่สำเร็จ')}`);
   }

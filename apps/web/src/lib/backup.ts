@@ -303,7 +303,17 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         .map((u) => ({
           id: u.id, code: u.code, name: u.name, active: u.active,
           created: u.created_at?.toISOString?.().slice(0, 10) ?? '',
-          perms: Object.fromEntries((u.perms ?? []).map((p: string) => [p, true])),
+          /* รูปแบบเดียวกับ perms ของรุ่น 6.4 — เมนูเป็นคีย์ระดับบน
+             แล้วสิทธิ์รายแท็บอยู่ใน tabs/editTabs/exportTabs เหมือนต้นฉบับ
+             เพื่อให้ไฟล์ที่ส่งออกเปิดด้วยโปรแกรมเดิมได้ */
+          perms: {
+            ...(u.perms?.menus ?? {}),
+            ...(u.perms?.cost === false ? { cost: false } : {}),
+            ...(u.perms?.homeReport === false ? { homeReport: false } : {}),
+            ...(u.perms?.tabs ? { tabs: u.perms.tabs } : {}),
+            ...(u.perms?.edit ? { editTabs: u.perms.edit } : {}),
+            ...(u.perms?.export ? { exportTabs: u.perms.export } : {}),
+          },
         })),
 
       seq: {

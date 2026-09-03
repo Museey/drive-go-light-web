@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { STOCK_FLAG_LABEL, type StockFlag } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { getStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
 import { listPendingItems } from '@/lib/pending';
@@ -8,6 +8,7 @@ import { ColPicker } from './col-picker';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listCategories, listProducts } from '@/lib/products';
+import { canCost } from '@/lib/perms';
 import { baht, thDate } from '@/lib/format';
 import { CategoryManager } from './category-manager';
 
@@ -20,7 +21,7 @@ export default async function StockPage({
     q?: string; cat?: string; reorder?: string; all?: string; page?: string; flag?: string; size?: string;
   }>;
 }) {
-  await requirePerm('stock');
+  const session = await requireTab('stock', 'list');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const flag = (['min', 'max', 'dead'] as const).find((f) => f === sp.flag);
@@ -42,7 +43,10 @@ export default async function StockPage({
   ]);
 
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
-  const show = (k: string) => !hidden.includes(k as never);
+  /* ต้นทุนถูกซ่อนได้สองทาง — ผู้ใช้เลือกซ่อนคอลัมน์เอง หรือไม่มีสิทธิ์เห็นต้นทุน
+     ตรงกับ colOn() ของรุ่น 6.4 ที่รวมสองเงื่อนไขนี้ไว้ในที่เดียว */
+  const seeCost = canCost(session);
+  const show = (k: string) => (k === 'cost' && !seeCost ? false : !hidden.includes(k as never));
   const keep = {
     ...(sp.q ? { q: sp.q } : {}),
     ...(sp.cat ? { cat: sp.cat } : {}),

@@ -154,7 +154,7 @@ describe.skipIf(!DB_URL)('ลบข้อมูลของอู่', () => {
       const id = t.rows[0].id;
       const u = await admin.query(
         `insert into users (tenant_id, code, name, email, role, perms)
-         values ($1, 'U01', 'เจ้าของ', $2, 'owner', array['settings']) returning id`,
+         values ($1, 'U01', 'เจ้าของ', $2, 'owner', '{"menus":{"settings":true}}'::jsonb) returning id`,
         [id, `${name}@example.com`],
       );
       const ct = await admin.query(

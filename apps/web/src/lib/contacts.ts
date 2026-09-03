@@ -252,6 +252,7 @@ export async function nextContactCode(kind: 'customer' | 'vendor'): Promise<stri
 }
 
 export async function saveContact(input: ContactInput): Promise<string> {
+  /* ทะเบียนลูกค้ากับทะเบียนผู้ขายเป็นคนละแท็บ สิทธิ์แก้ไขจึงแยกกัน */
   return mutate('customer', async (c) => {
     let id = input.id;
 
@@ -319,7 +320,9 @@ export async function saveContact(input: ContactInput): Promise<string> {
  * ถ้ามีเอกสารแล้วห้ามลบ เพราะเสียประวัติซื้อขายและลูกหนี้ค้างชำระไปด้วย
  * (ตัวคอลัมน์ตั้งเป็น ON DELETE SET NULL ลบไปเอกสารก็ไม่พังแต่ตามรอยกลับไม่ได้อีก)
  */
-export async function deleteContact(id: string): Promise<{ ok: boolean; reason?: string }> {
+export async function deleteContact(
+  id: string, kind: 'customer' | 'vendor' = 'customer',
+): Promise<{ ok: boolean; reason?: string }> {
   return mutate('customer', async (c) => {
     const { rows } = await c.query(
       `select count(*)::int as c from documents where party_id = $1`, [id],
@@ -333,5 +336,5 @@ export async function deleteContact(id: string): Promise<{ ok: boolean; reason?:
     }
     await c.query(`delete from contacts where id = $1`, [id]);
     return { ok: true };
-  });
+  }, { sub: kind });
 }

@@ -2,6 +2,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Icon } from './icon';
 import { MENU, type SubItem } from './menu-map';
+import { currentSession } from '@/lib/auth';
+import { canTab, type PermKey } from '@/lib/perms';
 
 /**
  * เมนูย่อยแนวตั้งชิดซ้าย ตามรุ่น 6.4
@@ -11,9 +13,12 @@ import { MENU, type SubItem } from './menu-map';
  *
  * ใต้รายการแท็บมีที่ว่างสำหรับการ์ดปุ่มทำงาน (เช่น "+ เพิ่มสินค้า")
  * ส่งเข้ามาทาง prop actions
+ *
+ * แท็บที่ผู้ใช้คนนี้เข้าไม่ได้ถูกซ่อน — อ่าน session เองเพื่อให้ทุกหน้าที่เรียก
+ * ไม่ต้องส่งเข้ามาทีละที่ แล้วลืมที่ใดที่หนึ่ง
  */
 
-export function SubNav({
+export async function SubNav({
   menu, current, badges, actions, children,
 }: {
   /** คีย์เมนูหลัก เช่น 'stock' */
@@ -26,7 +31,11 @@ export function SubNav({
   children: ReactNode;
 }) {
   const item = MENU.find((m) => m.key === menu);
-  const subs = item?.subs ?? [];
+  const session = await currentSession();
+  const all = item?.subs ?? [];
+  const subs = session && item?.perm
+    ? all.filter((s2) => canTab(session, item.perm as PermKey, s2.key))
+    : all;
 
   if (subs.length === 0) return <>{children}</>;
 

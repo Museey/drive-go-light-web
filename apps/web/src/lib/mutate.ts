@@ -1,10 +1,20 @@
 import 'server-only';
 import type pg from 'pg';
-import { requirePerm, type Perm } from './auth';
+import { requireEdit, requirePerm, type Perm } from './auth';
 import { withTenant } from './db';
 import { licenseStatusWith } from './license-window';
 
 export interface MutateOptions {
+  /**
+   * เมนูย่อยที่การเขียนครั้งนี้อยู่ เช่น 'count' ใน 'stock.count'
+   *
+   * ใส่แล้วตรวจสิทธิ์ "แก้ไขได้" ให้ในที่เดียว ไม่ต้องไล่เรียก requireEdit
+   * ทีละ action สี่สิบตัวแล้วลืมตัวใดตัวหนึ่ง
+   *
+   * ไม่ใส่ = ตรวจแค่ระดับเมนูหลักแบบเดิม ใช้กับงานที่ไม่ผูกกับแท็บใดแท็บหนึ่ง
+   * (เช่น การดึงสินค้าเข้าเอกสารขายซึ่งไม่นับเป็นการแก้ทะเบียนสินค้า)
+   */
+  sub?: string;
   /**
    * ให้ทำงานได้แม้การใช้งานหมดอายุ
    *
@@ -28,7 +38,9 @@ export async function mutate<T>(
   fn: (client: pg.PoolClient, userId: string) => Promise<T>,
   options: MutateOptions = {},
 ): Promise<T> {
-  const session = await requirePerm(perm);
+  const session = options.sub
+    ? await requireEdit(perm, options.sub)
+    : await requirePerm(perm);
 
   return withTenant(session.tenantId, async (c) => {
     if (!options.allowExpired) {

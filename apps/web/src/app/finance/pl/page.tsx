@@ -1,4 +1,4 @@
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { PrintHeader } from '@/components/print-header';
@@ -14,7 +14,7 @@ export default async function PLPage({
 }: {
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  await requirePerm('finance');
+  await requireTab('finance', 'pl');
   const sp = await searchParams;
   const pl = await getProfitAndLoss(sp.from, sp.to);
 

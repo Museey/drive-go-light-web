@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { query, requirePerm } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
@@ -15,7 +15,7 @@ export default async function CountPage({
 }: {
   searchParams: Promise<{ q?: string; from?: string; to?: string; month?: string; year?: string }>;
 }) {
-  await requirePerm('stock');
+  await requireTab('stock', 'count');
   const sp = await searchParams;
   const { from, to } = rangeFromParams(sp);
 

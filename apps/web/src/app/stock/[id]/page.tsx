@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { today } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
+import { canCost, canEdit, HIDDEN_COST } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { getProduct, listCategories, listProductLots, listStockMoves } from '@/lib/products';
 import { baht, thDate } from '@/lib/format';
@@ -28,7 +29,9 @@ export default async function ProductPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ saved?: string }>;
 }) {
-  await requirePerm('stock');
+  const session = await requireTab('stock', 'list');
+  const seeCost = canCost(session);
+  const mayEdit = canEdit(session, 'stock', 'list');
   const { id } = await params;
   const sp = await searchParams;
   const isNew = id === 'new';
@@ -53,15 +56,42 @@ export default async function ProductPage({
     >
       {sp.saved ? <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย</div> : null}
 
-      <div className="card">
-        <header><h2>{isNew ? 'ข้อมูลสินค้า' : 'แก้ไขข้อมูลสินค้า'}</h2></header>
-        <div className="body">
-          <ProductForm product={product} categories={categories} />
+      {/* ไม่มีสิทธิ์แก้ก็ไม่ต้องเห็นฟอร์ม — เซิร์ฟเวอร์ปฏิเสธอยู่แล้ว
+          แต่การให้กรอกจนเสร็จแล้วค่อยบอกว่าทำไม่ได้ เป็นการเสียเวลาของคนทำงาน */}
+      {mayEdit ? (
+        <div className="card">
+          <header><h2>{isNew ? 'ข้อมูลสินค้า' : 'แก้ไขข้อมูลสินค้า'}</h2></header>
+          <div className="body">
+            <ProductForm product={product} categories={categories} />
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="card">
+          <header><h2>ข้อมูลสินค้า</h2></header>
+          <div className="body">
+            <div className="grid g4">
+              <div className="kv"><b>รหัสสินค้า</b><span className="mono">{product?.code}</span></div>
+              <div className="kv"><b>รหัส OEM</b><span className="mono">{product?.oem || '-'}</span></div>
+              <div className="kv" style={{ gridColumn: 'span 2' }}>
+                <b>ชื่อสินค้า</b><span>{product?.name}</span>
+              </div>
+              <div className="kv"><b>หน่วยนับ</b><span>{product?.unit || '-'}</span></div>
+              <div className="kv"><b>หมวดหมู่</b><span>{product?.categoryName || '-'}</span></div>
+              <div className="kv"><b>คงเหลือ</b><span>{product?.qtyOnHand}</span></div>
+            </div>
+            <div className="note" style={{ marginTop: 12 }}>
+              บัญชีของคุณเปิดดูทะเบียนสินค้าได้อย่างเดียว แก้ไขไม่ได้ — ติดต่อเจ้าของกิจการ
+            </div>
+          </div>
+        </div>
+      )}
 
       {product ? (
         <>
+          {/* สองการ์ดนี้เขียนข้อมูล — ซ่อนถ้าไม่มีสิทธิ์แก้ไข
+              ส่วนล็อตคงเหลือกับประวัติเป็นการอ่าน จึงยังเห็นได้ */}
+          {mayEdit ? (
+          <>
           <div className="card">
             <header>
               <h2>รับเข้า / ตัดออก</h2>
@@ -87,13 +117,15 @@ export default async function ProductPage({
               <AdjustForm productId={product.id} current={product.qtyOnHand} unit={product.unit} />
             </div>
           </div>
+          </>
+          ) : null}
 
           <div className="card">
             <header>
               <h2>ล็อตคงเหลือ</h2>
               <div className="spacer" />
               <span className="subtle">
-                มูลค่าตามต้นทุน {baht(lotValue)} บาท · ตัดจากล็อตบนสุดก่อน
+                มูลค่าตามต้นทุน {seeCost ? baht(lotValue) : HIDDEN_COST} บาท · ตัดจากล็อตบนสุดก่อน
               </span>
             </header>
             {lots.length === 0 ? (
@@ -105,7 +137,7 @@ export default async function ProductPage({
                     <tr>
                       <th>รับเข้าเมื่อ</th>
                       <th className="num">คงเหลือ</th>
-                      <th className="num">ต้นทุน/หน่วย</th>
+                      {seeCost ? <th className="num">ต้นทุน/หน่วย</th> : null}
                       <th className="num">เป็นเงิน</th>
                     </tr>
                   </thead>
@@ -114,8 +146,8 @@ export default async function ProductPage({
                       <tr key={i}>
                         <td>{thDate(l.on)}{i === 0 ? <span className="chip" style={{ marginLeft: 6 }}>ตัดก่อน</span> : null}</td>
                         <td className="num">{l.qty.toLocaleString('en-US')} {product!.unit}</td>
-                        <td className="num">{baht(l.unitCost)}</td>
-                        <td className="num">{baht(l.qty * l.unitCost)}</td>
+                        {seeCost ? <td className="num">{baht(l.unitCost)}</td> : null}
+                        {seeCost ? <td className="num">{baht(l.qty * l.unitCost)}</td> : null}
                       </tr>
                     ))}
                   </tbody>
@@ -138,7 +170,7 @@ export default async function ProductPage({
                   <thead>
                     <tr>
                       <th>วันที่</th><th>ประเภท</th><th className="num">จำนวน</th>
-                      <th className="num">ต้นทุน</th>
+                      {seeCost ? <th className="num">ต้นทุน</th> : null}
                       <th>เอกสาร</th><th>หมายเหตุ</th>
                     </tr>
                   </thead>
@@ -150,9 +182,11 @@ export default async function ProductPage({
                         <td className="num" style={{ color: m.qtyDelta < 0 ? 'var(--due)' : 'var(--ok)' }}>
                           {m.qtyDelta > 0 ? '+' : ''}{m.qtyDelta.toLocaleString('en-US')}
                         </td>
-                        <td className="num" style={{ color: 'var(--ink-3)' }}>
-                          {m.costAmount === null ? '-' : baht(m.costAmount)}
-                        </td>
+                        {seeCost ? (
+                          <td className="num" style={{ color: 'var(--ink-3)' }}>
+                            {m.costAmount === null ? '-' : baht(m.costAmount)}
+                          </td>
+                        ) : null}
                         <td className="mono">
                           {m.docId
                             ? <Link href={`/income/${m.docId}`} style={{ textDecoration: 'underline' }}>{m.docNo}</Link>

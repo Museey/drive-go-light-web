@@ -44,5 +44,5 @@ export async function setStockHiddenCols(cols: string[]): Promise<void> {
         where id = current_tenant_id()`,
       [JSON.stringify(clean)],
     );
-  });
+  }, { sub: 'list' });
 }

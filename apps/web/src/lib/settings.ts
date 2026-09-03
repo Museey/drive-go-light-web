@@ -5,7 +5,7 @@ import { mutate } from './mutate';
 const n = (v: unknown): number => Number(v ?? 0);
 
 export { PERM_KEYS, PERM_LABEL, type PermKey, type StaffUser } from './perms';
-import type { PermKey, StaffUser } from './perms';
+import { seatsLeft, type PermKey, type Perms, type StaffUser } from './perms';
 
 /* =====================================================================
    ข้อมูลร้าน
@@ -62,7 +62,7 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
         input.warrantyText || null, input.logoUrl || null,
       ],
     );
-  }, { allowExpired: true });
+  }, { sub: 'shop', allowExpired: true });
 }
 
 /* =====================================================================
@@ -78,7 +78,7 @@ export async function listUsers(): Promise<StaffUser[]> {
     );
     return rows.map((r) => ({
       id: r.id, code: r.code, name: r.name, email: r.email ?? '',
-      role: r.role, perms: r.perms ?? [], active: r.active,
+      role: r.role, perms: (r.perms ?? {}) as Perms, active: r.active,
       hasPassword: r.has_password, lastLoginAt: r.last_login_at,
       lockedUntil: r.locked_until,
     }));
@@ -87,10 +87,12 @@ export async function listUsers(): Promise<StaffUser[]> {
 
 export interface StaffInput {
   id?: string;
+  /** รหัสพนักงานสำหรับอ้างอิงในเอกสาร — ไม่ใช่รหัสเข้าระบบ */
   code: string;
   name: string;
+  /** อีเมลที่ใช้เข้าระบบจริง */
   email: string;
-  perms: PermKey[];
+  perms: Perms;
   active: boolean;
 }
 
@@ -115,8 +117,11 @@ export async function saveStaff(input: StaffInput, currentUserId: string): Promi
   return mutate('settings', async (c) => {
     if (input.id === currentUserId) {
       if (!input.active) throw new Error('ปิดการใช้งานบัญชีของตัวเองไม่ได้');
-      if (!input.perms.includes('settings')) {
+      if (input.perms.menus?.settings !== true) {
         throw new Error('ถอดสิทธิ์ตั้งค่าร้านของตัวเองไม่ได้ — จะเข้าหน้านี้ไม่ได้อีก');
+      }
+      if (input.perms.tabs?.['settings.staff'] === false) {
+        throw new Error('ปิดแท็บตั้งค่าพนักงานของตัวเองไม่ได้ — จะเข้าหน้านี้ไม่ได้อีก');
       }
     }
 
@@ -137,19 +142,38 @@ export async function saveStaff(input: StaffInput, currentUserId: string): Promi
 
       await c.query(
         `update users set code=$2, name=$3, email=$4, perms=$5, active=$6 where id=$1`,
-        [input.id, input.code, input.name, input.email || null, input.perms, input.active],
+        [input.id, input.code, input.name, input.email || null,
+         JSON.stringify(input.perms), input.active],
       );
       return input.id;
+    }
+
+    /* ที่นั่งพนักงานตามแพ็กเกจ — ตรวจตอนสร้างบัญชีใหม่เท่านั้น ไม่ตรวจตอนล็อกอิน
+       ลดแพ็กเกจแล้วต้องไม่มีใครถูกล็อกออกจากระบบกลางดึกโดยไม่รู้ตัว
+       เจ้าของกิจการไม่ถูกนับ เพราะที่นั่งที่ขายคือที่นั่งพนักงาน */
+    const seat = await c.query(
+      `select (select max_users from subscriptions
+                order by expires_on desc limit 1) as max_users,
+              (select count(*)::int from users
+                where role = 'staff' and active) as staff`,
+    );
+    const max = seat.rows[0].max_users === null ? null : Number(seat.rows[0].max_users);
+    if (seatsLeft(max, Number(seat.rows[0].staff)) === 0) {
+      throw new Error(
+        `แพ็กเกจนี้เปิดบัญชีพนักงานได้ ${max} คน — ` +
+        'ปิดการเข้าใช้งานของคนที่ไม่ได้ทำงานแล้ว หรือติดต่อผู้ให้บริการเพื่อเพิ่มจำนวน',
+      );
     }
 
     const { rows } = await c.query(
       `insert into users (tenant_id, code, name, email, role, perms, active)
        values (current_tenant_id(), $1, $2, $3, 'staff', $4, $5)
        returning id`,
-      [input.code, input.name, input.email || null, input.perms, input.active],
+      [input.code, input.name, input.email || null,
+       JSON.stringify(input.perms), input.active],
     );
     return rows[0].id;
-  }, { allowExpired: true });
+  }, { sub: 'staff', allowExpired: true });
 }
 
 /** ให้สิทธิ์เจ้าของกิจการกับพนักงานอีกคน — ใช้ตอนเปลี่ยนมือหรือมีหุ้นส่วน */
@@ -157,11 +181,13 @@ export async function promoteToOwner(userId: string): Promise<void> {
   return mutate('settings', async (c) => {
     await c.query(
       `update users set role = 'owner',
-              perms = array['customer','income','expense','stock','finance','settings']
+              perms = jsonb_build_object('menus', jsonb_build_object(
+                'customer', true, 'income', true, 'expense', true,
+                'stock', true, 'finance', true, 'settings', true))
        where id = $1`,
       [userId],
     );
-  });
+  }, { sub: 'staff' });
 }
 
 export async function getUserById(id: string): Promise<StaffUser | null> {

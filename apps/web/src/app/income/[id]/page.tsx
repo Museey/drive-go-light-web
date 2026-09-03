@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getDocDetail, getShop } from '@/lib/queries';
 import { canEdit } from '@/lib/sales';
@@ -19,7 +19,7 @@ export default async function DocPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
-  const session = await requirePerm('income');
+  const session = await requireTab('income', 'receipt');
   const { id } = await params;
   const sp = await searchParams;
   const [doc, shop, editable, payments] = await Promise.all([

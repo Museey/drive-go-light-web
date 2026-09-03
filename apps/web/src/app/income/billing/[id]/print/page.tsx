@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext } from '@drivegolight/core';
-import { query, requirePerm } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
 import { getBillnote } from '@/lib/billnotes';
 import { getShop } from '@/lib/queries';
 import { PrintButton } from '../../../[id]/print/print-button';
@@ -10,7 +10,7 @@ import { baht, KIND_SHORT, thDate, thDateLong } from '@/lib/format';
 export const dynamic = 'force-dynamic';
 
 export default async function BillnotePrintPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePerm('income');
+  await requireTab('income', 'billing');
   const { id } = await params;
 
   const [data, shop] = await Promise.all([

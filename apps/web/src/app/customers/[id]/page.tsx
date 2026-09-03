@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getContact, getContactHistory, nextContactCode } from '@/lib/contacts';
 import { baht, KIND_SHORT, thDate } from '@/lib/format';
@@ -15,7 +15,7 @@ export default async function ContactPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ saved?: string; error?: string; kind?: string }>;
 }) {
-  await requirePerm('customer');
+  await requireTab('customer', 'customer');
   const { id } = await params;
   const sp = await searchParams;
   const isNew = id === 'new';
@@ -99,7 +99,8 @@ export default async function ContactPage({
                   ประวัติซื้อขายและยอดค้างชำระจะหายไปด้วย
                 </p>
               ) : (
-                <DeleteContactButton id={contact.id} name={contact.displayName || contact.code} />
+                <DeleteContactButton id={contact.id} kind={contact.kind}
+                                     name={contact.displayName || contact.code} />
               )}
             </div>
           </div>

@@ -4,7 +4,14 @@ import { useState } from 'react';
 import { deleteContactAction } from './actions';
 
 /** ลบต้องยืนยันสองจังหวะ — กดพลาดแล้วข้อมูลหายทันทีไม่ได้ */
-export function DeleteContactButton({ id, name }: { id: string; name: string }) {
+export function DeleteContactButton({
+  id, name, kind,
+}: {
+  id: string;
+  name: string;
+  /** ทะเบียนลูกค้ากับผู้ขายเป็นคนละแท็บ สิทธิ์แก้ไขจึงแยกกัน */
+  kind: 'customer' | 'vendor';
+}) {
   const [confirming, setConfirming] = useState(false);
 
   if (!confirming) {
@@ -18,7 +25,7 @@ export function DeleteContactButton({ id, name }: { id: string; name: string }) 
   return (
     <div className="tag-row">
       <span style={{ fontSize: 13.5 }}>ยืนยันลบ <b>{name}</b>? การลบนี้ย้อนกลับไม่ได้</span>
-      <form action={deleteContactAction.bind(null, id)}>
+      <form action={deleteContactAction.bind(null, id, kind)}>
         <button className="btn danger" type="submit">ลบเลย</button>
       </form>
       <button className="btn" type="button" onClick={() => setConfirming(false)}>ยกเลิก</button>

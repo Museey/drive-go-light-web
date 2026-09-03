@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
 import { canEdit, loadDocForCopy } from '@/lib/sales';
@@ -10,7 +10,7 @@ import { DocEditor } from '../../doc-editor';
 export const dynamic = 'force-dynamic';
 
 export default async function EditDocPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePerm('income');
+  await requireTab('income', 'receipt');
   const { id } = await params;
 
   const allowed = await canEdit(id);

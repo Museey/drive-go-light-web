@@ -14,7 +14,20 @@ import { randomUUID } from 'node:crypto';
 import {
   exTotals, isServiceItem, num, poTotals, recTotals, round2, totalsOf,
 } from '@drivegolight/core';
-import type { ShopContext, VatMode } from '@drivegolight/core';
+import { permsFromLegacy, type PermKey, type ShopContext, type VatMode } from '@drivegolight/core';
+
+/**
+ * ผังเมนูย่อยของระบบใหม่ — ใช้ตอนกางสิทธิ์รูปแบบเก่าให้เป็นรายแท็บ
+ * ต้องตรงกับ SUB_KEYS ใน apps/web/src/components/menu-map.ts (มีเทสต์เทียบให้)
+ */
+const SUB_KEYS: Record<PermKey, string[]> = {
+  customer: ['customer', 'vendor'],
+  income: ['quote', 'invoice', 'receipt', 'billing'],
+  expense: ['purchase', 'expense'],
+  stock: ['list', 'pending', 'claim', 'vclaim', 'count'],
+  finance: ['sales', 'ar', 'ap', 'pl'],
+  settings: ['shop', 'staff', 'import'],
+};
 import { addrLine, normalizeBackup, validateBackup } from './normalize.js';
 import type { BackupFile } from './normalize.js';
 import { unsupportedCollections, unsupportedWarnings } from './support.js';
@@ -151,11 +164,13 @@ export async function importBackup(
       ],
     );
 
-    /* ---------- ผู้ใช้งาน ---------- */
-    const PERM_KEYS = ['customer', 'income', 'expense', 'stock', 'finance', 'settings'];
+    /* ---------- ผู้ใช้งาน ----------
+       สิทธิ์ในไฟล์เดิมมีสองรูปแบบปนกัน แปลงครั้งเดียวตอนนำเข้าด้วย permsFromLegacy
+       จะได้ไม่ต้องแบกทางเลือกสองทางไว้ในโค้ดที่ใช้งานประจำวัน */
     const userRows = restoring ? [] : (db.users ?? []).map((u: any) => [
       randomUUID(), tenantId, text(u.code), text(u.name), 'staff',
-      PERM_KEYS.filter((k) => u.perms?.[k]), u.active !== false, text(u.id),
+      JSON.stringify(permsFromLegacy(u.perms, (m) => SUB_KEYS[m] ?? [])),
+      u.active !== false, text(u.id),
     ]);
     await insertRows(client, 'users',
       ['id', 'tenant_id', 'code', 'name', 'role', 'perms', 'active', 'legacy_id'], userRows);

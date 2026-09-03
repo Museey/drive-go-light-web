@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { can, requireSession } from '@/lib/auth';
+import { canHomeReport } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { DateRange } from '@/components/date-range';
 import { Icon } from '@/components/icon';
@@ -24,6 +25,7 @@ export default async function HomePage({
   const seesIncome = can(session, 'income');
   const seesFinance = can(session, 'finance');
   const seesStock = can(session, 'stock');
+  const seesReport = canHomeReport(session);
 
   const [shop, summary, tax] = await Promise.all([
     getShop(),
@@ -41,12 +43,18 @@ export default async function HomePage({
         </div>
       ) : null}
 
-      <div className="card" style={{ marginBottom: 18 }}>
-        <DateRange base="/" from={sp.from} to={sp.to} />
-      </div>
+      {seesReport ? (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <DateRange base="/" from={sp.from} to={sp.to} />
+        </div>
+      ) : null}
 
       {/* ---------- การ์ดสรุป ตามรุ่น 6.4 ----------
-           แต่ละใบมีปุ่มพาไปหน้าที่ทำงานต่อได้ ไม่ใช่แค่บอกตัวเลขแล้วปล่อยให้หาเอง */}
+           แต่ละใบมีปุ่มพาไปหน้าที่ทำงานต่อได้ ไม่ใช่แค่บอกตัวเลขแล้วปล่อยให้หาเอง
+
+           พนักงานที่ถูกปิดสิทธิ์ "เห็นรายงานสรุปหน้าแรก" จะเหลือแค่การ์ดเมนูใช้งาน
+           ไม่เห็นยอดขาย ลูกหนี้ เจ้าหนี้ และภาษี ตามรุ่น 6.4 */}
+      {seesReport ? (
       <div className="hgrid" style={{ marginBottom: 16 }}>
 
         <div className="hcard">
@@ -148,9 +156,10 @@ export default async function HomePage({
         </div>
 
       </div>
+      ) : null}
 
       {/* ---------- ของที่ควรสั่งก่อน ---------- */}
-      {seesStock && summary.reorderTop.length > 0 ? (
+      {seesReport && seesStock && summary.reorderTop.length > 0 ? (
         <div className="card">
           <header>
             <h2>สินค้าที่ควรสั่งก่อน</h2>

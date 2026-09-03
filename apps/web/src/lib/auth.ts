@@ -5,11 +5,17 @@ import { redirect } from 'next/navigation';
 import type pg from 'pg';
 import { withoutTenant, withTenant } from './db';
 import { verifyPassword } from './password';
+import {
+  canCost as canCostOf, canEdit as canEditOf, canExport as canExportOf,
+  canHomeReport as canHomeReportOf, canMenu, canTab as canTabOf,
+  type PermKey, type Perms,
+} from './perms';
 
 const COOKIE = 'dgl_session';
 const SESSION_DAYS = 14;
 
-export type Perm = 'customer' | 'income' | 'expense' | 'stock' | 'finance' | 'settings';
+/** ชื่อเดิมของ PermKey — โค้ดเก่าอ้างชื่อนี้อยู่หลายที่ */
+export type Perm = PermKey;
 
 export interface Session {
   userId: string;
@@ -17,7 +23,7 @@ export interface Session {
   tenantName: string;
   name: string;
   role: 'owner' | 'staff';
-  perms: Perm[];
+  perms: Perms;
 }
 
 /**
@@ -123,7 +129,7 @@ export async function currentSession(): Promise<Session | null> {
       tenantName: s.tenant_name,
       name: s.name,
       role: s.role,
-      perms: s.perms ?? [],
+      perms: (s.perms ?? {}) as Perms,
     };
   });
 }
@@ -136,8 +142,14 @@ export async function requireSession(): Promise<Session> {
 
 /** เจ้าของกิจการทำได้ทุกอย่าง คนอื่นดูตามสิทธิ์ที่ตั้งไว้ */
 export function can(session: Session, perm: Perm): boolean {
-  return session.role === 'owner' || session.perms.includes(perm);
+  return canMenu(session, perm);
 }
+
+export const canTab = canTabOf;
+export const canEdit = canEditOf;
+export const canExport = canExportOf;
+export const canCost = canCostOf;
+export const canHomeReport = canHomeReportOf;
 
 /**
  * ปิดประตูหน้าที่ต้องใช้สิทธิ์เฉพาะ
@@ -148,6 +160,47 @@ export function can(session: Session, perm: Perm): boolean {
 export async function requirePerm(perm: Perm): Promise<Session> {
   const s = await requireSession();
   if (!can(s, perm)) redirect('/?denied=' + perm);
+  return s;
+}
+
+/**
+ * ปิดประตูระดับเมนูย่อย — ใช้แทน requirePerm ในหน้าที่รู้ว่าตัวเองเป็นแท็บไหน
+ * ตรวจเมนูหลักให้ในตัว จึงเรียกตัวนี้ตัวเดียวพอ
+ */
+export async function requireTab(menu: Perm, sub: string): Promise<Session> {
+  const s = await requireSession();
+  if (!canTabOf(s, menu, sub)) redirect(`/?denied=${menu}.${sub}`);
+  return s;
+}
+
+/** ปิดประตูการเขียน — เรียกใน action ที่บันทึก ลบ หรือยกเลิกข้อมูล */
+export async function requireEdit(menu: Perm, sub: string): Promise<Session> {
+  const s = await requireSession();
+  if (!canEditOf(s, menu, sub)) {
+    throw new Error(
+      'บัญชีของคุณเปิดดูส่วนนี้ได้อย่างเดียว แก้ไขข้อมูลไม่ได้ — ติดต่อเจ้าของกิจการ',
+    );
+  }
+  return s;
+}
+
+/** ปิดประตูการพิมพ์ทั้งชุดและการดาวน์โหลดไฟล์ */
+export async function requireExport(menu: Perm, sub: string): Promise<Session> {
+  const s = await requireSession();
+  if (!canExportOf(s, menu, sub)) redirect(`/?denied=export.${menu}.${sub}`);
+  return s;
+}
+
+/**
+ * ปิดประตูสิ่งที่เป็นต้นทุนล้วน — ไฟล์สำรองทั้งอู่ CSV สินค้า และรายงานการเงิน
+ *
+ * ข้อนี้รุ่น 6.4 ไม่ได้ทำ แต่เป็นรูรั่วที่เห็นทันทีเมื่อแยกสิทธิ์ต้นทุนออกมา
+ * ไฟล์สำรองมีต้นทุนของสินค้าทุกตัวและทุกใบซื้ออยู่ในนั้น
+ * ถ้ากันแค่หน้าจอแต่ปล่อยให้กดดาวน์โหลดได้ การซ่อนต้นทุนก็ไม่มีความหมายเลย
+ */
+export async function requireCost(): Promise<Session> {
+  const s = await requireSession();
+  if (!canCostOf(s)) redirect('/?denied=cost');
   return s;
 }
 

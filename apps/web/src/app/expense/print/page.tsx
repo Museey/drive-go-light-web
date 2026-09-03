@@ -1,5 +1,5 @@
 import { EXPENSE_CATS } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { requireExport } from '@/lib/auth';
 import { ListPaper } from '@/components/list-paper';
 import { listBuyDocs } from '@/lib/purchases';
 import { rangeFromParams } from '@/components/doc-date-filter';
@@ -17,7 +17,7 @@ export default async function ExpensePrintPage({
     q?: string; kind?: string; cat?: string; from?: string; to?: string; month?: string; year?: string;
   }>;
 }) {
-  await requirePerm('expense');
+  await requireExport('expense', 'purchase');
   const sp = await searchParams;
   const { from, to } = rangeFromParams(sp);
 

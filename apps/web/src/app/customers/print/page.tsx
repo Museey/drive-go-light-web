@@ -1,4 +1,4 @@
-import { requirePerm } from '@/lib/auth';
+import { requireExport } from '@/lib/auth';
 import { ListPaper } from '@/components/list-paper';
 import { listContacts } from '@/lib/contacts';
 
@@ -12,7 +12,7 @@ export default async function ContactsPrintPage({
 }: {
   searchParams: Promise<{ q?: string; kind?: string; type?: string }>;
 }) {
-  await requirePerm('customer');
+  await requireExport('customer', 'customer');
   const sp = await searchParams;
 
   const { rows, total } = await listContacts({

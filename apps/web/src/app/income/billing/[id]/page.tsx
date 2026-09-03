@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { today } from '@drivegolight/core';
-import { query, requirePerm } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getBillnote, openInvoices } from '@/lib/billnotes';
 import { BillForm, type Party } from '../bill-form';
@@ -16,7 +16,7 @@ export default async function BillnotePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ saved?: string }>;
 }) {
-  await requirePerm('income');
+  await requireTab('income', 'billing');
   const { id } = await params;
   const sp = await searchParams;
   const isNew = id === 'new';

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { barcodeSVG } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { getProduct } from '@/lib/products';
 import { PrintButton } from '../../../income/[id]/print/print-button';
 import { baht } from '@/lib/format';
@@ -20,7 +20,7 @@ export default async function BarcodePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ n?: string }>;
 }) {
-  await requirePerm('stock');
+  await requireTab('stock', 'list');
   const { id } = await params;
   const sp = await searchParams;
 

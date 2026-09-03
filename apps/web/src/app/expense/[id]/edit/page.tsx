@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
 import { getBuyDocMeta, loadBuyDoc } from '@/lib/purchases';
@@ -9,7 +9,7 @@ import { BuyEditor } from '../../buy-editor';
 export const dynamic = 'force-dynamic';
 
 export default async function EditBuyPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePerm('expense');
+  await requireTab('expense', 'purchase');
   const { id } = await params;
 
   const [doc, meta, shop] = await Promise.all([loadBuyDoc(id), getBuyDocMeta(id), getShop()]);

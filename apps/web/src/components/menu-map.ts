@@ -179,3 +179,20 @@ export function menuOf(pathname: string): MenuItem | null {
     .filter((m) => m.href !== '/' && pathname.startsWith(m.href.split('?')[0]!))
     .sort((a, b) => b.href.length - a.href.length)[0] ?? null;
 }
+
+/**
+ * คีย์เมนูย่อยของแต่ละเมนูหลัก — ใช้ตอนตั้งสิทธิ์รายแท็บ
+ *
+ * อ่านจากผังข้างบนเสมอ ไม่เขียนซ้ำเป็นรายการที่สอง
+ * แท็บใหม่ที่เพิ่มในผังจึงมีที่ให้ติ๊กสิทธิ์เองอัตโนมัติ
+ */
+export const SUB_KEYS: Record<string, string[]> =
+  Object.fromEntries(
+    MENU.filter((m) => m.perm).map((m) => [m.perm as string, (m.subs ?? []).map((s) => s.key)]),
+  );
+
+/** ผังแท็บพร้อมเลขกำกับและชื่อ — ใช้วาดตารางติ๊กสิทธิ์ */
+export const SUB_ITEMS: Record<string, SubItem[]> =
+  Object.fromEntries(
+    MENU.filter((m) => m.perm).map((m) => [m.perm as string, m.subs ?? []]),
+  );

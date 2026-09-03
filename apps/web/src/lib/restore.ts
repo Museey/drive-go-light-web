@@ -49,5 +49,5 @@ export async function restoreFromBackup(
     if (!tenantId) throw new Error('ไม่พบข้อมูลอู่ในระบบ');
 
     return restoreIntoTenant(c, tenantId, backup);
-  }, { allowExpired: true });
+  }, { sub: 'import', allowExpired: true });
 }

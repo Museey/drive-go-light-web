@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listIncomeDocs } from '@/lib/queries';
@@ -39,7 +39,7 @@ export default async function IncomePage({
     from?: string; to?: string; month?: string; year?: string;
   }>;
 }) {
-  await requirePerm('income');
+  await requireTab('income', 'receipt');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const search = sp.q ?? '';

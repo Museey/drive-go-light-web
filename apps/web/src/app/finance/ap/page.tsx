@@ -1,4 +1,4 @@
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { PrintHeader } from '@/components/print-header';
@@ -15,7 +15,7 @@ export default async function ApPage({
 }: {
   searchParams: Promise<{ q?: string; overdue?: string; bulk?: string }>;
 }) {
-  await requirePerm('finance');
+  await requireTab('finance', 'ap');
   const sp = await searchParams;
   const onlyOverdue = sp.overdue === '1';
 

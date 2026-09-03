@@ -73,7 +73,7 @@ returns table (
   tenant_name    text,
   name           text,
   role           member_role,
-  perms          text[],
+  perms          jsonb,
   password_hash  text,
   active         boolean,
   locked_until   timestamptz,
@@ -149,7 +149,7 @@ returns table (
   tenant_name text,
   name        text,
   role        member_role,
-  perms       text[]
+  perms       jsonb
 )
 language plpgsql
 security definer
@@ -288,10 +288,15 @@ begin
     return null;
   end if;
 
+  -- เจ้าของข้ามด่านสิทธิ์ทุกด่านอยู่แล้วจาก role — perms ว่างไว้ได้
+  -- แต่ใส่ menus ครบให้เผื่อวันหนึ่งถูกลดเป็นพนักงาน จะได้ไม่เสียสิทธิ์เงียบ ๆ
   insert into users (tenant_id, code, name, email, role, perms, active)
   values (
     p_tenant_id, 'OWNER', coalesce(nullif(p_name, ''), 'เจ้าของกิจการ'), p_email, 'owner',
-    array['customer','income','expense','stock','finance','settings'], true
+    jsonb_build_object('menus', jsonb_build_object(
+      'customer', true, 'income', true, 'expense', true,
+      'stock', true, 'finance', true, 'settings', true)),
+    true
   )
   returning id into v_id;
 

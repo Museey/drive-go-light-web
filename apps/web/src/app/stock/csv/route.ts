@@ -1,9 +1,10 @@
-import { requirePerm } from '@/lib/auth';
+import { requireCost, requireExport } from '@/lib/auth';
 import { exportProductsCsv, productsCsvTemplate } from '@/lib/products-csv';
 
 /** ส่งออกทะเบียนสินค้าเป็น CSV — ใส่ ?template=1 เพื่อขอไฟล์ต้นแบบเปล่า */
 export async function GET(request: Request) {
-  await requirePerm('stock');
+  await requireExport('stock', 'list');
+  await requireCost();          /* ไฟล์นี้มีคอลัมน์ต้นทุน */
   const wantTemplate = new URL(request.url).searchParams.get('template') === '1';
 
   const body = wantTemplate ? productsCsvTemplate() : await exportProductsCsv();

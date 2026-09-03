@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { countIgnoredItems, listPendingItems } from '@/lib/pending';
@@ -9,7 +9,7 @@ import { PendingRow } from './pending-row';
 export const dynamic = 'force-dynamic';
 
 export default async function PendingPage() {
-  await requirePerm('stock');
+  await requireTab('stock', 'pending');
   const [items, ignored] = await Promise.all([listPendingItems(), countIgnoredItems()]);
 
   return (

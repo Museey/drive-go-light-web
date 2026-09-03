@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { query, requirePerm } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
 import { CLAIM_SIDE, getClaim, kindLabel } from '@/lib/claims';
 import { getShop } from '@/lib/queries';
 import { PrintButton } from '../../../../income/[id]/print/print-button';
@@ -9,7 +9,7 @@ import { baht, thDateLong } from '@/lib/format';
 export const dynamic = 'force-dynamic';
 
 export default async function ClaimPrintPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePerm('stock');
+  await requireTab('stock', 'claim');
   const { id } = await params;
 
   const [claim, shop] = await Promise.all([

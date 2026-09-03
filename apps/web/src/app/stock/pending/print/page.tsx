@@ -1,4 +1,4 @@
-import { requirePerm } from '@/lib/auth';
+import { requireExport } from '@/lib/auth';
 import { ListPaper } from '@/components/list-paper';
 import { listPendingItems } from '@/lib/pending';
 import { thDate } from '@/lib/format';
@@ -6,7 +6,7 @@ import { thDate } from '@/lib/format';
 export const dynamic = 'force-dynamic';
 
 export default async function PendingPrintPage() {
-  await requirePerm('stock');
+  await requireExport('stock', 'pending');
   const rows = await listPendingItems();
 
   return (

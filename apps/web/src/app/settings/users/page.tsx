@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listUsers, nextUserCode } from '@/lib/settings';
@@ -8,7 +8,7 @@ import { UserManager } from './user-manager';
 export const dynamic = 'force-dynamic';
 
 export default async function UsersPage() {
-  const session = await requirePerm('settings');
+  const session = await requireTab('settings', 'staff');
   const [users, nextCode] = await Promise.all([listUsers(), nextUserCode()]);
 
   return (

@@ -86,7 +86,7 @@ describe.skipIf(!DB_URL)('ฟังก์ชันยืนยันตัวต
   it('เจ้าของกิจการได้สิทธิ์ครบทุกเมนู', async () => {
     const { rows } = await admin.query(`select role, perms from users where id = $1`, [ownerId]);
     expect(rows[0].role).toBe('owner');
-    expect(rows[0].perms.sort()).toEqual(
+    expect(Object.keys(rows[0].perms.menus).sort()).toEqual(
       ['customer', 'expense', 'finance', 'income', 'settings', 'stock'],
     );
   });

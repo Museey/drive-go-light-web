@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { query, requirePerm } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { CLAIM_SIDE, getClaim, kindLabel } from '@/lib/claims';
 import { baht, thDate } from '@/lib/format';
@@ -14,7 +14,7 @@ export default async function ClaimDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ saved?: string }>;
 }) {
-  await requirePerm('stock');
+  await requireTab('stock', 'claim');
   const { id } = await params;
   const sp = await searchParams;
 

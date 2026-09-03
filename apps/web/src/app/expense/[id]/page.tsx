@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext, EXPENSE_CATS } from '@drivegolight/core';
-import { can, requirePerm } from '@/lib/auth';
+import { can, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getDocDetail } from '@/lib/queries';
 import { getBuyDocMeta } from '@/lib/purchases';
@@ -20,7 +20,7 @@ export default async function BuyDocPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
-  const session = await requirePerm('expense');
+  const session = await requireTab('expense', 'purchase');
   const { id } = await params;
   const sp = await searchParams;
 

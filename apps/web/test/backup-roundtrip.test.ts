@@ -382,6 +382,43 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     expect(await read(secondTenant)).toEqual(a);
   });
 
+  /**
+   * สิทธิ์แบบละเอียดต้องรอดข้ามไฟล์สำรอง — ส่งออกเป็นรูปแบบของรุ่น 6.4
+   * แล้วนำกลับเข้ามาต้องได้สิทธิ์เท่าเดิม ไม่ใช่ตกกลับไปเป็นค่าปริยาย
+   */
+  it('สิทธิ์แบบละเอียดของพนักงานตามไฟล์สำรองไปด้วย', async () => {
+    await admin.query(
+      `insert into users (tenant_id, code, name, email, role, perms, active)
+       values ($1, 'U77', 'พนักงานสิทธิ์จำกัด', 'limited@example.com', 'staff',
+               $2::jsonb, true)`,
+      [firstTenant, JSON.stringify({
+        menus: { stock: true, income: true },
+        tabs: { 'stock.list': true, 'stock.count': false },
+        edit: { 'stock.list': false },
+        cost: false,
+      })],
+    );
+
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [firstTenant]);
+    const exported = await exportBackupWith(app) as unknown as Record<string, any>;
+    const out = exported.users.find((u: any) => u.code === 'U77');
+
+    /* รูปแบบต้องเป็นแบบ 6.4 — เมนูเป็นคีย์ระดับบน สิทธิ์รายแท็บอยู่ใน tabs/editTabs */
+    expect(out.perms.stock).toBe(true);
+    expect(out.perms.cost).toBe(false);
+    expect(out.perms.tabs['stock.count']).toBe(false);
+    expect(out.perms.editTabs['stock.list']).toBe(false);
+
+    const back = await importBackup(app, exported as never, { openingStockDate: '2026-08-28' });
+    const { rows } = await admin.query(
+      `select perms from users where tenant_id = $1 and code = 'U77'`, [back.tenantId],
+    );
+    expect(rows[0].perms.menus).toEqual({ stock: true, income: true });
+    expect(rows[0].perms.cost).toBe(false);
+    expect(rows[0].perms.tabs['stock.count']).toBe(false);
+    expect(rows[0].perms.edit['stock.list']).toBe(false);
+  });
+
   it('ไฟล์สำรองไม่มีรหัสผ่านติดไปด้วย', async () => {
     await app.query(`select set_config('app.tenant_id', $1, false)`, [firstTenant]);
     const exported = await exportBackupWith(app);

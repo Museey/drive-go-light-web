@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { getShopSettings } from '@/lib/settings';
@@ -8,7 +8,7 @@ import { ShopForm } from './shop-form';
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
-  await requirePerm('settings');
+  await requireTab('settings', 'shop');
   const shop = await getShopSettings();
 
   return (

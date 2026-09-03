@@ -287,7 +287,7 @@ export async function saveProduct(input: ProductInput): Promise<string> {
       );
     }
     return id;
-  });
+  }, { sub: 'list' });
 }
 
 /**
@@ -319,7 +319,7 @@ export async function adjustStock(productId: string, countedQty: number, note: s
         reason: 'adjust', note: label, userId,
       });
     }
-  });
+  }, { sub: 'list' });
 }
 
 async function lastCostOf(c: pg.PoolClient, productId: string): Promise<number> {
@@ -370,7 +370,7 @@ export async function recordStockMove(input: {
       productId: input.productId, qty, movedOn: input.movedOn,
       reason: input.direction === 'use' ? 'use' : 'adjust', note, userId,
     });
-  });
+  }, { sub: 'list' });
 }
 
 export async function createCategory(name: string): Promise<string> {
@@ -383,18 +383,18 @@ export async function createCategory(name: string): Promise<string> {
       [name],
     );
     return rows[0].id;
-  });
+  }, { sub: 'list' });
 }
 
 export async function renameCategory(id: string, name: string): Promise<void> {
   return mutate('stock', async (c) => {
     await c.query(`update product_categories set name = $2 where id = $1`, [id, name]);
-  });
+  }, { sub: 'list' });
 }
 
 /** ลบหมวดหมู่ — สินค้าที่อยู่ในหมวดนั้นจะกลายเป็นไม่ระบุหมวด ไม่หายไปไหน */
 export async function deleteCategory(id: string): Promise<void> {
   return mutate('stock', async (c) => {
     await c.query(`delete from product_categories where id = $1`, [id]);
-  });
+  }, { sub: 'list' });
 }

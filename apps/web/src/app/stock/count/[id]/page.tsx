@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { query, requirePerm } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getCount } from '@/lib/stock-counts';
 import { thDate } from '@/lib/format';
@@ -10,7 +10,7 @@ import { CountHead } from '../count-head';
 export const dynamic = 'force-dynamic';
 
 export default async function CountDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePerm('stock');
+  await requireTab('stock', 'count');
   const { id } = await params;
 
   const count = await query((c) => getCount(c, id));

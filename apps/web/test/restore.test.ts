@@ -69,7 +69,8 @@ describe.skipIf(!DB_URL)('กู้คืนข้อมูลทับอู่
     const user = await admin.query(
       `insert into users (tenant_id, code, name, email, role, perms, password_hash)
        values ($1, 'U99', 'เจ้าของอู่ปลายทาง', 'target@example.com', 'owner',
-               array['customer','income','expense','stock','finance','settings'], 'scrypt$x')
+               '{"menus":{"customer":true,"income":true,"expense":true,"stock":true,"finance":true,"settings":true}}'::jsonb,
+               'scrypt$x')
        returning id`,
       [target],
     );

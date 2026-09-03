@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './icon';
 import { BLANK_FORM, MENU, type MenuItem } from './menu-map';
-import type { Perm, Session } from '@/lib/auth';
+import type { Session } from '@/lib/auth';
+import { canMenu, canTab, type PermKey } from '@/lib/perms';
 
 /**
  * แถบเมนูหลัก — แนวนอนด้านบนตามรุ่น 6.4
@@ -12,12 +13,12 @@ import type { Perm, Session } from '@/lib/auth';
  * เมนูที่มีแท็บย่อยกดแล้วหล่นแผงการ์ดลงมา เมนูที่ไม่มีก็ไปหน้านั้นเลย
  * บนมือถือแถบเลื่อนซ้ายขวาได้ ปุ่มหน้าแรกตรึงไว้ซ้ายสุดเพื่อให้กดกลับได้เสมอ
  *
- * เมนูที่ไม่มีสิทธิ์ถูกซ่อน แต่การซ่อนไม่ใช่การป้องกัน — ทุกหน้าเรียก requirePerm() เอง
+ * เมนูและแท็บที่ไม่มีสิทธิ์ถูกซ่อน แต่การซ่อนไม่ใช่การป้องกัน —
+ * ทุกหน้าเรียก requireTab() เอง เพราะผู้ใช้พิมพ์ URL ตรงเข้ามาได้เสมอ
  */
 
-function can(session: Session, perm: Perm | null): boolean {
-  return !perm || session.role === 'owner' || session.perms.includes(perm);
-}
+const can = (session: Session, perm: PermKey | null): boolean =>
+  !perm || canMenu(session, perm);
 
 export function MenuBar({ session, current }: { session: Session; current: string }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -80,7 +81,10 @@ export function MenuBar({ session, current }: { session: Session; current: strin
       </div>
 
       {visible.map((m) => {
-        const subs = (m.subs ?? []).filter(() => true);
+        /* ซ่อนแท็บที่คนนี้เข้าไม่ได้ — เมนูที่ไม่เหลือแท็บเลยก็ไม่ต้องแสดงแผงหล่น */
+        const subs = m.perm
+          ? (m.subs ?? []).filter((sub) => canTab(session, m.perm as PermKey, sub.key))
+          : (m.subs ?? []);
         const showing = open === m.key;
 
         if (subs.length === 0) {

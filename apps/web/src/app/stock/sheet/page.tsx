@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePerm } from '@/lib/auth';
+import { requireExport } from '@/lib/auth';
 import { listCategories, listProducts } from '@/lib/products';
 import { getShop } from '@/lib/queries';
 import { PrintButton } from '../../income/[id]/print/print-button';
@@ -22,7 +22,7 @@ export default async function CountSheetPage({
 }: {
   searchParams: Promise<{ cat?: string; sys?: string; q?: string }>;
 }) {
-  await requirePerm('stock');
+  await requireExport('stock', 'list');
   const sp = await searchParams;
   const showSys = sp.sys === '1';
 

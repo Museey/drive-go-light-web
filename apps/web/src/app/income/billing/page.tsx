@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { query } from '@/lib/auth';
@@ -14,7 +14,7 @@ export default async function BillingPage({
 }: {
   searchParams: Promise<{ q?: string; from?: string; to?: string; month?: string; year?: string }>;
 }) {
-  await requirePerm('income');
+  await requireTab('income', 'billing');
   const sp = await searchParams;
   const { from, to } = rangeFromParams(sp);
 

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { can, requirePerm } from '@/lib/auth';
+import { can, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { CsvImport } from './csv-import';
@@ -8,7 +8,7 @@ import { RestoreForm } from './restore-form';
 export const dynamic = 'force-dynamic';
 
 export default async function BackupPage() {
-  const session = await requirePerm('settings');
+  const session = await requireTab('settings', 'import');
   const seesStock = can(session, 'stock');
 
   return (

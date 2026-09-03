@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext, EXPENSE_CATS } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { getDocDetail, getShop } from '@/lib/queries';
 import { getBuyDocMeta } from '@/lib/purchases';
 import { listPayments } from '@/lib/receivables';
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 const CAT = Object.fromEntries(EXPENSE_CATS.map((c) => [c.key, c]));
 
 export default async function BuyPrintPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePerm('expense');
+  await requireTab('expense', 'purchase');
   const { id } = await params;
 
   const [doc, meta, shop, payments] = await Promise.all([

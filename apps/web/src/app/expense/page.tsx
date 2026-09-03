@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { EXPENSE_CATS } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listBuyDocs } from '@/lib/purchases';
@@ -27,7 +27,7 @@ export default async function ExpensePage({
     from?: string; to?: string; month?: string; year?: string;
   }>;
 }) {
-  await requirePerm('expense');
+  await requireTab('expense', 'purchase');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const { from, to } = rangeFromParams(sp);

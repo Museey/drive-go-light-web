@@ -151,5 +151,5 @@ export async function importProductsCsv(text: string): Promise<CsvImportResult> 
     }
 
     return result;
-  });
+  }, { sub: 'list' });
 }

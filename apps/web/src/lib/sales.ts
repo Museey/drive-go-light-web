@@ -221,7 +221,7 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
     }
 
     return { id: id!, docNo };
-  });
+  }, { sub: 'receipt' });
 }
 
 function updateParams(
@@ -290,7 +290,7 @@ export async function voidSalesDoc(id: string, reason: string): Promise<void> {
       `update documents set status='void', voided_at=now(), voided_reason=$2 where id=$1`,
       [id, reason || 'ยกเลิกโดยผู้ใช้'],
     );
-  });
+  }, { sub: 'receipt' });
 }
 
 /* =====================================================================

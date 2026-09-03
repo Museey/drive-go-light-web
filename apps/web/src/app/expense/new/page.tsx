@@ -1,4 +1,4 @@
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
 import type { BuyDocInput, BuyKind } from '@/lib/purchases';
@@ -16,7 +16,7 @@ export default async function NewBuyPage({
 }: {
   searchParams: Promise<{ kind?: string }>;
 }) {
-  await requirePerm('expense');
+  await requireTab('expense', 'purchase');
   const sp = await searchParams;
   const kind: BuyKind = sp.kind === 'EX' ? 'EX' : 'PO';
   const shop = await getShop();

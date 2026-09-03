@@ -31,7 +31,7 @@ export async function saveBillnoteAction(_prev: FormResult, fd: FormData): Promi
       byWhom: str(fd, 'byWhom'),
       note: str(fd, 'note'),
       docIds,
-    }, userId));
+    }, userId), { sub: 'billing' });
   } catch (err) {
     return { error: describe(err, 'บันทึกใบวางบิลไม่สำเร็จ'), values: keepValues(fd) };
   }
@@ -43,7 +43,7 @@ export async function saveBillnoteAction(_prev: FormResult, fd: FormData): Promi
 export async function voidBillnoteAction(id: string, reason: string): Promise<FormResult> {
   await requirePerm('income');
   try {
-    await mutate('income', (c) => voidBillnote(c, id, reason));
+    await mutate('income', (c) => voidBillnote(c, id, reason), { sub: 'billing' });
   } catch (err) {
     return { error: describe(err, 'ยกเลิกใบวางบิลไม่สำเร็จ') };
   }

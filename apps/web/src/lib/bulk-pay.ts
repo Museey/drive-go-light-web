@@ -47,6 +47,11 @@ export async function bulkPay(
     method: string;
     ref: string;
   },
+  /**
+   * ตรวจสิทธิ์แก้ไขตามชนิดเอกสารจริงของแต่ละใบ — ลูกหนี้กับเจ้าหนี้เป็นคนละแท็บ
+   * ส่งเข้ามาแทนที่จะเรียกเองเพราะไฟล์นี้ไม่ผูกกับ session (ชุดทดสอบเรียกได้ตรง ๆ)
+   */
+  checkEdit?: (sub: 'ar' | 'ap') => Promise<unknown>,
 ): Promise<BulkPaymentResult> {
   /* ใบที่กรอกศูนย์ (หรือติดลบ) แปลว่าไม่ตัดใบนั้น ไม่ใช่ข้อผิดพลาด */
   const lines = input.lines.filter((l) => l.amount > EPS);
@@ -60,6 +65,7 @@ export async function bulkPay(
 
   const { rows } = await c.query(
     `select d.id, d.doc_no, d.payable, d.status::text as status,
+            d.direction::text as direction,
             coalesce(sum(p.amount), 0) as paid
      from documents d
      left join payments p on p.doc_id = d.id
@@ -76,6 +82,7 @@ export async function bulkPay(
     const d = byId.get(l.docId);
     if (!d) throw new Error('ไม่พบเอกสารบางใบในรายการ — เปิดหน้าใหม่แล้วลองอีกครั้ง');
     if (d.status === 'void') throw new Error(`${d.doc_no} ถูกยกเลิกแล้ว รับชำระไม่ได้`);
+    if (checkEdit) await checkEdit(d.direction === 'buy' ? 'ap' : 'ar');
 
     const outstanding = round2(n(d.payable) - n(d.paid));
     const amount = round2(Math.min(l.amount, Math.max(outstanding, 0)));

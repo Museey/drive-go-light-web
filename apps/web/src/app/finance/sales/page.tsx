@@ -1,4 +1,5 @@
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
+import { canCost, HIDDEN_COST } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { PrintHeader } from '@/components/print-header';
@@ -14,7 +15,8 @@ export default async function SalesReportPage({
 }: {
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  await requirePerm('finance');
+  const session = await requireTab('finance', 'sales');
+  const seeCost = canCost(session);
   const sp = await searchParams;
 
   const [report, vat] = await Promise.all([

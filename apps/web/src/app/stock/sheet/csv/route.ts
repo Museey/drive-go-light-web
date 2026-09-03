@@ -1,4 +1,4 @@
-import { requirePerm } from '@/lib/auth';
+import { requireExport } from '@/lib/auth';
 import { listProducts } from '@/lib/products';
 import { today } from '@drivegolight/core';
 
@@ -10,7 +10,7 @@ const fmtQty = (v: number) => String(Math.round(v * 1000) / 1000);
  * เว้นช่อง "นับได้จริง" "ผลต่าง" "หมายเหตุ" ไว้ให้กรอก เหมือน exportCountSheetCsv ของรุ่น 6.4
  */
 export async function GET(request: Request) {
-  await requirePerm('stock');
+  await requireExport('stock', 'list');
   const sp = new URL(request.url).searchParams;
   const showSys = sp.get('sys') === '1';
 

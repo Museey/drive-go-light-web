@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requirePerm } from '@/lib/auth';
+import { query, requirePerm } from '@/lib/auth';
 import { friendlyDbError, keepValues, money, qty, str, type FormResult } from '@/lib/mutate';
 import { mutate } from '@/lib/mutate';
 import { isClaimSide, saveClaim, voidClaim, type ClaimItemInput } from '@/lib/claims';
@@ -73,7 +73,7 @@ export async function saveClaimAction(_prev: FormResult, fd: FormData): Promise<
       byWhom: str(fd, 'byWhom'),
       note: str(fd, 'note'),
       items: itemsOf(fd),
-    }, userId));
+    }, userId), { sub: side === 'vendor' ? 'vclaim' : 'claim' });
   } catch (err) {
     return { error: describe(err, 'บันทึกใบเคลมไม่สำเร็จ'), values: keepValues(fd) };
   }
@@ -88,7 +88,11 @@ export async function saveClaimAction(_prev: FormResult, fd: FormData): Promise<
 export async function voidClaimAction(id: string, reason: string): Promise<FormResult> {
   await requirePerm('stock');
   try {
-    await mutate('stock', (c, userId) => voidClaim(c, id, reason, userId));
+    /* เคลมฝั่งลูกค้ากับฝั่งผู้ขายเป็นคนละแท็บ — ดูจากตัวใบจริง ไม่ใช่เชื่อผู้เรียก */
+    const side = await query((c) =>
+      c.query(`select side::text as side from claims where id = $1`, [id])
+        .then((r) => (r.rows[0]?.side === 'vendor' ? 'vclaim' : 'claim')));
+    await mutate('stock', (c, userId) => voidClaim(c, id, reason, userId), { sub: side });
   } catch (err) {
     return { error: describe(err, 'ยกเลิกใบเคลมไม่สำเร็จ') };
   }

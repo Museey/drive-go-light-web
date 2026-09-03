@@ -1,10 +1,11 @@
-import { requirePerm } from '@/lib/auth';
+import { requireCost, requireExport } from '@/lib/auth';
 import { getFinanceCsvRows } from '@/lib/reports';
 import { BOM, csvField, FINANCE_HEADERS } from '@/lib/csv';
 
 /** ส่งออกรายรับรายจ่ายในช่วงที่เลือกเป็น CSV — ?from=&to= */
 export async function GET(request: Request) {
-  await requirePerm('finance');
+  await requireExport('finance', 'sales');
+  await requireCost();
 
   const sp = new URL(request.url).searchParams;
   const from = sp.get('from') || undefined;

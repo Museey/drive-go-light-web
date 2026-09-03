@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
 import { getDefaultWarranty, loadDocForCopy, type SalesDocInput, type SalesKind } from '@/lib/sales';
@@ -42,7 +42,7 @@ export default async function NewDocPage({
 }: {
   searchParams: Promise<{ kind?: string; from?: string }>;
 }) {
-  await requirePerm('income');
+  await requireTab('income', 'receipt');
   const sp = await searchParams;
   const kind = (KINDS.includes(sp.kind as SalesKind) ? sp.kind : 'QT') as SalesKind;
 

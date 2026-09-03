@@ -93,7 +93,7 @@ export async function linkPendingToProduct(nameNorm: string, productId: string):
       [nameNorm, productId],
     );
     return rowCount ?? 0;
-  });
+  }, { sub: 'pending' });
 }
 
 /** สั่งข้ามชื่อนี้ ไม่ต้องเตือนอีก */
@@ -104,14 +104,14 @@ export async function ignorePendingItem(nameNorm: string): Promise<void> {
        values (current_tenant_id(), $1) on conflict do nothing`,
       [nameNorm],
     );
-  });
+  }, { sub: 'pending' });
 }
 
 /** เอารายการที่ข้ามไว้กลับมาแสดงทั้งหมด */
 export async function restoreIgnoredItems(): Promise<void> {
   return mutate('stock', async (c) => {
     await c.query(`delete from ignored_item_names`);
-  });
+  }, { sub: 'pending' });
 }
 
 /** สร้างสินค้าใหม่จากชื่อที่ค้างอยู่ แล้วผูกให้เลย */
@@ -139,5 +139,5 @@ export async function createProductFromPending(
     );
 
     return { productId, linked: rowCount ?? 0 };
-  });
+  }, { sub: 'pending' });
 }

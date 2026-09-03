@@ -77,18 +77,25 @@ create table users (
   email           citext,                                  -- ใช้ล็อกอิน (ของเดิมไม่มี)
   password_hash   text,                                    -- argon2id — ห้ามเก็บรหัสผ่านดิบ
   role            member_role not null default 'staff',
-  perms           text[]      not null default '{}',
+  -- สิทธิ์แบบละเอียด ดู lib/perms.ts — โครงเป็นออบเจกต์เสมอ
+  --   menus  {stock:true}          เข้าเมนูหลักได้ไหม
+  --   tabs   {'stock.count':true}  เข้าเมนูย่อยได้ไหม
+  --   edit   {'stock.list':false}  แก้ไขในเมนูย่อยได้ไหม
+  --   export {'stock.list':false}  พิมพ์ทั้งชุด / ดาวน์โหลดไฟล์ได้ไหม
+  --   cost / homeReport            สวิตช์ระดับคน
+  -- ที่ไม่ได้ตั้งไว้ = อนุญาต ยกเว้น tabs ที่ทำตามกติกาของรุ่น 6.4
+  perms           jsonb       not null default '{}'::jsonb,
   active          boolean     not null default true,
   last_login_at   timestamptz,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
   unique (tenant_id, code),
   unique (tenant_id, email),
-  -- ชุดสิทธิ์ต้องตรงกับ PERMS ในโปรแกรมเดิม
-  constraint users_perms_valid check (
-    perms <@ array['customer','income','expense','stock','finance','settings']::text[]
-  )
+  constraint users_perms_object check (jsonb_typeof(perms) = 'object')
 );
+
+comment on column users.code is
+  'รหัสพนักงานสำหรับอ้างอิงในเอกสารและประวัติการแก้ไข — ไม่ใช่รหัสเข้าระบบ (เข้าด้วยอีเมล)';
 
 create index on users (tenant_id) where active;
 
@@ -103,6 +110,9 @@ create table subscriptions (
   started_on      date        not null default current_date,
   expires_on      date        not null,
   amount          numeric(14,2),                           -- ยอดที่เก็บจริง
+  -- จำนวนบัญชีพนักงานที่แพ็กเกจนี้เปิดได้ · null = ไม่จำกัด · เจ้าของไม่ถูกนับ
+  -- ตรวจตอนสร้างบัญชีใหม่เท่านั้น ไม่ตรวจตอนล็อกอิน — ลดแพ็กเกจแล้วต้องไม่ล็อกใครออก
+  max_users       integer     check (max_users is null or max_users > 0),
   note            text,
   created_at      timestamptz not null default now()
 );

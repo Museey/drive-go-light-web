@@ -23,5 +23,5 @@ export async function deleteTenantData(confirmName: string): Promise<void> {
     }
 
     await c.query(`delete from tenants where id = current_tenant_id()`);
-  }, { allowExpired: true });
+  }, { sub: 'shop', allowExpired: true });
 }

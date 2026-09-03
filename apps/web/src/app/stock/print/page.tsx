@@ -1,8 +1,9 @@
 import { STOCK_FLAG_LABEL, type StockFlag } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { requireExport } from '@/lib/auth';
 import { ListPaper } from '@/components/list-paper';
 import { listCategories, listProducts } from '@/lib/products';
 import { getStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
+import { canCost } from '@/lib/perms';
 import { baht, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export default async function StockPrintPage({
 }: {
   searchParams: Promise<{ q?: string; cat?: string; reorder?: string; all?: string; flag?: string }>;
 }) {
-  await requirePerm('stock');
+  const session = await requireExport('stock', 'list');
   const sp = await searchParams;
   const flag = (['min', 'max', 'dead'] as const).find((f) => f === sp.flag);
 
@@ -39,7 +40,10 @@ export default async function StockPrintPage({
 
   /* เอกสารที่พิมพ์ซ่อนคอลัมน์ชุดเดียวกับหน้าจอ ตามรุ่นเดิม
      ยกเว้นราคา B และ C ที่ไม่พิมพ์ลงกระดาษเลย เพราะกระดาษหลุดถึงมือลูกค้าได้ */
-  const show = (k: string) => !hidden.includes(k as never);
+  /* ต้นทุนถูกซ่อนได้สองทาง — ผู้ใช้เลือกซ่อนคอลัมน์เอง หรือไม่มีสิทธิ์เห็นต้นทุน
+     ตรงกับ colOn() ของรุ่น 6.4 ที่รวมสองเงื่อนไขนี้ไว้ในที่เดียว */
+  const seeCost = canCost(session);
+  const show = (k: string) => (k === 'cost' && !seeCost ? false : !hidden.includes(k as never));
   const PRINTABLE = ['cost', 'qty', 'min', 'max', 'move'];
   const hiddenHere = STOCK_COLS.filter(([k]) => PRINTABLE.includes(k) && !show(k));
 

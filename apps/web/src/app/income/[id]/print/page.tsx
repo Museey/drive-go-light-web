@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext, whtBaseOf } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { getDocDetail, getShop } from '@/lib/queries';
 import { payAtIssue } from '@/lib/print';
 import { baht, thDate, thDateLong } from '@/lib/format';
@@ -41,7 +41,7 @@ const Slot = ({ value }: { value: number }) => (
 );
 
 export default async function PrintPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePerm('income');
+  await requireTab('income', 'receipt');
   const { id } = await params;
   const [doc, shop] = await Promise.all([getDocDetail(id), getShop()]);
   if (!doc) notFound();

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { today } from '@drivegolight/core';
 import { CLAIM_SIDE, isClaimSide } from '@/lib/claims';
@@ -12,7 +12,7 @@ export default async function NewClaimPage({
 }: {
   searchParams: Promise<{ side?: string }>;
 }) {
-  await requirePerm('stock');
+  await requireTab('stock', 'claim');
   const sp = await searchParams;
   const side = isClaimSide(sp.side) ? sp.side : 'customer';
   const S = CLAIM_SIDE[side];

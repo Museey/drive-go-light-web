@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { requirePerm } from '@/lib/auth';
 import { issueSetupToken } from '@/lib/auth';
 import { saveShopSettings, saveStaff, promoteToOwner, nextUserCode } from '@/lib/settings';
-import { PERM_KEYS, type PermKey } from '@/lib/perms';
+import { PERM_KEYS, type Perms } from '@/lib/perms';
+import { SUB_KEYS } from '@/components/menu-map';
 import { importProductsCsv, type CsvImportResult } from '@/lib/products-csv';
 import {
   inspectBackup, restoreFromBackup, type BackupPreview, type RestoreResult,
@@ -75,7 +76,26 @@ export async function saveStaffAction(_prev: FormResult, fd: FormData): Promise<
     return { error: 'รูปแบบอีเมลไม่ถูกต้อง', field: 'email' };
   }
 
-  const perms = PERM_KEYS.filter((k) => fd.get(`perm_${k}`) === 'on') as PermKey[];
+  /**
+   * อ่านสิทธิ์จากฟอร์ม — เขียนครบทุกแท็บเสมอ ไม่ใช่เขียนเฉพาะที่ติ๊ก
+   *
+   * ค่าที่ "ไม่มีคีย์" มีความหมายพิเศษ (ดู canTab) และควรเกิดเฉพาะกับข้อมูล
+   * ที่ย้ายเข้ามาจากไฟล์เก่า ไม่ใช่ข้อมูลที่ระบบเราสร้างเอง
+   */
+  const perms: Perms = { menus: {}, tabs: {}, edit: {}, export: {} };
+  for (const k of PERM_KEYS) {
+    const menuOn = fd.get(`perm_${k}`) === 'on';
+    if (menuOn) perms.menus![k] = true;
+    for (const sub of SUB_KEYS[k]) {
+      const key = `${k}.${sub}`;
+      const canOpen = menuOn && fd.get(`tab_${key}`) === 'on';
+      perms.tabs![key] = canOpen;
+      perms.edit![key] = canOpen && fd.get(`edit_${key}`) === 'on';
+      perms.export![key] = canOpen && fd.get(`export_${key}`) === 'on';
+    }
+  }
+  perms.cost = fd.get('perm_cost') === 'on';
+  perms.homeReport = fd.get('perm_homeReport') === 'on';
 
   try {
     await saveStaff({

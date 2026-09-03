@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePerm } from '@/lib/auth';
+import { requireTab } from '@/lib/auth';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
@@ -23,7 +23,7 @@ export default async function CustomersPage({
 }: {
   searchParams: Promise<{ q?: string; kind?: string; type?: string; page?: string; size?: string }>;
 }) {
-  await requirePerm('customer');
+  await requireTab('customer', 'customer');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
 

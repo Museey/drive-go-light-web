@@ -71,5 +71,5 @@ export async function recordRenewal(input: {
     );
 
     return { expiresOn };
-  }, { allowExpired: true });
+  }, { sub: 'shop', allowExpired: true });
 }

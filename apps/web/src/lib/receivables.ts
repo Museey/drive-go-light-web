@@ -1,5 +1,5 @@
 import 'server-only';
-import { query } from './auth';
+import { query, requireEdit } from './auth';
 import { mutate } from './mutate';
 import { checkPaymentAmount } from './payment-rules';
 import { bulkPay, type BulkPaymentLine, type BulkPaymentResult } from './bulk-pay';
@@ -150,7 +150,8 @@ export async function recordPayment(input: {
 }): Promise<void> {
   return mutate('finance', async (c, userId) => {
     const { rows } = await c.query(
-      `select d.payable, d.status::text as status, coalesce(sum(p.amount), 0) as paid
+      `select d.payable, d.status::text as status, d.direction::text as direction,
+              coalesce(sum(p.amount), 0) as paid
        from documents d left join payments p on p.doc_id = d.id
        where d.id = $1 group by d.id`,
       [input.docId],
@@ -158,6 +159,10 @@ export async function recordPayment(input: {
     const d = rows[0];
     if (!d) throw new Error('ไม่พบเอกสาร');
     if (d.status === 'void') throw new Error('เอกสารนี้ถูกยกเลิกแล้ว รับชำระไม่ได้');
+
+    /* ลูกหนี้กับเจ้าหนี้เป็นคนละแท็บ สิทธิ์แก้ไขจึงแยกกัน
+       ดูจากชนิดเอกสารจริง ไม่ใช่เชื่อว่าหน้าที่เรียกมาส่งมาถูก */
+    await requireEdit('finance', d.direction === 'buy' ? 'ap' : 'ar');
 
     const problem = checkPaymentAmount(n(d.payable), n(d.paid), input.amount);
     if (problem) throw new Error(problem);
@@ -177,7 +182,8 @@ export async function recordBulkPayments(input: {
   method: string;
   ref: string;
 }): Promise<BulkPaymentResult> {
-  return mutate('finance', (c, userId) => bulkPay(c, userId, input));
+  return mutate('finance', (c, userId) =>
+    bulkPay(c, userId, input, (sub) => requireEdit('finance', sub)));
 }
 
 /**
@@ -189,9 +195,12 @@ export async function recordBulkPayments(input: {
 export async function deletePayment(paymentId: string): Promise<void> {
   return mutate('finance', async (c) => {
     const { rows } = await c.query(
-      `select at_issue from payments where id = $1`, [paymentId],
+      `select p.at_issue, d.direction::text as direction
+       from payments p join documents d on d.id = p.doc_id
+       where p.id = $1`, [paymentId],
     );
     if (!rows[0]) throw new Error('ไม่พบรายการรับชำระ');
+    await requireEdit('finance', rows[0].direction === 'buy' ? 'ap' : 'ar');
     if (rows[0].at_issue) {
       throw new Error(
         'รายการนี้เป็นยอดที่รับ ณ วันออกเอกสาร ซึ่งพิมพ์อยู่บนใบเสร็จ — แก้ที่ตัวเอกสารแทน',

@@ -113,13 +113,18 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
       const { rows } = await app.query(`select code, name, perms, active from users order by code`);
       expect(rows).toHaveLength(2);
 
-      // quote:true หรือ receipt:true → income
-      expect(rows[0].perms.sort()).toEqual(['customer', 'income', 'stock']);
+      // quote:true หรือ receipt:true → income (ตาม migrateUserPerms ของรุ่น 6.4)
+      expect(Object.keys(rows[0].perms.menus).sort())
+        .toEqual(['customer', 'income', 'stock']);
       expect(rows[0].active).toBe(true);
 
       // purchase:true → expense
-      expect(rows[1].perms.sort()).toEqual(['expense', 'finance']);
+      expect(Object.keys(rows[1].perms.menus).sort()).toEqual(['expense', 'finance']);
       expect(rows[1].active).toBe(false);
+
+      /* สิทธิ์รายแท็บถูกกางให้ครบ ไม่ใช่ปล่อยว่างแล้วไปตกที่ค่าปริยายเงียบ ๆ */
+      expect(rows[0].perms.tabs['stock.count']).toBe(true);
+      expect(rows[0].perms.tabs['finance.pl']).toBeUndefined();
     });
 
     it('ไม่นำรหัสผ่านเดิมเข้ามา และเตือนให้ตั้งใหม่', async () => {
