@@ -9,7 +9,7 @@
  *
  *   DATABASE_URL=postgresql://postgres:x@localhost:5433/dgl npm test -w @drivegolight/web
  */
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -182,14 +182,114 @@ describe.skipIf(!DB_URL)('รันไมเกรชันจริง', () => 
     expect(t.rows[0].n).toBe(0);
   }, 60_000);
 
-  /** enum ที่เพิ่มค่าแล้วใช้ทันทีในไฟล์เดียวกัน — เหตุผลที่ต้องแยกคำสั่งแต่แรก */
-  it('เพิ่มค่า enum แล้วใช้ค่านั้นในไฟล์เดียวกันได้', async () => {
+  /**
+   * enum ที่เพิ่มค่าแล้วใช้ทันทีในไฟล์เดียวกัน — เคยทำได้ ตอนนี้ทำไม่ได้แล้ว
+   *
+   * แลกมากับการที่หนึ่งไฟล์เป็นหนึ่งทรานแซกชัน ซึ่งคุ้มกว่ามากเมื่อฐานมีข้อมูลจริง
+   * ของอู่อยู่ข้างใน ไฟล์จริงของเรา (003 และ 005) แยกไว้แบบนี้ตั้งแต่แรกอยู่แล้ว
+   *
+   * สิ่งที่เทสต์นี้คุ้มไว้คือ **ข้อความบอกทางแก้** ไม่ใช่แค่ว่ามันพัง
+   */
+  it('เพิ่มค่า enum แล้วใช้ในไฟล์เดียวกัน ต้องพังพร้อมบอกทางแก้', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dgl-mig-'));
     writeFileSync(join(dir, '001_init.sql'), `
       create type สี as enum ('แดง');
       alter type สี add value if not exists 'เขียว';
       create table t (c สี not null default 'เขียว');
     `);
+    await expect(migrate(c, { mode: 'run', dir, log: quiet }))
+      .rejects.toThrow(/แยก `alter type \.\.\. add value` ออกไปเป็นไฟล์ไมเกรชันของตัวเอง/);
+  }, 60_000);
+
+  it('แยกค่า enum ไปอีกไฟล์แล้วใช้ได้', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dgl-mig-'));
+    writeFileSync(join(dir, '001_init.sql'), `
+      create type สี as enum ('แดง');
+      alter type สี add value if not exists 'เขียว';
+    `);
+    writeFileSync(join(dir, '002_use.sql'), `create table t (c สี not null default 'เขียว');`);
     await expect(migrate(c, { mode: 'run', dir, log: quiet })).resolves.toBeTruthy();
   }, 60_000);
+
+  /* ---------------------------------------------------------------
+     หนึ่งไฟล์คือหนึ่งทรานแซกชัน — ข้อสำคัญที่สุดตั้งแต่ขึ้นเครื่องจริง
+     --------------------------------------------------------------- */
+
+  it('ไฟล์ที่พังกลางคัน ต้องไม่ทิ้งอะไรไว้เลย', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dgl-mig-'));
+    writeFileSync(join(dir, '001_init.sql'), `
+      create table เกิดได้ (id int);
+      create table ห้ามเหลือ (id int);
+      นี่ไม่ใช่ SQL;
+    `);
+
+    await expect(migrate(c, { mode: 'run', dir, log: quiet })).rejects.toThrow(/001_init\.sql/);
+
+    /* ตารางที่คำสั่งก่อนหน้าสร้างไว้แล้วต้องหายไปด้วย */
+    const t = await c.query(
+      `select count(*)::int as n from information_schema.tables
+       where table_name in ('เกิดได้','ห้ามเหลือ')`);
+    expect(t.rows[0].n, 'คำสั่งที่ผ่านไปแล้วก่อนจุดที่พัง ต้องถูกย้อนกลับด้วย').toBe(0);
+  }, 60_000);
+
+  it('ไฟล์ที่พังต้องไม่ถูกจดว่ารันแล้ว และรันใหม่ได้ทันทีหลังแก้', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dgl-mig-'));
+    const file = join(dir, '001_init.sql');
+    writeFileSync(file, 'create table a (id int); นี่ไม่ใช่ SQL;');
+
+    await expect(migrate(c, { mode: 'run', dir, log: quiet })).rejects.toThrow();
+
+    const after = await c.query('select count(*)::int as n from ops.migrations');
+    expect(after.rows[0].n, 'ไฟล์ที่ยังไม่สำเร็จห้ามถูกจด').toBe(0);
+
+    /* แก้แล้วรันใหม่ต้องผ่านเลย ไม่ติดว่า "ตารางมีอยู่แล้ว" และไม่ติดเรื่อง checksum */
+    writeFileSync(file, 'create table a (id int);');
+    await expect(migrate(c, { mode: 'run', dir, log: quiet })).resolves.toBeTruthy();
+
+    const t = await c.query(
+      `select count(*)::int as n from information_schema.tables where table_name = 'a'`);
+    expect(t.rows[0].n).toBe(1);
+  }, 60_000);
+
+  it('ไฟล์ก่อนหน้าที่สำเร็จแล้วยังอยู่ ถึงไฟล์ถัดไปจะพัง', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dgl-mig-'));
+    writeFileSync(join(dir, '001_init.sql'), 'create table ต้องอยู่ (id int);');
+    writeFileSync(join(dir, '002_bad.sql'), 'นี่ไม่ใช่ SQL;');
+
+    await expect(migrate(c, { mode: 'run', dir, log: quiet })).rejects.toThrow(/002_bad\.sql/);
+
+    const t = await c.query(
+      `select count(*)::int as n from information_schema.tables where table_name = 'ต้องอยู่'`);
+    expect(t.rows[0].n).toBe(1);
+    const { rows } = await c.query('select filename from ops.migrations');
+    expect(rows.map((r) => r.filename)).toEqual(['001_init.sql']);
+  }, 60_000);
+});
+
+/**
+ * ไฟล์ SQL จริงต้องรันในทรานแซกชันได้ทุกไฟล์
+ *
+ * ไม่ต้องต่อฐานข้อมูลก็ตรวจได้ และไฟล์ใหม่ที่ละเมิดจะแดงเองโดยไม่ต้องมีใครนึกออก
+ */
+describe('ไฟล์ไมเกรชันจริง', () => {
+  const dir = resolve(ROOT, 'db');
+  const files = readdirSync(dir).filter((f) => /^\d+.*\.sql$/.test(f)).sort();
+
+  it('ไม่มีคำสั่งที่รันในทรานแซกชันไม่ได้', () => {
+    /* ตัดคอมเมนต์ทิ้งก่อน — ไฟล์ 003 กับ 005 พูดถึงข้อจำกัดนี้ไว้ในคอมเมนต์ */
+    const forbidden = /\bconcurrently\b|\bvacuum\b|\balter\s+system\b|\bcreate\s+database\b/i;
+    for (const f of files) {
+      const sql = readFileSync(resolve(dir, f), 'utf8')
+        .split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
+      expect(forbidden.test(sql), `${f} มีคำสั่งที่รันในทรานแซกชันไม่ได้`).toBe(false);
+    }
+  });
+
+  it('ไม่มีไฟล์ไหนห่อ begin/commit เอง — ตัวรันห่อให้แล้ว', () => {
+    for (const f of files) {
+      const sql = readFileSync(resolve(dir, f), 'utf8')
+        .split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
+      expect(/^\s*(begin|commit|rollback)\s*;/im.test(sql), `${f} ห่อทรานแซกชันเอง`).toBe(false);
+    }
+  });
 });
