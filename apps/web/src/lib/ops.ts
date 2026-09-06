@@ -1,7 +1,6 @@
 import 'server-only';
-import { readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { withoutTenant } from './db';
+import { EXPECTED_MIGRATIONS } from './migrations.generated';
 import { currentSession } from './auth';
 import {
   healthChecksWith, listErrorsWith, markSeenWith, recordErrorWith,
@@ -44,23 +43,9 @@ export async function markErrorsSeen(ids: string[]): Promise<void> {
   return withoutTenant((c) => markSeenWith(c, ids));
 }
 
-/**
- * ไฟล์ไมเกรชันที่โค้ดชุดนี้ต้องการ — อ่านจากโฟลเดอร์จริง ไม่ใช่รายชื่อที่พิมพ์ไว้
- * เพิ่มไฟล์ใหม่แล้วตัวตรวจสุขภาพรู้เองทันที ไม่ต้องจำไปแก้อีกที่
- */
-function expectedMigrations(): string[] {
-  try {
-    return readdirSync(resolve(process.cwd(), '../../db'))
-      .filter((f) => /^\d+.*\.sql$/.test(f))
-      .sort();
-  } catch {
-    return [];
-  }
-}
-
 export async function healthChecks(): Promise<HealthCheck[]> {
   try {
-    return await withoutTenant((c) => healthChecksWith(c, expectedMigrations()));
+    return await withoutTenant((c) => healthChecksWith(c, [...EXPECTED_MIGRATIONS]));
   } catch (err) {
     return [{
       name: 'db',

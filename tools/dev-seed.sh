@@ -32,7 +32,7 @@ psql -c 'drop schema if exists auth cascade; drop schema if exists ops cascade; 
 # ใช้ตัวรันไมเกรชันตัวเดียวกับเครื่องจริง ไม่ใช่ psql ตรง ๆ
 # ไม่งั้นเครื่องพัฒนาจะไม่มีตาราง ops.migrations แล้ว /healthz จะแดงตลอด
 # และเราจะไม่มีวันเจอปัญหาของตัวรันจนกว่าจะไปเจอบนเครื่องจริง
-PSQL="docker exec -i $C psql -U postgres" ADMIN_URL="$DB" ./tools/migrate.sh --fresh > /dev/null
+ADMIN_URL="postgresql://postgres:x@localhost:5433/$DB" ./tools/migrate.sh --fresh > /dev/null
 sed "s/เปลี่ยนรหัสนี้ก่อนใช้จริง/$PASS/" db/app-role.sql | psql > /dev/null
 
 echo "นำเข้าข้อมูลตัวอย่าง…"

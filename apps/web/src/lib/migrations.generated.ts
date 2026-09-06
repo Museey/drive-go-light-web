@@ -1,0 +1,14 @@
+/* สร้างอัตโนมัติจากโฟลเดอร์ db/ — ห้ามแก้ด้วยมือ
+   สร้างใหม่ด้วย: node tools/gen-migrations.mjs
+   มีเทสต์ตรวจว่าตรงกับโฟลเดอร์จริง (ops.test.ts) */
+
+export const EXPECTED_MIGRATIONS: readonly string[] = [
+  '001_init.sql',
+  '002_auth.sql',
+  '003_fifo.sql',
+  '004_billnotes.sql',
+  '005_claims.sql',
+  '006_counts.sql',
+  '007_perms.sql',
+  '008_ops.sql',
+];
