@@ -96,6 +96,8 @@ describe('ทุกเส้นทางที่ส่งข้อมูลอ�
       '/customers/print/page.tsx',
       '/expense/print/page.tsx',
       '/stock/sheet/page.tsx',
+      '/stock/barcodes/page.tsx',
+      '/finance/print/page.tsx',
     ];
     for (const r of WHOLE_LIST) {
       const src = readFileSync(join(APP, r), 'utf8');

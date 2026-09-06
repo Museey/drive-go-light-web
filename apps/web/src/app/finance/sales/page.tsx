@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireTab } from '@/lib/auth';
 import { canCost, HIDDEN_COST } from '@/lib/perms';
 import { Shell } from '@/components/shell';
@@ -38,6 +39,7 @@ export default async function SalesReportPage({
     <Shell actions={
       <div className="tag-row">
         <a className="btn" href={`/finance/csv${csvQuery ? `?${csvQuery}` : ''}`} download>ส่งออก CSV</a>
+        <Link className="btn" href={`/finance/print${csvQuery ? `?${csvQuery}` : ''}`}>พิมพ์ / PDF</Link>
         <PagePrintButton />
       </div>
     } current="/finance" title="ยอดขาย" sub="มูลค่าก่อนภาษีและภาษีขายรายงวด">

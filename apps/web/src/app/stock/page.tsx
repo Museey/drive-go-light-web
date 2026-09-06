@@ -69,6 +69,9 @@ export default async function StockPage({
       actions={
         <div className="tag-row">
           <Link className="btn" href={`/stock/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายการ</Link>
+          <Link className="btn" href={`/stock/barcodes${printQuery ? `?${printQuery}` : ''}`}>
+            พิมพ์ฉลากบาร์โค้ด
+          </Link>
           <ColPicker cols={STOCK_COLS} hidden={hidden} />
           <Link className="btn" href="/settings/import">นำเข้า / ส่งออก CSV</Link>
           <Link className="btn" href="/stock/pending">
