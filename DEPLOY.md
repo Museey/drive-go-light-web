@@ -36,22 +36,27 @@ DATABASE_URL='<External URL>?sslmode=no-verify' node tools/probe-db.mjs
 `?sslmode=no-verify` ต้องมี เพราะ Render บังคับ SSL ส่วน `pg` ตีความ `require`
 เป็น `verify-full` ซึ่งล้มกับใบรับรองที่ผู้ให้บริการออกเอง
 
-### 3. ตั้งเขตเวลาและสร้าง role ของแอป
+### 3. รันไมเกรชัน ตั้งเขตเวลา และสร้าง role ของแอป
+
+**ไม่ต้องมี `psql` บนเครื่อง** — เครื่องมือทั้งหมดเป็น Node ใช้ไลบรารีที่โปรเจกต์มีอยู่แล้ว
 
 ```bash
 ADMIN='<External URL>?sslmode=no-verify'
 
-# เขตเวลา — ไม่ตั้งแล้วแอปปฏิเสธไม่ยอมทำงาน
-psql "$ADMIN" -c "alter database dgl set timezone = 'Asia/Bangkok'"
-
-# ไมเกรชัน
+# สร้างสคีมา
 ADMIN_URL="$ADMIN" node tools/migrate.mjs --fresh
 
-# role ของแอป — จดรหัสที่สุ่มได้ไว้ ต้องใช้ในขั้นตอนถัดไป
-APP_PASS=$(openssl rand -base64 24 | tr -d '/+=')
-echo "$APP_PASS"
-psql "$ADMIN" -v ON_ERROR_STOP=1 -v app_password="$APP_PASS" -f db/app-role-managed.sql
+# ตั้งเขตเวลา + สร้าง role ของแอป + ให้สิทธิ์ ในคำสั่งเดียว
+ADMIN_URL="$ADMIN" node tools/setup-db.mjs
 ```
+
+คำสั่งที่สองพิมพ์ `DATABASE_URL` ที่ประกอบเสร็จแล้วออกมาให้ **เก็บไว้ให้ดี**
+เพราะไม่แสดงรหัสผ่านซ้ำอีก ถ้าทำหายให้รันใหม่ จะได้รหัสใหม่มาแทน
+
+อยากกำหนดรหัสเองก็ได้ — `node tools/setup-db.mjs --password='รหัสที่ต้องการ'`
+
+> คนที่มี `psql` อยู่แล้ว (เช่นตอนดูแลเซิร์ฟเวอร์เอง) ใช้ `db/app-role-managed.sql`
+> แทนได้ ผลเหมือนกัน
 
 **ทำไมต้องมี role แยก** — role ที่ Render ให้มาเป็นเจ้าของตาราง และเจ้าของตาราง
 สั่ง `alter table ... no force row level security` ได้ คือปิดเกราะของตัวเอง
