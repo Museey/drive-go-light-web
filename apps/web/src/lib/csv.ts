@@ -93,6 +93,55 @@ export function csvNumber(row: string[], i?: number): number {
 export const csvText = (row: string[], i?: number): string =>
   i === undefined ? '' : String(row[i] ?? '').trim();
 
+/**
+ * หัวตารางของไฟล์นำเข้า–ส่งออกทะเบียนลูกค้าและผู้ขาย
+ *
+ * ยกมาจาก CUST_CSV_HEADERS / VEND_CSV_HEADERS ของรุ่น 6.4 ทีละช่อง
+ * ต้องตรงเป๊ะ เพราะอู่ที่ย้ายมาจะเอาไฟล์ชุดเดิมที่เคยส่งออกจาก 6.4 มานำเข้าที่นี่
+ * มีเทสต์อ่านเทียบกับไฟล์ต้นฉบับโดยตรง
+ *
+ * ลูกค้าเป็น **หนึ่งแถวต่อหนึ่งคัน** — ลูกค้าที่มีสามคันก็สามแถว ชื่อเดียวกัน
+ */
+export const CUST_CSV_HEADERS = [
+  'รหัสลูกค้า', 'ประเภท(บุคคล/นิติบุคคล)', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'ชื่อนิติบุคคล',
+  'เลขผู้เสียภาษี', 'โทรศัพท์', 'โทรศัพท์สำรอง', 'อีเมล', 'เลขที่', 'หมู่บ้าน/อาคาร', 'หมู่ที่',
+  'ซอย', 'ถนน', 'ตำบล/แขวง', 'อำเภอ/เขต', 'จังหวัด', 'รหัสไปรษณีย์', 'เครดิต(วัน)', 'หมายเหตุ',
+  'ยี่ห้อรถ', 'รุ่นรถ', 'ปีจดทะเบียน', 'สีรถ', 'ทะเบียนหมวดอักษร', 'ทะเบียนหมวดเลข',
+  'จังหวัดทะเบียน', 'เลขเครื่องยนต์', 'เลขตัวถัง', 'เลขไมล์',
+] as const;
+
+export const VEND_CSV_HEADERS = [
+  'รหัสผู้ขาย', 'ประเภท(บุคคล/นิติบุคคล)', 'ชื่อร้าน/บริษัท', 'เลขผู้เสียภาษี',
+  'โทรศัพท์', 'โทรศัพท์สำรอง', 'อีเมล', 'เลขที่', 'หมู่บ้าน/อาคาร', 'หมู่ที่', 'ซอย', 'ถนน',
+  'ตำบล/แขวง', 'อำเภอ/เขต', 'จังหวัด', 'รหัสไปรษณีย์', 'เครดิต(วัน)', 'หมายเหตุ',
+] as const;
+
+/** ชื่อฟิลด์ที่แต่ละคอลัมน์ตรงกับ — เรียงตามหัวตารางข้างบนช่องต่อช่อง */
+export const CUST_FIELDS = [
+  'code', 'type', 'prefix', 'firstName', 'lastName', 'orgName', 'taxId', 'tel', 'tel2', 'email',
+  'a_no', 'a_village', 'a_moo', 'a_soi', 'a_road', 'a_subdistrict', 'a_district', 'a_province',
+  'a_zip', 'creditDays', 'note',
+  'v_brand', 'v_model', 'v_year', 'v_color', 'v_plateA', 'v_plateB', 'v_plateProv',
+  'v_engineNo', 'v_chassisNo', 'v_mileage',
+] as const;
+
+export const VEND_FIELDS = [
+  'code', 'type', 'orgName', 'taxId', 'tel', 'tel2', 'email',
+  'a_no', 'a_village', 'a_moo', 'a_soi', 'a_road', 'a_subdistrict', 'a_district', 'a_province',
+  'a_zip', 'creditDays', 'note',
+] as const;
+
+/**
+ * ทำให้ชื่อหัวคอลัมน์เทียบกันได้ — ตัดวงเล็บทิ้ง ตัดหัวท้าย ตัวพิมพ์เล็ก
+ * ตรงกับ normHeader() ของรุ่น 6.4 เพื่อให้ไฟล์ที่เคยนำเข้าได้ที่นั่นนำเข้าที่นี่ได้ด้วย
+ */
+export const normHeader = (h: string): string =>
+  String(h ?? '').replace(/\(.*?\)/g, '').trim().toLowerCase();
+
+/** ชื่อที่เทียบกันได้ — ตัดหัวท้าย ยุบช่องว่างซ้ำ ตัวพิมพ์เล็ก ตรงกับ normName() ของ 6.4 */
+export const normName = (v: string): string =>
+  String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
 /** หัวตารางของไฟล์ส่งออกรายรับรายจ่าย — เรียงตามรุ่น 3.6 */
 export const FINANCE_HEADERS = [
   'ประเภท', 'เลขที่', 'วันที่', 'คู่ค้า', 'ก่อนภาษี', 'VAT',

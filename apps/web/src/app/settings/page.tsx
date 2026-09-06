@@ -18,7 +18,7 @@ export default async function SettingsPage() {
       actions={
         <div className="tag-row">
           <Link className="btn" href="/settings/users">ผู้ใช้งานและสิทธิ์</Link>
-          <Link className="btn" href="/settings/backup">สำรองข้อมูล</Link>
+          <Link className="btn" href="/settings/import">นำข้อมูลเข้าระบบ</Link>
         </div>
       }
     >

@@ -124,7 +124,7 @@ export default async function LicensePage() {
           </p>
           <p style={{ marginBottom: 14 }}>
             อู่ขอให้ลบข้อมูลทั้งหมดออกจากระบบได้ทุกเมื่อ —
-            ก่อนลบควร<Link href="/settings/backup" style={{ textDecoration: 'underline' }}>ดาวน์โหลดไฟล์สำรอง</Link>เก็บไว้
+            ก่อนลบควร<Link href="/settings/import" style={{ textDecoration: 'underline' }}>ดาวน์โหลดไฟล์สำรอง</Link>เก็บไว้
           </p>
           {isOwner && shop ? <DeleteTenantForm shopName={shop.name} /> : (
             <p className="subtle" style={{ margin: 0 }}>เฉพาะผู้ที่มีสิทธิ์ตั้งค่าร้านเท่านั้นที่ขอลบข้อมูลได้</p>

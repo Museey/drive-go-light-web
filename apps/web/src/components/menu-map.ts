@@ -153,7 +153,7 @@ export const MENU: MenuItem[] = [
       },
       {
         key: 'import', no: '07.3', label: 'นำข้อมูลเข้าระบบ', desc: 'นำเข้าและสำรองข้อมูล',
-        icon: 'folder', color: '#1D8A5F', href: '/settings/backup',
+        icon: 'folder', color: '#1D8A5F', href: '/settings/import',
       },
     ],
   },
