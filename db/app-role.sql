@@ -55,3 +55,22 @@ alter default privileges in schema public
 -- ---------------------------------------------------------------------
 grant usage on schema auth to dgl_app;
 grant execute on all functions in schema auth to dgl_app;
+
+-- ---------------------------------------------------------------------
+-- สคีมา ops — คอนโซลผู้ให้บริการ
+--
+-- ให้เฉพาะฟังก์ชันที่แอปต้องเรียกจริง ไม่ใช่ทั้งสคีมา — ตัวที่ไม่ให้คือตัวที่เรียก
+-- จากในฟังก์ชันอื่นเท่านั้น โดยเฉพาะ ops.log ซึ่งถ้าเรียกได้จากข้างนอก
+-- จะปลอมบันทึกการใช้งานได้
+--
+-- รายชื่ออยู่ใน ops.grant_app() ที่ db/011_ops_console.sql เพื่อไม่ให้เก็บไว้สองที่
+-- แล้วปล่อยให้เพี้ยนจากกัน — ข้ามไปถ้ายังไม่ได้รันไฟล์นั้น (ฐานที่ยังไม่ได้อัปเกรด)
+-- ---------------------------------------------------------------------
+do $$ begin
+  if exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'ops' and p.proname = 'grant_app'
+  ) then
+    perform ops.grant_app('dgl_app');
+  end if;
+end $$;

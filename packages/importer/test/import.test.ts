@@ -53,13 +53,18 @@ describe.skipIf(!DB_URL)('นำเข้าไฟล์สำรองข้อ
     await admin.query(readFileSync(SCHEMA, 'utf8'));
 
     await admin.query(`
+      -- **ไม่ลบ role ทิ้ง** — role อยู่ระดับคลัสเตอร์ ถ้ามีฐานข้อมูลอื่นในเครื่องเดียวกัน
+      -- ที่ยังมีสิทธิ์ของ role นี้ค้างอยู่ (เช่นฐานที่เอาไว้ลองอะไรสักอย่าง)
+      -- คำสั่ง drop role จะล้มทั้งชุดทดสอบ ทั้งที่ไม่เกี่ยวกับสิ่งที่กำลังทดสอบเลย
+      -- คืนสิทธิ์ในฐานนี้แล้วสร้างใหม่ถ้ายังไม่มี ก็พอแล้ว
       do $$ begin
         if exists (select 1 from pg_roles where rolname = 'dgl_app') then
-          execute 'drop owned by dgl_app';   -- ต้องคืนสิทธิ์ก่อน ไม่งั้นลบ role ไม่ได้
-          execute 'drop role dgl_app';
+          execute 'drop owned by dgl_app';
+        else
+          execute 'create role dgl_app login password ''apppass''';
         end if;
       end $$;
-      create role dgl_app login password 'apppass';
+      alter role dgl_app login password 'apppass';
       grant usage on schema public to dgl_app;
       grant select, insert, update, delete on all tables in schema public to dgl_app;
       grant execute on all functions in schema public to dgl_app;

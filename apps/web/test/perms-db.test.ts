@@ -82,7 +82,10 @@ describe('ทุกเส้นทางที่ส่งข้อมูลอ�
                     ถ้าบังคับสิทธิ์ส่งออก ช่างที่ดูสต๊อกได้แต่ส่งออกไม่ได้จะเห็น
                     หน้ารายการเป็นกรอบว่างทั้งหน้า — กันด้วย requireTab แทน */
       const EXEMPT = ['/logout/route.ts', '/healthz/route.ts',
-                      '/pics/[productId]/[sha]/route.ts'];
+                      '/pics/[productId]/[sha]/route.ts',
+                      /* ออกจากคอนโซลผู้ให้บริการ — แค่ลบ session ไม่ส่งข้อมูลอะไรออก
+                         และต้องทำได้เสมอแม้ session พังไปแล้ว */
+                      '/ops/logout/route.ts'];
       if (EXEMPT.includes(rel(p))) continue;
       if (!/require(Export|Cost)\(/.test(src)) missing.push(rel(p));
     }

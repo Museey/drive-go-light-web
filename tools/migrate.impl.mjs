@@ -43,8 +43,15 @@ import { runStatements, sslHint } from './sql-statements.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = resolve(ROOT, process.env.DIR ?? 'db');
 
-/** ไฟล์ที่ต้องรันจริงตอนติดตั้งใหม่ — ที่เหลือรวมอยู่ใน 001 แล้ว จึงแค่จดว่ารันแล้ว */
-export const FRESH_FILES = new Set(['001_init.sql', '002_auth.sql', '008_ops.sql']);
+/**
+ * ไฟล์ที่ต้องรันจริงตอนติดตั้งใหม่ — ที่เหลือรวมอยู่ใน 001 แล้ว จึงแค่จดว่ารันแล้ว
+ *
+ * สคีมา ops ไม่ได้อยู่ใน 001 เพราะไม่ใช่ข้อมูลของอู่ ไฟล์ของมันจึงต้องรันเองทุกครั้ง
+ * ทั้งตอนติดตั้งใหม่และตอนอัปเกรด — เขียนแบบรันซ้ำได้ทุกไฟล์
+ */
+export const FRESH_FILES = new Set([
+  '001_init.sql', '002_auth.sql', '008_ops.sql', '011_ops_console.sql',
+]);
 
 /**
  * ไฟล์ที่เป็น **ภาพรวมของสคีมาปัจจุบัน** ไม่ใช่ขั้นตอนการอัปเกรด
