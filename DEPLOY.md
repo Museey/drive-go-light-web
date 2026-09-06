@@ -5,6 +5,144 @@
 
 ---
 
+## 0. เตรียมเครื่องตั้งแต่ยังไม่มีอะไร
+
+ทำครั้งเดียวตอนตั้งเครื่องใหม่ ใช้เวลาราวหนึ่งชั่วโมง
+
+### 0.1 เช่าเครื่อง
+
+| อย่าง | ที่ต้องเลือก |
+|---|---|
+| สเปก | 2 vCPU · 4 GB RAM · SSD 60 GB |
+| ระบบปฏิบัติการ | **Ubuntu 24.04 LTS** (Postgres 16 อยู่ในคลังปริยาย) |
+| ที่ตั้ง | **ศูนย์ข้อมูลในไทย** — ผู้ใช้อยู่ไทยทั้งหมด และข้อมูลอยู่ในประเทศตามที่หน้า `/privacy` บอกไว้ |
+| การเข้าเครื่อง | ใส่ **SSH public key** ตอนสั่งซื้อ อย่าเลือกให้ส่งรหัสผ่านทางอีเมล |
+
+ยังไม่มีคู่กุญแจ SSH ให้สร้างบนเครื่องตัวเองก่อน แล้วเอาค่าที่พิมพ์ออกมาไปวางตอนสั่งซื้อ
+
+```bash
+ssh-keygen -t ed25519 -C "dgl-deploy"
+cat ~/.ssh/id_ed25519.pub
+```
+
+### 0.2 ตั้งชื่อโดเมนให้ชี้มาที่เครื่อง
+
+ที่ผู้ให้บริการโดเมน เพิ่มเรคคอร์ด `A` ชี้ไปที่ IP ของเครื่อง
+**ทำก่อนตั้ง Caddy** เพราะ Caddy ขอใบรับรอง HTTPS ทันทีที่เริ่มทำงาน
+ถ้าโดเมนยังไม่ชี้มาจะขอไม่ผ่านแล้วต้องรอโควตาใหม่
+
+```bash
+dig +short app.example.com      # ต้องได้ IP ของเครื่อง
+```
+
+### 0.3 เข้าเครื่องครั้งแรกและปิดประตูหลัง
+
+```bash
+ssh root@<IP>
+
+apt update && apt upgrade -y
+timedatectl set-timezone Asia/Bangkok        # สำคัญ — ทั้งระบบคิดวันที่ตามเวลาไทย
+
+# ผู้ใช้ที่แอปจะรันด้วย ไม่มีสิทธิ์ล็อกอินและไม่มี shell
+adduser --system --group --home /srv/drivegolight dgl
+
+# ผู้ใช้ที่เราใช้ดูแลเครื่อง
+adduser deploy
+usermod -aG sudo deploy
+mkdir -p /home/deploy/.ssh
+cp ~/.ssh/authorized_keys /home/deploy/.ssh/
+chown -R deploy:deploy /home/deploy/.ssh
+chmod 700 /home/deploy/.ssh && chmod 600 /home/deploy/.ssh/authorized_keys
+```
+
+ทดสอบว่าเข้าด้วย `deploy` ได้ **จากอีกหน้าต่างหนึ่ง โดยยังไม่ปิดหน้าต่าง root**
+ถ้าปิดก่อนแล้วเข้าไม่ได้จะเข้าเครื่องไม่ได้อีกเลย
+
+```bash
+ssh deploy@<IP> 'sudo whoami'     # ต้องได้ root
+```
+
+ได้แล้วค่อยปิดการล็อกอินด้วยรหัสผ่านและปิด root
+
+```bash
+sudo sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo systemctl restart ssh
+```
+
+### 0.4 ไฟร์วอลล์
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 80,443/tcp
+sudo ufw --force enable
+sudo ufw status
+```
+
+**ห้ามเปิดพอร์ต 5432 ออกอินเทอร์เน็ต** — Postgres ฟังเฉพาะ 127.0.0.1 เท่านั้น
+
+### 0.5 ติดตั้งของที่ต้องใช้
+
+```bash
+# Node 22 จาก NodeSource — ต้องได้ npm ที่ /usr/bin/npm ตามที่ไฟล์ systemd อ้าง
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v && which npm                      # ต้องเป็น v22.x และ /usr/bin/npm
+
+# Postgres 16
+sudo apt install -y postgresql postgresql-contrib
+psql --version
+
+# Caddy
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
+```
+
+### 0.6 เอาโค้ดขึ้นเครื่อง
+
+repo เป็นของส่วนตัว จึงต้องมีสิทธิ์อ่าน — วิธีที่ง่ายที่สุดคือสร้าง **deploy key**
+(กุญแจที่อ่านได้อย่างเดียว ผูกกับ repo เดียว ถอนได้โดยไม่กระทบบัญชี)
+
+```bash
+sudo -u dgl ssh-keygen -t ed25519 -f /srv/drivegolight/.ssh/id_ed25519 -N ''
+sudo cat /srv/drivegolight/.ssh/id_ed25519.pub
+```
+
+เอาค่าที่ได้ไปใส่ที่ GitHub → repo → Settings → Deploy keys → Add deploy key
+(ไม่ต้องติ๊ก Allow write access)
+
+```bash
+sudo -u dgl git clone git@github.com:Museey/drive-go-light-web.git /srv/drivegolight
+```
+
+### 0.7 สร้างฐานข้อมูลและไฟล์ค่าลับ
+
+```bash
+sudo -u postgres createdb dgl
+
+# ตั้งรหัสผ่านของ role แอป — สุ่มมา อย่าตั้งเอง
+DGL_PASS=$(openssl rand -base64 24)
+echo "$DGL_PASS"                          # จดไว้ ใช้ในขั้นตอนถัดไป
+
+sudo mkdir -p /etc/drivegolight
+sudo tee /etc/drivegolight/env > /dev/null <<EOF
+DATABASE_URL=postgresql://dgl_app:$DGL_PASS@127.0.0.1:5432/dgl
+EOF
+sudo chown root:dgl /etc/drivegolight/env
+sudo chmod 640 /etc/drivegolight/env
+```
+
+ไฟล์นี้อ่านได้เฉพาะ root กับกลุ่ม `dgl` — **ห้ามเก็บรหัสผ่านไว้ในไฟล์ systemd**
+เพราะไฟล์นั้นอ่านได้ทั้งเครื่องและมักถูกคัดลอกไปแปะเวลาถามปัญหา
+
+จากนั้นไปทำข้อ 3 ต่อ
+
+---
+
 ## 1. สิ่งที่ต้องมีบนเครื่องเซิร์ฟเวอร์
 
 | อย่าง | รุ่น | หมายเหตุ |
@@ -37,21 +175,47 @@ NODE_ENV=production
 
 ## 3. ติดตั้งครั้งแรก
 
+ทำต่อจากข้อ 0 — ฐานข้อมูล `dgl` และไฟล์ `/etc/drivegolight/env` มีแล้ว
+
+**สร้างสคีมาและ role ของแอป**
+
 ```bash
-createdb dgl
-ADMIN_URL=postgresql://postgres@127.0.0.1/dgl tools/migrate.sh --fresh
-# แก้รหัสผ่านในไฟล์ก่อน แล้วค่อยรัน
-psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f db/app-role.sql
+cd /srv/drivegolight
 
-npm ci
-npm run build -w @drivegolight/core -w @drivegolight/importer
-npm run build -w @drivegolight/web
+# ไมเกรชันรันด้วยสิทธิ์ผู้ดูแลฐานข้อมูล ไม่ใช่ role ของแอป
+sudo -u postgres env ADMIN_URL=dgl ./tools/migrate.sh --fresh
+sudo -u postgres env ADMIN_URL=dgl ./tools/migrate.sh --status   # ต้องขึ้นครบทุกไฟล์
 
+# ใส่รหัสผ่านที่สุ่มไว้ในข้อ 0.7 ลงไปแทนค่าตัวอย่าง แล้วรัน
+DGL_PASS=$(sudo grep -oP '(?<=dgl_app:)[^@]+' /etc/drivegolight/env)
+sed "s/เปลี่ยนรหัสนี้ก่อนใช้จริง/$DGL_PASS/" db/app-role.sql \
+  | sudo -u postgres psql -d dgl -v ON_ERROR_STOP=1
+```
+
+**สร้างไฟล์ที่จะรัน**
+
+```bash
+# -H สำคัญ — ให้ npm เขียนแคชลงบ้านของ dgl ไม่ใช่บ้านของคนที่สั่ง sudo
+sudo -u dgl -H npm ci
+sudo -u dgl -H npm run build -w @drivegolight/core -w @drivegolight/importer
+sudo -u dgl -H npm run build -w @drivegolight/web
+```
+
+**เปิดบริการ**
+
+```bash
 sudo cp deploy/drivegolight.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now drivegolight
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile   # แก้ชื่อโดเมนก่อน
+sudo systemctl daemon-reload
+sudo systemctl enable --now drivegolight
+systemctl status drivegolight            # ต้องเป็น active (running)
+
+sudo sed -i 's/app\.example\.com/<โดเมนจริง>/' deploy/Caddyfile
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
+
+ถ้า `systemctl status` ไม่เขียว ให้ดูสาเหตุที่ `journalctl -u drivegolight -n 50`
+สาเหตุที่พบบ่อยที่สุดคือ `DATABASE_URL` ผิด หรือยังไม่ได้รัน `db/app-role.sql`
 
 **ติดตั้งใหม่กับอัปเกรดใช้คนละคำสั่ง**
 
@@ -230,6 +394,12 @@ psql "postgresql://dgl_app:<รหัส>@127.0.0.1/dgl_drill" \
 - [ ] เปิดหน้าใดก็ได้แล้วไม่ขึ้นข้อผิดพลาดเรื่องเขตเวลา (แอปตรวจให้เองตอนต่อฐานข้อมูล)
 - [ ] หน้านโยบายข้อมูลส่วนบุคคลเปิดได้โดยไม่ต้องเข้าสู่ระบบ
 - [ ] ข้อมูลติดต่อในหน้า `/privacy` และหน้าต่ออายุตรงกับความจริง
+- [ ] `curl https://<โดเมน>/healthz` ตอบ `{"ok":true,"failed":[]}`
+- [ ] ปิดล็อกอินด้วยรหัสผ่านและปิด root แล้ว (`ssh root@<IP>` ต้องถูกปฏิเสธ)
+- [ ] `sudo ufw status` เปิดแค่ 22 · 80 · 443
+- [ ] `sudo systemctl is-enabled drivegolight caddy postgresql` ได้ enabled ทั้งสาม
+      (รีบูตเครื่องแล้วต้องกลับมาเองโดยไม่ต้องสั่ง)
+- [ ] `/etc/drivegolight/env` เป็น `root:dgl` และ `chmod 640`
 
 ## 9. ยังไม่ได้ทำ
 
