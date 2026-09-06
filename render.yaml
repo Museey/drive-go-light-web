@@ -65,7 +65,7 @@ services:
     branch: main
     schedule: "0 4 1 * *"      # วันที่ 1 ของทุกเดือน ตีสี่
     buildCommand: npm ci
-    command: node tools/prune-errors.mjs 90
+    startCommand: node tools/prune-errors.mjs 90
     envVars:
       - key: NODE_VERSION
         value: "22"
