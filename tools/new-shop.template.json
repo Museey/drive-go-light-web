@@ -1,0 +1,22 @@
+{
+  "_comment": "แบบร่างสำหรับอู่ที่ยังไม่เคยใช้โปรแกรมรุ่นเดิม — ก๊อปไฟล์นี้ แก้ shop แล้วส่งให้ตัวนำเข้า ดู ONBOARDING.md ข้อ 1",
+
+  "shop": {
+    "name": "ชื่ออู่",
+    "tel": "",
+    "tel2": "",
+    "addr": "",
+    "taxId": "",
+    "vatRate": 7,
+    "whtRate": 3
+  },
+
+  "categories": [],
+  "products": [],
+  "customers": [],
+  "purchases": [],
+  "expenses": [],
+  "quotes": [],
+  "invoices": [],
+  "receipts": []
+}
