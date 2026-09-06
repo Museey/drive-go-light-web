@@ -16,6 +16,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
+import { FRESH_FILES, migrationFiles } from '../../../tools/migrate.impl.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '../../..');
@@ -100,21 +101,29 @@ describe.skipIf(!DB_URL)('ไมเกรชัน', () => {
     admin = new pg.Client({ connectionString: DB_URL });
     await admin.connect();
 
-    /* ทางติดตั้งใหม่ */
+    /**
+     * รายชื่อไฟล์อ่านจากโฟลเดอร์จริง ไม่ใช่รายการที่พิมพ์ไว้
+     *
+     * ไมเกรชันไฟล์ใหม่จะถูกดึงเข้ามาเองทั้งสองทาง — ถ้าเขียนไว้ตายตัว
+     * ไฟล์ใหม่ที่ลืมเติมจะทำให้เทสต์เทียบสคีมาสองอันที่ไม่ครบทั้งคู่ แล้วเขียวทั้งที่ผิด
+     */
+    const all = migrationFiles(resolve(ROOT, 'db'));
+
+    /* ทางติดตั้งใหม่ — เฉพาะไฟล์ฐาน ที่เหลือรวมอยู่ใน 001 แล้ว */
     fresh = await makeDb(admin, 'dgl_fresh_test');
-    for (const f of ['db/001_init.sql', 'db/002_auth.sql', 'db/008_ops.sql']) {
-      await fresh.query(sql(f));
+    for (const f of all.filter((x) => FRESH_FILES.has(x))) {
+      await fresh.query(sql(`db/${f}`));
     }
 
-    /* ทางอัปเกรด — เริ่มจากสคีมารุ่นก่อนมี FIFO ที่ตรึงไว้เป็น fixture */
+    /* ทางอัปเกรด — เริ่มจากสคีมารุ่นก่อนมี FIFO ที่ตรึงไว้เป็น fixture
+       แล้วรันทุกไฟล์ที่มาหลังจากนั้น */
     upgraded = await makeDb(admin, 'dgl_upgraded_test');
     await upgraded.query(sql('apps/web/test/fixtures/001_init.baseline.sql'));
     await upgraded.query(sql('apps/web/test/fixtures/002_auth.baseline.sql'));
-    for (const f of ['003_fifo', '004_billnotes', '005_claims',
-                     '006_counts', '007_perms', '008_ops']) {
+    for (const f of all.filter((x) => x !== '001_init.sql' && x !== '002_auth.sql')) {
       /* บางไฟล์มี alter type ... add value ซึ่งอยู่ในทรานแซกชันเดียวกับที่ใช้ค่านั้นไม่ได้
          node-postgres ส่งทั้งก้อนเป็นทรานแซกชันเดียว จึงต้องแยกทีละคำสั่งเหมือนที่ psql ทำ */
-      await runStatements(upgraded, sql(`db/${f}.sql`));
+      await runStatements(upgraded, sql(`db/${f}`));
     }
   }, 180_000);
 

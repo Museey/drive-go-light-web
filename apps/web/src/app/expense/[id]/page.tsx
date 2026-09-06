@@ -9,6 +9,7 @@ import { listPayments } from '@/lib/receivables';
 import { PaymentsPanel } from '../../finance/payments-panel';
 import { BuyDocActions } from '../doc-actions';
 import { baht, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
+import { DocHistory } from '@/components/doc-history';
 
 export const dynamic = 'force-dynamic';
 
@@ -166,6 +167,7 @@ export default async function BuyDocPage({
         canPay={meta.status === 'issued' && can(session, 'finance')}
         direction="buy"
       />
+      <DocHistory documentId={meta.id} />
     </Shell>
   );
 }

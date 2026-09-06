@@ -207,7 +207,9 @@ export async function requireCost(): Promise<Session> {
 /** รัน query ในนามของอู่ที่ผู้ใช้คนนี้สังกัด */
 export async function query<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
   const s = await requireSession();
-  return withTenant(s.tenantId, fn);
+  /* ส่งผู้ใช้เข้าไปด้วย ถึงทางนี้จะไว้อ่านเป็นหลัก — เผื่อวันหนึ่งมีคนเขียนผ่านทางนี้
+     จะได้ไม่กลายเป็นประวัติที่ไม่รู้ว่าใครทำ */
+  return withTenant(s.tenantId, fn, s.userId);
 }
 
 /* =====================================================================

@@ -56,7 +56,7 @@ export async function mutate<T>(
       }
     }
     return fn(c, session.userId);
-  });
+  }, session.userId);
 }
 
 /** ผลลัพธ์ของฟอร์ม — คืนค่าที่กรอกกลับไปด้วยเพื่อไม่ให้ผู้ใช้ต้องพิมพ์ใหม่ทั้งหมด */

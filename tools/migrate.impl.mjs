@@ -44,7 +44,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = resolve(ROOT, process.env.DIR ?? 'db');
 
 /** ไฟล์ที่ต้องรันจริงตอนติดตั้งใหม่ — ที่เหลือรวมอยู่ใน 001 แล้ว จึงแค่จดว่ารันแล้ว */
-const FRESH_FILES = new Set(['001_init.sql', '002_auth.sql', '008_ops.sql']);
+export const FRESH_FILES = new Set(['001_init.sql', '002_auth.sql', '008_ops.sql']);
 
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 

@@ -11,4 +11,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '006_counts.sql',
   '007_perms.sql',
   '008_ops.sql',
+  '009_edits.sql',
 ];

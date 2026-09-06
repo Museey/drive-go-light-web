@@ -122,6 +122,7 @@ async function assertClockAgrees(client: pg.PoolClient): Promise<void> {
 export async function withTenant<T>(
   tenantId: string,
   fn: (client: pg.PoolClient) => Promise<T>,
+  userId: string | null = null,
 ): Promise<T> {
   const client = await getPool().connect();
   try {
@@ -129,6 +130,14 @@ export async function withTenant<T>(
     await assertClockAgrees(client);
     await client.query('begin');
     await client.query(`select set_config('app.tenant_id', $1, true)`, [tenantId]);
+    /**
+     * ใครเป็นคนทำ — trigger ประวัติการบันทึกเอกสารอ่านค่านี้
+     *
+     * ตั้งแบบ local เหมือน app.tenant_id เพื่อไม่ให้ค่าค้างข้าม request
+     * connection ถูกใช้ซ้ำจาก pool ถ้าตั้งแบบ session ค่าของคนก่อนหน้าจะติดมา
+     * แล้วประวัติจะบันทึกชื่อผิดคนโดยไม่มีอาการอะไรให้เห็น
+     */
+    await client.query(`select set_config('app.user_id', $1, true)`, [userId ?? '']);
     const result = await fn(client);
     await client.query('commit');
     return result;

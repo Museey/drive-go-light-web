@@ -23,6 +23,27 @@ export function thDateLong(iso: string | null | undefined): string {
   return `${d} ${TH_MONTHS[m - 1]} ${y + 543}`;
 }
 
+/**
+ * วันที่และเวลาแบบไทย จาก timestamp เต็ม — ตรงกับ thDateTime() ของรุ่น 6.4
+ *
+ * ต่างจาก thDate() ตรงที่ต้องสร้าง Date จริงเพราะต้องอ่านเวลาด้วย
+ * และตรึงเขตเวลาไว้ที่เวลาไทยเสมอ ไม่ใช่เขตเวลาของเครื่องที่เปิดดู —
+ * เจ้าของอู่ที่เปิดดูจากต่างประเทศต้องเห็นเวลาเดียวกับที่พนักงานหน้าร้านเห็น
+ */
+export function thDateTime(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  const p = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d);
+  const at = (k: string) => Number(p.find((x) => x.type === k)?.value ?? 0);
+  return `${at('day')} ${TH_ABBR[at('month') - 1]} ${at('year') + 543} `
+    + `${String(at('hour')).padStart(2, '0')}:${String(at('minute')).padStart(2, '0')} น.`;
+}
+
 export const baht = (n: number): string =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

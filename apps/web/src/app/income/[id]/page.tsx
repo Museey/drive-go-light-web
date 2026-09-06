@@ -10,6 +10,7 @@ import { can } from '@/lib/auth';
 import { PaymentsPanel } from '../../finance/payments-panel';
 import { DocActions } from '../doc-actions';
 import { baht, KIND_LABEL, payLabel, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
+import { DocHistory } from '@/components/doc-history';
 
 export const dynamic = 'force-dynamic';
 
@@ -198,6 +199,7 @@ export default async function DocPage({
           </div>
         </div>
       </div>
+      <DocHistory documentId={doc.id} />
     </Shell>
   );
 }
