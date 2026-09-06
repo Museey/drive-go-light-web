@@ -276,6 +276,27 @@ describe.skipIf(!DB_URL)('นำเข้าไฟล์สำรองข้อ
     expect(result.warnings.some((w) => w.includes('เจ้าของกิจการ'))).toBe(true);
   });
 
+  /**
+   * ผู้เรียกที่กำลังจะสร้างบัญชีเจ้าของให้ทันที ไม่ควรถูกเตือนว่ายังไม่มีบัญชีเจ้าของ
+   * คำเตือนที่ไม่จริงทำให้คนเลิกอ่านคำเตือนทั้งหมด ซึ่งอันตรายกว่าไม่เตือนเลย
+   */
+  it('ไม่เตือนเรื่องบัญชีเจ้าของ เมื่อผู้เรียกบอกว่าจะสร้างให้ต่อทันที', async () => {
+    /* ลบอู่ที่สร้างขึ้นทิ้งเมื่อจบ — เทสต์ข้ออื่นในไฟล์นี้นับจำนวนแถวรวมของทุกอู่
+       ถ้าปล่อยให้ค้างไว้ ข้อที่นับจะแดงโดยไม่เกี่ยวกับสิ่งที่มันทดสอบ
+       ทุกตารางผูกกับ tenants แบบ on delete cascade จึงหายตามหมด */
+    let tenantId = '';
+    try {
+      const r = await importBackup(app, raw, {
+        openingStockDate: '2026-08-28', ownerFollows: true,
+      });
+      tenantId = r.tenantId;
+      expect(r.warnings.some((w) => w.includes('ยังไม่มีบัญชีเจ้าของกิจการ'))).toBe(false);
+    } finally {
+      if (tenantId) await admin.query('delete from tenants where id = $1', [tenantId]);
+      await app.query(`select set_config('app.tenant_id', $1, false)`, [result.tenantId]);
+    }
+  }, 60_000);
+
   it('นำเข้าไฟล์เดิมซ้ำได้เป็นอู่ใหม่ ไม่ชนกับของเดิม', async () => {
     const second = await importBackup(app, raw, { openingStockDate: '2026-08-28' });
     expect(second.tenantId).not.toBe(result.tenantId);

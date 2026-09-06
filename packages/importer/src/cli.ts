@@ -113,6 +113,7 @@ try {
     const result = await importBackup(client, raw, {
       tenantName: arg('name'),
       openingStockDate: arg('opening-date'),
+      ownerFollows: Boolean(ownerEmail),
     });
     tenantId = result.tenantId;
 
