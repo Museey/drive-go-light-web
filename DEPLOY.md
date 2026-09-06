@@ -5,7 +5,102 @@
 
 ---
 
-## 0. เตรียมเครื่องตั้งแต่ยังไม่มีอะไร
+## 0. ขึ้น Render — ทางที่ใช้อยู่จริง
+
+ทางนี้ไม่ต้องดูแลเซิร์ฟเวอร์เอง **ข้อมูลอยู่ที่สิงคโปร์** ซึ่งบอกไว้ในหน้า `/privacy` แล้ว
+ถ้าวันหนึ่งต้องการให้ข้อมูลอยู่ในไทย ให้ข้ามไปทำข้อ 0ข ซึ่งเป็นทาง VPS
+
+### 1. สร้าง Postgres
+
+Dashboard → **New +** → **Postgres**
+
+| ช่อง | ค่า |
+|---|---|
+| Region | **Singapore** — เปลี่ยนทีหลังไม่ได้ |
+| PostgreSQL Version | 16 |
+| Instance Type | แพ็กเกจที่เสียเงิน (ฟรีไม่มีการสำรองข้อมูลและหมดอายุ) |
+| Storage | เริ่มที่ 1 GB — **เพิ่มได้ ลดไม่ได้** |
+
+วัดจากข้อมูลจริง อู่หนึ่งรายใช้ราว 5 KB ต่อเอกสาร — อู่ 30 รายที่ออกเอกสาร
+เดือนละ 150 ใบ ใช้ราว 280 MB ต่อปี
+
+### 2. ตรวจว่าฐานข้อมูลใช้ได้
+
+```bash
+DATABASE_URL='<External URL>?sslmode=no-verify' node tools/probe-db.mjs
+```
+
+ต้องได้ทั้งสองบรรทัด — บทบาทแอปผ่าน และบทบาทผู้ดูแลผ่าน
+ถ้าไม่ผ่านข้อใดข้อหนึ่ง ตัวตรวจจะบอกเองว่าต้องทำอะไรต่อ
+
+`?sslmode=no-verify` ต้องมี เพราะ Render บังคับ SSL ส่วน `pg` ตีความ `require`
+เป็น `verify-full` ซึ่งล้มกับใบรับรองที่ผู้ให้บริการออกเอง
+
+### 3. ตั้งเขตเวลาและสร้าง role ของแอป
+
+```bash
+ADMIN='<External URL>?sslmode=no-verify'
+
+# เขตเวลา — ไม่ตั้งแล้วแอปปฏิเสธไม่ยอมทำงาน
+psql "$ADMIN" -c "alter database dgl set timezone = 'Asia/Bangkok'"
+
+# ไมเกรชัน
+ADMIN_URL="$ADMIN" node tools/migrate.mjs --fresh
+
+# role ของแอป — จดรหัสที่สุ่มได้ไว้ ต้องใช้ในขั้นตอนถัดไป
+APP_PASS=$(openssl rand -base64 24 | tr -d '/+=')
+echo "$APP_PASS"
+psql "$ADMIN" -v ON_ERROR_STOP=1 -v app_password="$APP_PASS" -f db/app-role-managed.sql
+```
+
+**ทำไมต้องมี role แยก** — role ที่ Render ให้มาเป็นเจ้าของตาราง และเจ้าของตาราง
+สั่ง `alter table ... no force row level security` ได้ คือปิดเกราะของตัวเอง
+ในคำสั่งเดียว ถ้าวันหนึ่งมีช่องโหว่ที่ยิง SQL อะไรก็ได้ ความต่างนี้คือ
+"เห็นเฉพาะอู่ตัวเอง" กับ "เห็นทุกอู่"
+
+### 4. สร้างเว็บและงานตามเวลา
+
+Dashboard → **New +** → **Blueprint** → เลือก repo นี้ → Render อ่าน `render.yaml` เอง
+
+กรอกค่าลับสองตัวที่ Blueprint ถาม
+
+| ตัวแปร | ใส่อะไร |
+|---|---|
+| `DATABASE_URL` | URL ที่เปลี่ยน user กับรหัสเป็น `dgl_app` และรหัสที่สุ่มไว้ · ต่อท้าย `?sslmode=no-verify` |
+| `ADMIN_URL` | External URL เดิมของ Render · ต่อท้าย `?sslmode=no-verify` |
+
+รูปแบบของ `DATABASE_URL`
+
+```
+postgresql://dgl_app:<APP_PASS>@dpg-xxxxx-a.singapore-postgres.render.com/dgl?sslmode=no-verify
+```
+
+### 5. ตรวจว่าขึ้นแล้วใช้ได้
+
+```bash
+curl -s https://<ชื่อบริการ>.onrender.com/healthz
+```
+
+ต้องได้ `{"ok":true,"failed":[]}` เท่านั้น
+
+### 6. เปิดอู่แรก
+
+รันตัวนำเข้า**จากเครื่องเรา** ชี้ไปฐานข้อมูลจริง ไม่ต้องรันบน Render
+
+```bash
+DATABASE_URL="$ADMIN" node packages/importer/dist/cli.js <ไฟล์สำรอง>.json \
+  --owner-email=<อีเมลเจ้าของอู่> \
+  --app-url=https://<ชื่อบริการ>.onrender.com
+```
+
+ใช้ `ADMIN_URL` เพราะตัวนำเข้าต้องเขียนข้ามอู่ตอนสร้างอู่ใหม่
+
+---
+
+## 0ข. ทางเลือก — เซิร์ฟเวอร์ที่เราดูแลเอง (VPS)
+
+ยังไม่ได้ใช้ทางนี้ — เก็บไว้เผื่อวันหนึ่งต้องย้ายข้อมูลมาไทย
+ย้ายคือ dump แล้ว restore เพราะทั้งระบบเป็น Postgres กับ Node ธรรมดา
 
 ทำครั้งเดียวตอนตั้งเครื่องใหม่ ใช้เวลาราวหนึ่งชั่วโมง
 

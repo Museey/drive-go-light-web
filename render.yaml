@@ -1,0 +1,73 @@
+# Blueprint สำหรับ Render — https://render.com/docs/blueprint-spec
+#
+# ตั้งค่าไว้ในไฟล์ ไม่ใช่กดในหน้าเว็บ เพราะการตั้งค่าที่อยู่แต่ในหน้าเว็บของผู้ให้บริการ
+# คือการตั้งค่าที่ไม่มีใครรีวิวได้ ย้อนดูไม่ได้ว่าใครเปลี่ยนอะไรเมื่อไหร่
+# และสร้างใหม่ตอนย้ายไม่ได้
+#
+# **ฐานข้อมูลไม่ได้ประกาศไว้ในนี้โดยตั้งใจ** — สร้างด้วยมือแล้วเก็บ connection string
+# ไว้เป็นค่าลับ เพราะเราใช้ role แยกสองตัว (ดู db/app-role-managed.sql)
+# ซึ่งการผูกอัตโนมัติของ Render ให้ไม่ได้
+#
+# วิธีใช้ — Dashboard → New → Blueprint → เลือก repo นี้
+# แล้วกรอกค่าลับสองตัวที่ sync: false ไว้ในหน้าเว็บ
+
+services:
+  - type: web
+    name: drivegolight
+    runtime: node
+    region: singapore          # ต้องอยู่ภูมิภาคเดียวกับฐานข้อมูล
+    plan: starter
+    branch: main
+
+    buildCommand: >-
+      npm ci &&
+      npm run build -w @drivegolight/core -w @drivegolight/importer &&
+      npm run build -w @drivegolight/web
+    startCommand: npm run start -w @drivegolight/web
+
+    # รันไมเกรชันก่อนเวอร์ชันใหม่ขึ้นจริง ไม่ใช่ตอนแอปเริ่ม
+    # ถ้ารันตอนแอปเริ่ม ทุก instance ที่เกิดใหม่จะแย่งกันรัน และถ้าไมเกรชันพัง
+    # แอปจะขึ้น ๆ ลง ๆ วนไปโดยไม่มีใครบอกว่าทำไม — แบบนี้พังแล้วหยุด deploy
+    # ของเดิมยังให้บริการอยู่
+    preDeployCommand: node tools/migrate.mjs
+
+    # ล้มเหลวสามข้อที่เคยพังจริง — ต่อฐานไม่ได้ · เขตเวลาไม่ตรง · ไมเกรชันไม่ครบ
+    healthCheckPath: /healthz
+
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+
+      # connection ของแอป — ชี้ไปที่ role dgl_app ซึ่งไม่ได้เป็นเจ้าของตาราง
+      # จึงสั่งปิด force row level security ของตัวเองไม่ได้
+      - key: DATABASE_URL
+        sync: false
+
+      # connection ของผู้ดูแล — ใช้ตอนรันไมเกรชันเท่านั้น
+      # ต้องเป็น role ที่เป็นเจ้าของตาราง (ตัวที่ Render ให้มา)
+      - key: ADMIN_URL
+        sync: false
+
+      # แต่ละ connection กิน RAM ฝั่ง Postgres ราว 5-10 MB
+      # แพ็กเกจฐานข้อมูลเล็กควรอยู่ที่ 3-5
+      - key: DB_POOL_MAX
+        value: "5"
+
+  # ล้างข้อผิดพลาดที่เกิน 90 วัน ให้ตรงกับที่หน้านโยบายข้อมูลส่วนบุคคลบอกไว้
+  # ใช้ connection ของผู้ดูแล เพราะ role ของแอปตั้งใจให้ลบไม่ได้
+  - type: cron
+    name: drivegolight-prune-errors
+    runtime: node
+    region: singapore
+    plan: starter
+    branch: main
+    schedule: "0 4 1 * *"      # วันที่ 1 ของทุกเดือน ตีสี่
+    buildCommand: npm ci
+    command: node tools/prune-errors.mjs 90
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: ADMIN_URL
+        sync: false
