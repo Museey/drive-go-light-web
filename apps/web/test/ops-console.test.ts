@@ -78,14 +78,43 @@ describe('หน้าจอของคอนโซล', () => {
     }
   });
 
-  it('คุกกี้ของคอนโซลเป็นคนละตัวกับของอู่ และไม่ถูกส่งไปกับหน้าอู่', () => {
+  it('คุกกี้ของคอนโซลเป็นคนละตัวกับของอู่', () => {
     const ops = readFileSync(resolve(here, '../src/lib/ops-auth.ts'), 'utf8');
     const shop = readFileSync(resolve(here, '../src/lib/auth.ts'), 'utf8');
 
     const nameOf = (s: string) => /const COOKIE = '([^']+)'/.exec(s)?.[1];
-    expect(nameOf(ops)).not.toBe(nameOf(shop));
-    expect(ops, "path=/ops ทำให้คุกกี้ไม่ถูกส่งไปกับ request ของหน้าอู่เลย")
-      .toContain("path: '/ops'");
+    expect(nameOf(ops), 'ชื่อคุกกี้คนละตัวคือสิ่งที่กันไม่ให้สองระบบสับสนกัน')
+      .not.toBe(nameOf(shop));
+  });
+
+  /**
+   * คุณสมบัติของคุกกี้ที่ถ้าพลาดแล้วเจ็บ
+   *
+   * เคยพลาดมาแล้วครั้งหนึ่ง — ตั้ง path เป็น '/ops' เพื่อกันชั้นพิเศษ
+   * แล้วบนเครื่องจริงเบราว์เซอร์ไม่เก็บคุกกี้เลย ล็อกอินได้แต่กดลิงก์ถัดไปหลุดทุกครั้ง
+   * บนเครื่องพัฒนาไม่มีอาการ จึงไม่มีใครเห็นจนขึ้นเครื่องจริง
+   */
+  it('คุกกี้ของคอนโซลตั้งค่าครบตามที่ตั้งใจ', () => {
+    const ops = readFileSync(resolve(here, '../src/lib/ops-auth.ts'), 'utf8');
+    const block = ops.slice(ops.indexOf('jar.set(COOKIE'), ops.indexOf('return { ok: true'));
+
+    expect(block, 'JavaScript ต้องอ่านโทเคนไม่ได้').toContain('httpOnly: true');
+    expect(block, 'ต้องส่งเฉพาะบน HTTPS ตอนขึ้นเครื่องจริง')
+      .toContain("secure: process.env.NODE_ENV === 'production'");
+    expect(block, "path ต้องเป็น '/' — ตั้งแคบกว่านั้นแล้วเบราว์เซอร์ไม่เก็บ")
+      .toContain("path: '/'");
+  });
+
+  it('session ของคอนโซลสั้นกว่าของอู่ และรหัสผ่านยาวกว่า', () => {
+    const ops = readFileSync(resolve(here, '../src/lib/ops-auth.ts'), 'utf8');
+    const shop = readFileSync(resolve(here, '../src/lib/auth.ts'), 'utf8');
+
+    const opsHours = Number(/SESSION_HOURS = (\d+)/.exec(ops)?.[1]);
+    const shopDays = Number(/SESSION_DAYS = (\d+)/.exec(shop)?.[1]);
+    expect(opsHours, 'บัญชีอู่ที่หลุดคืออู่เดียว บัญชีผู้ให้บริการที่หลุดคือทุกอู่')
+      .toBeLessThan(shopDays * 24);
+
+    expect(Number(/OPS_MIN_PASSWORD = (\d+)/.exec(ops)?.[1])).toBeGreaterThanOrEqual(14);
   });
 });
 

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export default async function OpsLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; expired?: string }>;
 }) {
   if (await currentOperator()) redirect('/ops');
   const sp = await searchParams;
@@ -41,6 +41,10 @@ export default async function OpsLoginPage({
             <div className="note"
                  style={{ background: '#FCF1F1', borderColor: '#EEC4C4', color: '#7A2020' }}>
               {sp.error}
+            </div>
+          ) : sp.expired ? (
+            <div className="note">
+              เซสชันหมดอายุหรือยังไม่ได้เข้าสู่ระบบ — เข้าใหม่แล้วจะกลับมาทำต่อได้
             </div>
           ) : null}
 

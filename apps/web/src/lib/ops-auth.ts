@@ -87,8 +87,20 @@ export async function opsSignIn(
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
-      /* คุกกี้นี้ไม่ถูกส่งไปกับ request ของหน้าอู่เลย */
-      path: '/ops',
+      /**
+       * ใช้ path '/' เหมือนคุกกี้ของหน้าอู่
+       *
+       * เคยตั้งเป็น '/ops' เพื่อไม่ให้คุกกี้ผู้ให้บริการถูกส่งไปกับ request ของหน้าอู่
+       * ซึ่งเป็นการกันชั้นพิเศษ แต่บนเครื่องจริงเบราว์เซอร์ไม่เก็บคุกกี้นั้นเลย
+       * ล็อกอินแล้วหน้าแรกขึ้น (เพราะ Next เรนเดอร์ปลายทางในคำตอบเดียวกับ action)
+       * แต่กดลิงก์ถัดไปก็เด้งกลับหน้าล็อกอินทุกครั้ง
+       *
+       * **การจำกัด path ไม่ใช่ด่านที่กันของจริง** — ด่านจริงคือฟังก์ชันในฐานข้อมูล
+       * ที่ตรวจโทเคนทุกครั้งที่ถูกเรียก ต่อให้คุกกี้ถูกส่งไปทุกหน้า ก็ไม่ได้สิทธิ์อะไรเพิ่ม
+       * สิ่งที่กันไม่ให้สองระบบสับสนกันคือ **ชื่อคุกกี้คนละตัวและตาราง session คนละใบ**
+       * ซึ่งยังอยู่ครบ
+       */
+      path: '/',
       expires,
     });
 
@@ -102,7 +114,7 @@ export async function opsSignOut(): Promise<void> {
   if (token) {
     await withoutTenant((c) => c.query(`select ops.delete_session($1)`, [hashToken(token)]));
   }
-  jar.delete({ name: COOKIE, path: '/ops' });
+  jar.delete({ name: COOKIE, path: '/' });
 }
 
 export async function currentOperator(): Promise<OperatorSession | null> {
@@ -127,7 +139,9 @@ export async function currentOperator(): Promise<OperatorSession | null> {
  */
 export async function requireOperator(): Promise<OperatorSession> {
   const session = await currentOperator();
-  if (!session) redirect('/ops/login');
+  /* บอกหน้าล็อกอินว่ามาจากการถูกเด้ง ไม่ใช่เปิดเองตั้งแต่ต้น —
+     ไม่งั้นคนที่ session หมดอายุกลางทางจะงงว่าทำไมอยู่ ๆ ก็หลุด */
+  if (!session) redirect('/ops/login?expired=1');
   return session;
 }
 
