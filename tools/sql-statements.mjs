@@ -67,24 +67,43 @@ export async function runStatements(client, text) {
 }
 
 /**
- * บอกทางแก้เมื่อต่อไม่ได้เพราะใบรับรอง SSL
+ * บอกทางแก้เมื่อต่อฐานข้อมูลไม่ได้เพราะ SSL
  *
- * ผู้ให้บริการ Postgres แบบ managed ส่วนใหญ่บังคับ SSL และ connection string
- * ที่ให้มามักลงท้ายด้วย ?sslmode=require — แต่ pg รุ่นนี้ตีความ require
- * เป็น verify-full ซึ่งตรวจสายใบรับรองเต็มรูปแบบ แล้วล้มกับใบที่ผู้ให้บริการออกเอง
+ * มีสองอาการที่ต่างกันและแก้คนละแบบ ข้อความดิบจาก Node/Postgres แยกไม่ออก
  *
- * ข้อความจาก Node ตรงนี้อ่านไม่รู้เรื่องเลยถ้าไม่เคยเจอ จึงแปลให้
+ *   "SSL/TLS required"        ผู้ให้บริการบังคับ SSL แต่ URL ยังไม่ได้บอกให้ใช้
+ *                             → ต้อง **เติม** sslmode เข้าไป
+ *
+ *   "self-signed certificate" URL บอกให้ใช้ SSL แล้ว แต่ pg รุ่นนี้ตีความ
+ *                             sslmode=require เป็น verify-full ซึ่งตรวจสายใบรับรอง
+ *                             เต็มรูปแบบ แล้วล้มกับใบที่ผู้ให้บริการออกเอง
+ *                             → ต้อง **เปลี่ยน** เป็น no-verify
  */
 export function sslHint(err) {
   const m = String(err?.message ?? err);
-  if (!/certificate|SSL|self.signed|SELF_SIGNED/i.test(m)) return null;
-  return [
-    'ต่อไม่ได้เพราะการตรวจใบรับรอง SSL',
-    '',
-    'ลองเปลี่ยนท้าย connection string จาก  ?sslmode=require',
-    'เป็น  ?sslmode=no-verify  แล้วรันใหม่',
-    '',
-    'no-verify ยังเข้ารหัสการเชื่อมต่ออยู่ แค่ไม่ตรวจว่าใบรับรองออกโดยใคร',
-    'ซึ่งยอมรับได้เพราะเราต่อไปที่ชื่อโฮสต์ที่ผู้ให้บริการให้มาโดยตรง',
-  ].join('\n');
+
+  if (/SSL\/TLS required|server does not support SSL|no pg_hba.*SSL/i.test(m)) {
+    return [
+      'ฐานข้อมูลนี้บังคับให้เชื่อมต่อแบบเข้ารหัส แต่ connection string ยังไม่ได้บอกไว้',
+      '',
+      'เติมท้าย connection string ด้วย  ?sslmode=no-verify',
+      '  ...render.com/dgl?sslmode=no-verify',
+      '',
+      'ถ้ามี ? อยู่แล้วให้ใช้ &sslmode=no-verify แทน',
+    ].join('\n');
+  }
+
+  if (/certificate|self.signed|SELF_SIGNED|unable to verify/i.test(m)) {
+    return [
+      'ต่อไม่ได้เพราะการตรวจใบรับรอง SSL',
+      '',
+      'เปลี่ยนท้าย connection string จาก  ?sslmode=require',
+      'เป็น  ?sslmode=no-verify  แล้วรันใหม่',
+      '',
+      'no-verify ยังเข้ารหัสการเชื่อมต่ออยู่ แค่ไม่ตรวจว่าใบรับรองออกโดยใคร',
+      'ซึ่งยอมรับได้เพราะเราต่อไปที่ชื่อโฮสต์ที่ผู้ให้บริการให้มาโดยตรง',
+    ].join('\n');
+  }
+
+  return null;
 }
