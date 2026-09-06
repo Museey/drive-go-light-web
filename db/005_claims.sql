@@ -148,5 +148,15 @@ begin
 end;
 $$;
 
-grant select, insert, update, delete on claims, claim_items, claim_sequences to dgl_app;
-grant execute on function next_claim_no(uuid, claim_side, text) to dgl_app;
+-- ให้สิทธิ์ role ของแอปเฉพาะเมื่อมี role นั้นอยู่จริง
+--
+-- บนเครื่องที่เราคุมเอง role ถูกสร้างโดย db/app-role.sql ซึ่งอาจรันทีหลัง
+-- บนบริการ Postgres แบบ managed มัก **ไม่มี role นี้เลย** เพราะแพลตฟอร์ม
+-- ให้ role มาให้แล้วหนึ่งตัวและสร้างเพิ่มไม่ได้ — ถ้า grant ตรง ๆ ไมเกรชันจะล้มทั้งไฟล์
+do $grant$ begin
+  if exists (select 1 from pg_roles where rolname = 'dgl_app') then
+    execute 'grant select, insert, update, delete on claims, claim_items, claim_sequences to dgl_app';
+    execute 'grant execute on function next_claim_no(uuid, claim_side, text) to dgl_app';
+  end if;
+end $grant$;
+

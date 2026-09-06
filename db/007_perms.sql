@@ -100,4 +100,14 @@ begin
 end;
 $$;
 
-grant execute on all functions in schema auth to dgl_app;
+-- ให้สิทธิ์ role ของแอปเฉพาะเมื่อมี role นั้นอยู่จริง
+--
+-- บนเครื่องที่เราคุมเอง role ถูกสร้างโดย db/app-role.sql ซึ่งอาจรันทีหลัง
+-- บนบริการ Postgres แบบ managed มัก **ไม่มี role นี้เลย** เพราะแพลตฟอร์ม
+-- ให้ role มาให้แล้วหนึ่งตัวและสร้างเพิ่มไม่ได้ — ถ้า grant ตรง ๆ ไมเกรชันจะล้มทั้งไฟล์
+do $grant$ begin
+  if exists (select 1 from pg_roles where rolname = 'dgl_app') then
+    execute 'grant execute on all functions in schema auth to dgl_app';
+  end if;
+end $grant$;
+

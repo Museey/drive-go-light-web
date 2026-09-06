@@ -64,10 +64,20 @@ create index if not exists errors_unseen on ops.errors (at desc) where not seen;
 --
 -- ตาราง migrations แอปอ่านได้อย่างเดียว ใช้ตอนตรวจสุขภาพว่าไมเกรชันครบไหม
 -- ---------------------------------------------------------------------
-grant usage on schema ops to dgl_app;
-grant select, insert, update on ops.errors to dgl_app;
-grant usage, select on sequence ops.errors_id_seq to dgl_app;
-grant select on ops.migrations to dgl_app;
+-- ให้สิทธิ์ role ของแอปเฉพาะเมื่อมี role นั้นอยู่จริง
+--
+-- บนเครื่องที่เราคุมเอง role ถูกสร้างโดย db/app-role.sql ซึ่งอาจรันทีหลัง
+-- บนบริการ Postgres แบบ managed มัก **ไม่มี role นี้เลย** เพราะแพลตฟอร์ม
+-- ให้ role มาให้แล้วหนึ่งตัวและสร้างเพิ่มไม่ได้ — ถ้า grant ตรง ๆ ไมเกรชันจะล้มทั้งไฟล์
+do $grant$ begin
+  if exists (select 1 from pg_roles where rolname = 'dgl_app') then
+    execute 'grant usage on schema ops to dgl_app';
+    execute 'grant select, insert, update on ops.errors to dgl_app';
+    execute 'grant usage, select on sequence ops.errors_id_seq to dgl_app';
+    execute 'grant select on ops.migrations to dgl_app';
+  end if;
+end $grant$;
+
 
 -- ลบข้อผิดพลาดที่เก่ากว่าที่กำหนด — ค่าตั้งต้น 90 วัน
 -- ให้ตรงกับที่หน้านโยบายข้อมูลส่วนบุคคลบอกไว้เรื่องการเก็บไฟล์สำรอง
