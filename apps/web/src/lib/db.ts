@@ -29,7 +29,18 @@ function makePool(): pg.Pool {
   if (!connectionString) {
     throw new Error('ยังไม่ได้ตั้งตัวแปรแวดล้อม DATABASE_URL — ดู apps/web/.env.example');
   }
-  return new pg.Pool({ connectionString, max: 10 });
+  /**
+   * จำนวน connection สูงสุดต่อโพรเซส
+   *
+   * แต่ละ connection กิน RAM ฝั่ง Postgres ราว 5–10 MB ซึ่งสำคัญมากบนแพ็กเกจเล็ก
+   * ที่มี RAM ไม่กี่ร้อยเมกะไบต์ — ตั้งสูงเกินแล้วฐานข้อมูลจะโดนฆ่าเพราะหน่วยความจำหมด
+   * ก่อนที่ CPU จะทำงานหนักเสียอีก
+   *
+   * ตั้งได้จาก DB_POOL_MAX เพื่อปรับตามแพ็กเกจโดยไม่ต้องแก้โค้ด
+   * ค่าตั้งต้น 5 พอสำหรับอู่หลักสิบราย — คิวรีที่หนักที่สุดในระบบใช้เวลาไม่ถึง 2 ms
+   */
+  const max = Number(process.env.DB_POOL_MAX) || 5;
+  return new pg.Pool({ connectionString, max });
 }
 
 /** dev server รีโหลดโมดูลบ่อย — เก็บ pool ไว้บน globalThis กัน connection รั่ว */
