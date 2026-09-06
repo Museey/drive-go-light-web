@@ -12,4 +12,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '007_perms.sql',
   '008_ops.sql',
   '009_edits.sql',
+  '010_pics.sql',
 ];

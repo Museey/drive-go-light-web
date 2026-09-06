@@ -10,11 +10,12 @@
  *     เพราะ products.qty ในไฟล์เดิมเป็นยอดสะสมที่ผ่านการบวกลบมาแล้ว
  *     ถ้าลงประวัติซื้อ/ขายด้วยจะกลายเป็นนับสองรอบ
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   exTotals, isServiceItem, num, poTotals, recTotals, round2, totalsOf,
 } from '@drivegolight/core';
 import { permsFromLegacy, type PermKey, type ShopContext, type VatMode } from '@drivegolight/core';
+import { picsFromBackup } from './pics.js';
 
 /**
  * ผังเมนูย่อยของระบบใหม่ — ใช้ตอนกางสิทธิ์รูปแบบเก่าให้เป็นรายแท็บ
@@ -254,6 +255,29 @@ export async function importBackup(
       ['id', 'tenant_id', 'code', 'oem', 'barcode', 'name', 'unit', 'category_id',
        'last_cost', 'price_a', 'price_b', 'price_c', 'qty_min', 'qty_max', 'legacy_id'],
       productRows);
+
+    /* ---------- รูปสินค้า ---------- */
+    const { rows: picRows, skipped: picSkipped } = picsFromBackup(db);
+    const picValues: unknown[][] = [];
+    for (const r of picRows) {
+      const pid = productId.get(r.legacyProductId);
+      if (!pid) continue;
+      picValues.push([
+        pid, tenantId, createHash('sha256').update(r.full).digest('hex'), r.mime,
+        r.full, r.thumb, r.full.length + r.thumb.length,
+      ]);
+    }
+    /* ความกว้างและสูงเว้นว่างไว้ — อ่านไม่ได้ที่นี่เพราะไม่มีตัวถอดรูปฝั่งเซิร์ฟเวอร์
+       ใส่ค่าปลอมแล้วหลอกตัวเองว่ารู้ แย่กว่าการบอกตรง ๆ ว่าไม่ทราบ
+       การอัปโหลดครั้งถัดไปจะเขียนค่าจริงทับให้เอง */
+    if (picValues.length) {
+      await insertRows(client, 'product_pics',
+        ['product_id', 'tenant_id', 'sha', 'mime', 'full_bytes', 'thumb_bytes', 'bytes'],
+        picValues);
+    }
+    if (picSkipped) {
+      warnings.push(`รูปสินค้า ${picSkipped} รูปในไฟล์อ่านไม่ออก — ข้ามไป ข้อมูลอื่นครบ`);
+    }
 
     /* ---------- สต๊อกยกมา ---------- */
     const stockRows = db.products

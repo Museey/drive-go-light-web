@@ -8,7 +8,10 @@ import {
 import {
   createProductFromPending, ignorePendingItem, linkPendingToProduct, restoreIgnoredItems,
 } from '@/lib/pending';
-import { flag, friendlyDbError, keepValues, money, qty, str, type FormResult } from '@/lib/mutate';
+import { deletePic, savePic } from '@/lib/pics';
+import {
+  flag, friendlyDbError, keepValues, money, mutate, qty, str, type FormResult,
+} from '@/lib/mutate';
 import { setStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
 
 export async function saveProductAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
@@ -172,5 +175,49 @@ export async function createFromPendingAction(_prev: FormResult, fd: FormData): 
 
   revalidatePath('/stock/pending');
   revalidatePath('/stock');
+  return { ok: true };
+}
+
+/* ---------- รูปสินค้า ---------- */
+
+/**
+ * รับรูปที่เบราว์เซอร์ย่อมาแล้ว
+ *
+ * ฝั่งเซิร์ฟเวอร์ตรวจไบต์จริงซ้ำเสมอ ไม่เชื่ออะไรที่มาจากฝั่งผู้ใช้เลย —
+ * ทั้ง `file.type` และการที่หน้าเว็บบอกว่าย่อมาแล้ว ผู้ส่งปลอมได้ทั้งคู่
+ */
+export async function savePicAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
+  const productId = str(fd, 'productId');
+  if (!productId) return { error: 'ไม่รู้ว่าเป็นรูปของสินค้าตัวไหน' };
+
+  const full = fd.get('full');
+  const thumb = fd.get('thumb');
+  if (!(full instanceof File) || !(thumb instanceof File) || full.size === 0) {
+    return { error: 'เลือกรูปก่อน — ถ้าเลือกแล้วยังขึ้นข้อความนี้ แปลว่าเบราว์เซอร์ย่อรูปไม่สำเร็จ' };
+  }
+
+  const fullBytes = new Uint8Array(await full.arrayBuffer());
+  const thumbBytes = new Uint8Array(await thumb.arrayBuffer());
+
+  try {
+    const result = await mutate('stock', (c) => savePic(c, productId, fullBytes, thumbBytes),
+      { sub: 'list' });
+    if (!result.ok) return { error: result.error };
+    revalidatePath('/stock');
+    revalidatePath(`/stock/${productId}`);
+    return { ok: true };
+  } catch (err) {
+    /* โควตาเต็มมาจาก trigger ในฐานข้อมูล ข้อความบอกตัวเลขจริงอยู่แล้ว */
+    return { error: friendlyDbError(err) };
+  }
+}
+
+export async function deletePicAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
+  const productId = str(fd, 'productId');
+  if (!productId) return { error: 'ไม่รู้ว่าเป็นรูปของสินค้าตัวไหน' };
+
+  await mutate('stock', (c) => deletePic(c, productId), { sub: 'list' });
+  revalidatePath('/stock');
+  revalidatePath(`/stock/${productId}`);
   return { ok: true };
 }

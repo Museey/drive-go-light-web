@@ -9,6 +9,9 @@ import { baht, thDate } from '@/lib/format';
 import { ProductForm } from '../product-form';
 import { AdjustForm } from '../adjust-form';
 import { MoveForm } from '../move-form';
+import { PicPanel } from './pic-panel';
+import { query } from '@/lib/auth';
+import { getPicMeta } from '@/lib/pics';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,9 +45,13 @@ export default async function ProductPage({
   ]);
   if (!isNew && !product) notFound();
 
-  const [moves, lots] = product
-    ? await Promise.all([listStockMoves(product.id), listProductLots(product.id)])
-    : [[], []];
+  const [moves, lots, pic] = product
+    ? await Promise.all([
+      listStockMoves(product.id),
+      listProductLots(product.id),
+      query((c) => getPicMeta(c, product.id)),
+    ])
+    : [[], [], null];
   const lotValue = lots.reduce((s2, l) => s2 + l.qty * l.unitCost, 0);
 
   return (
@@ -55,6 +62,11 @@ export default async function ProductPage({
       actions={<Link className="btn" href="/stock">← กลับทะเบียนสินค้า</Link>}
     >
       {sp.saved ? <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย</div> : null}
+
+      {/* รูปอยู่หลังฟอร์มไม่ได้ เพราะสินค้าใหม่ยังไม่มี id ให้ผูกรูป */}
+      {product ? (
+        <PicPanel productId={product.id} sha={pic?.sha ?? null} canEdit={mayEdit} />
+      ) : null}
 
       {/* ไม่มีสิทธิ์แก้ก็ไม่ต้องเห็นฟอร์ม — เซิร์ฟเวอร์ปฏิเสธอยู่แล้ว
           แต่การให้กรอกจนเสร็จแล้วค่อยบอกว่าทำไม่ได้ เป็นการเสียเวลาของคนทำงาน */}

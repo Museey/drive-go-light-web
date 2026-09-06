@@ -7,11 +7,12 @@
  *   DATABASE_URL=postgresql://postgres:x@localhost:5433/dgl npm test -w @drivegolight/web
  */
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { importBackup } from '@drivegolight/importer';
+import { readPic, savePic, sha256 } from '../src/lib/pics';
 import { exportBackupWith } from '../src/lib/backup';
 import { openInvoices, saveBillnote } from '../src/lib/billnotes';
 import { saveClaim } from '../src/lib/claims';
@@ -26,6 +27,10 @@ const ROOT = resolve(here, '../../..');
 const DB_URL = process.env.DATABASE_URL;
 const n = (v: unknown) => Number(v);
 
+const PICS = resolve(here, 'fixtures/pics');
+const picFull = new Uint8Array(readFileSync(join(PICS, 'small.jpg')));
+const picThumb = new Uint8Array(readFileSync(join(PICS, 'small.png')));
+
 describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข้า', () => {
   let admin: pg.Client;
   let app: pg.Client;
@@ -37,6 +42,7 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
   let claimCost = 0;
   let countNo = '';
   let countedTo = 0;
+  let picProductCode = '';
 
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: DB_URL });
@@ -71,6 +77,11 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     firstTenant = first.tenantId;
 
     await app.query(`select set_config('app.tenant_id', $1, false)`, [firstTenant]);
+
+    /* ใส่รูปให้สินค้าตัวหนึ่ง ไฟล์สำรองจะได้มีรูปให้พิสูจน์ว่าไปกลับแล้วยังเท่าเดิม */
+    const anyProduct = await app.query('select id, code from products order by code limit 1');
+    picProductCode = anyProduct.rows[0].code;
+    await savePic(app, anyProduct.rows[0].id, picFull, picThumb);
 
     /* วางบิลลูกค้าที่ค้างมากที่สุดไว้หนึ่งใบ ไฟล์สำรองจะได้มีใบวางบิลให้พิสูจน์ */
     const open = await openInvoices(app);
@@ -427,6 +438,36 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     expect(text).not.toContain('scrypt');
     expect(text).not.toContain('password_hash');
     expect(text).not.toContain('passwordHash');
+  });
+
+  it('รูปสินค้าไปกลับแล้วยังเท่าเดิมทุกไบต์', async () => {
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [secondTenant]);
+    const p = await app.query('select id from products where code = $1', [picProductCode]);
+    expect(p.rows[0], 'สินค้าที่มีรูปต้องถูกนำเข้ามาด้วย').toBeTruthy();
+
+    const back = await readPic(app, p.rows[0].id, sha256(picFull), 'full');
+    expect(back, 'รูปต้องตามมากับไฟล์สำรอง').not.toBeNull();
+    expect(new Uint8Array(back!.bytes)).toEqual(picFull);
+
+    const t = await readPic(app, p.rows[0].id, sha256(picFull), 'thumb');
+    expect(new Uint8Array(t!.bytes), 'รูปย่อก็ต้องตามมา ไม่ใช่ถูกสร้างใหม่จากรูปเต็ม')
+      .toEqual(picThumb);
+
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [firstTenant]);
+  });
+
+  it('ไฟล์สำรองเก็บรูปในรูปแบบเดียวกับรุ่น 6.4 เปิดที่นั่นได้', async () => {
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [firstTenant]);
+    const file = await exportBackupWith(app);
+
+    const key = `p:${sha256(picFull)}`;
+    expect(file._piclib, '_piclib คือชื่อที่รุ่น 6.4 ใช้').toHaveProperty(key);
+    expect(file._piclib![key]).toMatch(/^data:image\/jpeg;base64,/);
+
+    const prod = (file.products as any[]).find((x) => x.code === picProductCode);
+    expect(prod.pics, 'ตัวสินค้าอ้างถึงรหัสรูป เหมือน p.pics ของรุ่นเดิม').toEqual([key]);
+
+    expect(file._picthumbs, 'รูปย่ออยู่คนละคีย์ ซึ่งรุ่น 6.4 ข้ามไปเอง').toHaveProperty(key);
   });
 
   it('ไฟล์ที่ส่งออกผ่านการตรวจของตัวนำเข้าเอง', async () => {

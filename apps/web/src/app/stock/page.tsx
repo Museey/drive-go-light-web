@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { STOCK_FLAG_LABEL, type StockFlag } from '@drivegolight/core';
-import { requireTab } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { getStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
+import { picShaOf } from '@/lib/pics';
 import { listPendingItems } from '@/lib/pending';
 import { ColPicker } from './col-picker';
 import { Shell } from '@/components/shell';
@@ -41,6 +42,9 @@ export default async function StockPage({
       pageSize,
     }),
   ]);
+
+  /* รูปย่อของทั้งหน้ารวดเดียว ไม่ใช่ยิงทีละแถว — หน้าละ 50 แถวจะกิน connection หมด pool */
+  const picSha = await query((c) => picShaOf(c, rows.map((p) => p.id)));
 
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   /* ต้นทุนถูกซ่อนได้สองทาง — ผู้ใช้เลือกซ่อนคอลัมน์เอง หรือไม่มีสิทธิ์เห็นต้นทุน
@@ -124,6 +128,7 @@ export default async function StockPage({
             <table className="tbl">
               <thead>
                 <tr>
+                  <th style={{ width: 46 }} />
                   <th>รหัส</th>
                   <th>OEM</th>
                   <th>ชื่อสินค้า</th>
@@ -141,6 +146,20 @@ export default async function StockPage({
               <tbody>
                 {rows.map((p) => (
                   <tr key={p.id}>
+                    <td style={{ padding: 4 }}>
+                      {picSha.get(p.id) ? (
+                        <Link href={`/stock/${p.id}`}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`/pics/${p.id}/${picSha.get(p.id)}?t=1`}
+                            alt=""
+                            width={38}
+                            height={38}
+                            style={{ objectFit: 'cover', borderRadius: 4, display: 'block' }}
+                          />
+                        </Link>
+                      ) : null}
+                    </td>
                     <td className="mono">
                       <Link href={`/stock/${p.id}`} style={{ textDecoration: 'underline' }}>{p.code}</Link>
                       {!p.active ? <span className="chip" style={{ marginLeft: 6 }}>ปิดใช้งาน</span> : null}

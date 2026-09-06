@@ -9,6 +9,7 @@
  *
  *   DATABASE_URL=postgresql://postgres:x@localhost:5433/dgl npm test -w @drivegolight/web
  */
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -130,16 +131,57 @@ describe.skipIf(!DB_URL)('รันไมเกรชันจริง', () => 
   }, 60_000);
 
   /** ข้อสำคัญที่สุด */
-  it('ไฟล์ที่รันไปแล้วถูกแก้เนื้อหา ต้องหยุดและบอกชื่อไฟล์', async () => {
+  it('ไฟล์อัปเกรดที่รันไปแล้วถูกแก้เนื้อหา ต้องหยุดและบอกชื่อไฟล์', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dgl-mig-'));
     writeFileSync(join(dir, '001_init.sql'), 'create table a (id int);');
-    writeFileSync(join(dir, '002_auth.sql'), 'create table b (id int);');
+    writeFileSync(join(dir, '003_more.sql'), 'create table b (id int);');
 
     await migrate(c, { mode: 'run', dir, log: quiet });
 
-    writeFileSync(join(dir, '001_init.sql'), 'create table a (id int); -- แก้ทีหลัง');
+    writeFileSync(join(dir, '003_more.sql'), 'create table b (id int); -- แก้ทีหลัง');
     await expect(migrate(c, { mode: 'run', dir, log: quiet }))
-      .rejects.toThrow(/001_init\.sql/);
+      .rejects.toThrow(/003_more\.sql/);
+  }, 60_000);
+
+  /**
+   * 001 กับ 002 เป็นภาพรวมของสคีมาปัจจุบัน ไม่ใช่ขั้นตอนการอัปเกรด
+   * ทุกครั้งที่มีไมเกรชันใหม่ สองไฟล์นี้ต้องถูกแก้ตามด้วยเสมอ
+   *
+   * เคยพังจริงมาแล้วครั้งหนึ่ง — เพิ่ม 009 พร้อมแก้ 001 แล้ว deploy ไม่ผ่าน
+   * เพราะตัวรันมองว่าไฟล์ที่รันแล้วถูกแก้ ทั้งที่นั่นคือสิ่งที่ควรเกิด
+   */
+  it('ไฟล์ภาพรวมสคีมาถูกแก้ ต้องไปต่อได้ ไม่ใช่หยุด', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dgl-mig-'));
+    writeFileSync(join(dir, '001_init.sql'), 'create table a (id int);');
+    await migrate(c, { mode: 'run', dir, log: quiet });
+
+    /* จำลองการเพิ่มไมเกรชันใหม่พร้อมแก้ภาพรวมให้ตรงกัน */
+    writeFileSync(join(dir, '001_init.sql'),
+      'create table a (id int); create table b (id int);');
+    writeFileSync(join(dir, '009_new.sql'), 'create table b (id int);');
+
+    const r = await migrate(c, { mode: 'run', dir, log: quiet });
+    expect(r.pending, 'ต้องรันเฉพาะไฟล์ใหม่').toBe(1);
+
+    /* ตาราง b ต้องมาจาก 009 ไม่ใช่จากการรัน 001 ซ้ำ ซึ่งจะพังที่ create table a */
+    const t = await c.query(
+      `select count(*)::int as n from information_schema.tables where table_name in ('a','b')`);
+    expect(t.rows[0].n).toBe(2);
+  }, 60_000);
+
+  it('ลายเซ็นใหม่ของไฟล์ภาพรวมถูกจดไว้ รันอีกรอบจึงเงียบ', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dgl-mig-'));
+    writeFileSync(join(dir, '001_init.sql'), 'create table a (id int);');
+    await migrate(c, { mode: 'run', dir, log: quiet });
+
+    writeFileSync(join(dir, '001_init.sql'), 'create table a (id int); -- เพิ่มคอมเมนต์');
+    await migrate(c, { mode: 'run', dir, log: quiet });
+
+    const { rows } = await c.query(
+      `select checksum from ops.migrations where filename = '001_init.sql'`);
+    const after = createHash('sha256')
+      .update(readFileSync(join(dir, '001_init.sql'), 'utf8')).digest('hex');
+    expect(rows[0].checksum, 'ถ้าไม่จดใหม่ จะเตือนซ้ำทุกครั้งที่ deploy').toBe(after);
   }, 60_000);
 
   it('ไฟล์ใหม่ที่เพิ่มทีหลังถูกรันและถูกจด', async () => {

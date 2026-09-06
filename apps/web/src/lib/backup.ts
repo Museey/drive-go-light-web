@@ -36,6 +36,14 @@ export interface BackupFile {
   counts: unknown[];
   ui: Record<string, unknown>;
   lastExportAt: number;
+  /**
+   * คลังรูปสินค้า — รูปแบบเดียวกับ `_piclib` ของรุ่น 6.4
+   * `{ 'p:<sha>': 'data:image/jpeg;base64,…' }` โดยตัวสินค้าอ้างถึงด้วย `pics: ['p:<sha>']`
+   * ตั้งใจให้เหมือนกันเป๊ะ เพื่อให้ไฟล์สำรองของเราเปิดด้วยโปรแกรมรุ่นเดิมได้จริง
+   */
+  _piclib?: Record<string, string>;
+  /** รูปย่อ — คีย์ที่รุ่น 6.4 ไม่รู้จักและข้ามไปเอง */
+  _picthumbs?: Record<string, string>;
 }
 
 const n = (v: unknown): number => Number(v ?? 0);
@@ -67,6 +75,12 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
        from products p left join product_stock st on st.product_id = p.id
        order by p.code`,
     );
+
+    const pics = await c.query(
+      `select product_id, sha, mime, full_bytes, thumb_bytes from product_pics`);
+    /* รหัสรูปใช้รูปแบบของรุ่นเดิม (p:xxx) เพื่อให้ไฟล์เปิดที่นั่นได้ */
+    const picKey = new Map<string, string>(
+      pics.rows.map((r) => [r.product_id, `p:${r.sha}`]));
 
     const contacts = await c.query(`select * from contacts order by code`);
     const vehicles = await c.query(`select * from vehicles order by created_at`);
@@ -226,6 +240,7 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         cost: n(p.last_cost), pA: n(p.price_a), pB: n(p.price_b), pC: n(p.price_c),
         qty: n(p.qty), min: n(p.qty_min), max: n(p.qty_max),
         lastMove: p.last_move_on ?? '',
+        ...(picKey.has(p.id) ? { pics: [picKey.get(p.id)!] } : {}),
         ...(p.active ? {} : { active: false }),
       })),
 
@@ -392,6 +407,17 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
 
       ui: s.ui_prefs ?? {},
       lastExportAt: Date.now(),
+
+      ...(pics.rows.length ? {
+        _piclib: Object.fromEntries(pics.rows.map((r) => [
+          `p:${r.sha}`,
+          `data:${r.mime};base64,${(r.full_bytes as Buffer).toString('base64')}`,
+        ])),
+        _picthumbs: Object.fromEntries(pics.rows.map((r) => [
+          `p:${r.sha}`,
+          `data:${r.mime};base64,${(r.thumb_bytes as Buffer).toString('base64')}`,
+        ])),
+      } : {}),
     };
   }
 }

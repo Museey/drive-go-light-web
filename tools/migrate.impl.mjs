@@ -46,6 +46,20 @@ const DIR = resolve(ROOT, process.env.DIR ?? 'db');
 /** ไฟล์ที่ต้องรันจริงตอนติดตั้งใหม่ — ที่เหลือรวมอยู่ใน 001 แล้ว จึงแค่จดว่ารันแล้ว */
 export const FRESH_FILES = new Set(['001_init.sql', '002_auth.sql', '008_ops.sql']);
 
+/**
+ * ไฟล์ที่เป็น **ภาพรวมของสคีมาปัจจุบัน** ไม่ใช่ขั้นตอนการอัปเกรด
+ *
+ * 001 กับ 002 บอกว่า "ฐานข้อมูลที่ถูกต้องหน้าตาเป็นอย่างไร" ทุกครั้งที่มีไฟล์
+ * ไมเกรชันใหม่ สองไฟล์นี้ต้องถูกแก้ตามด้วยเสมอ ไม่งั้นการติดตั้งใหม่จะได้สคีมาเก่า
+ *
+ * เนื้อหาที่เปลี่ยนของสองไฟล์นี้จึงไม่ใช่สัญญาณอันตราย ตรงกันข้าม — มันคือสิ่งที่ควรเกิด
+ * ส่วนฐานข้อมูลที่ติดตั้งไปแล้วได้เนื้อหาใหม่จากไฟล์ 003 เป็นต้นไปอยู่แล้ว
+ *
+ * สิ่งที่คอยจับว่าแก้ 001 แล้วลืมเขียนไฟล์อัปเกรดคู่กันคือ migrations.test.ts
+ * ซึ่งสร้างฐานสองใบด้วยสองทางแล้วเทียบสคีมากันทีละคอลัมน์ — แข็งแรงกว่า checksum มาก
+ */
+export const SNAPSHOT_FILES = new Set(['001_init.sql', '002_auth.sql']);
+
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 
 /** ไฟล์ไมเกรชันคือไฟล์ที่ขึ้นต้นด้วยตัวเลข — app-role.sql ไม่ใช่ เพราะต้องรันซ้ำทุกครั้งหลังกู้ */
@@ -117,17 +131,32 @@ export async function migrate(client, { mode = 'run', dir = DIR, log = console.l
     }
   }
 
-  /* ไฟล์ที่ขึ้นเครื่องจริงแล้วห้ามแก้ — ถ้าแก้แปลว่าโค้ดกับฐานข้อมูลไม่ตรงกันโดยไม่มีใครรู้ */
+  /* ไฟล์ที่ขึ้นเครื่องจริงแล้วห้ามแก้ — ถ้าแก้แปลว่าโค้ดกับฐานข้อมูลไม่ตรงกันโดยไม่มีใครรู้
+     ยกเว้นไฟล์ภาพรวมสคีมา ซึ่งต้องถูกแก้ทุกครั้งที่มีไมเกรชันใหม่ (ดู SNAPSHOT_FILES) */
   const changed = [];
+  const restamped = [];
   for (const f of files) {
     const before = ran.get(f);
-    if (before && before !== sha(readFileSync(join(dir, f), 'utf8'))) changed.push(f);
+    if (!before) continue;
+    const now = sha(readFileSync(join(dir, f), 'utf8'));
+    if (before === now) continue;
+    if (SNAPSHOT_FILES.has(f)) restamped.push([f, now]);
+    else changed.push(f);
   }
   if (changed.length) {
     throw new Error(
       `ไฟล์ที่รันไปแล้วถูกแก้เนื้อหา: ${changed.join(', ')}\n` +
       'ไฟล์ไมเกรชันที่ขึ้นเครื่องจริงแล้วห้ามแก้ — ให้เขียนไฟล์ใหม่ต่อท้ายแทน',
     );
+  }
+
+  /* จดลายเซ็นใหม่ของไฟล์ภาพรวม **โดยไม่รันมันซ้ำ** — ฐานนี้ได้เนื้อหาใหม่
+     จากไฟล์อัปเกรดอยู่แล้ว การรัน 001 ซ้ำจะพังทันทีเพราะตารางมีอยู่แล้ว */
+  if (restamped.length && mode !== 'dry') {
+    for (const [f, now] of restamped) {
+      await client.query('update ops.migrations set checksum = $2 where filename = $1', [f, now]);
+      log(`ปรับลายเซ็น (ไฟล์ภาพรวมสคีมา ไม่ได้รันซ้ำ)  ${f}`);
+    }
   }
 
   let pending = 0;

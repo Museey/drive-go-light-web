@@ -166,9 +166,28 @@ if (errors.length) {
   process.exit(1);
 }
 
+/* ---------- ติดรูปให้สินค้าตัวแรก ---------- */
+/**
+ * รุ่น 3.6 ที่ใช้สร้างข้อมูลตัวอย่างยังไม่มีรูปสินค้า แต่ชุดทดสอบต้องมีรูปอย่างน้อยหนึ่งรูป
+ * ไม่งั้นเส้นทางนำเข้ารูปจะไม่เคยถูกรันเลย และเทสต์ที่ไล่ทุกตารางจาก information_schema
+ * จะเห็น product_pics ว่างแล้วเตือนว่า RLS กรองจนไม่เหลืออะไร
+ *
+ * รูปแบบเดียวกับที่รุ่น 6.4 ส่งออก — p.pics = ['p:<id>'] กับ _piclib
+ */
+{
+  const pic = readFileSync(resolve(ROOT, 'apps/web/test/fixtures/pics/small.jpg'));
+  const thumb = readFileSync(resolve(ROOT, 'apps/web/test/fixtures/pics/small.png'));
+  const key = 'p:demo0001';
+  if (db.products[0]) {
+    db.products[0].pics = [key];
+    db._piclib = { [key]: `data:image/jpeg;base64,${pic.toString('base64')}` };
+    db._picthumbs = { [key]: `data:image/png;base64,${thumb.toString('base64')}` };
+  }
+}
+
 mkdirSync(OUT_DIR, { recursive: true });
 const outFile = resolve(OUT_DIR, 'demo-backup.json');
-writeFileSync(outFile, json, 'utf8');
+writeFileSync(outFile, JSON.stringify(db, null, 2), 'utf8');
 
 /* ---------- สรุป ---------- */
 
