@@ -15,7 +15,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
-import { migrate } from '../../../tools/migrate.mjs';
+import { migrate } from '../../../tools/migrate.impl.mjs';
 import { splitStatements } from '../../../tools/sql-statements.mjs';
 import { EXPECTED_MIGRATIONS } from '../src/lib/migrations.generated';
 
