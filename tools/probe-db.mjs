@@ -19,6 +19,7 @@
  * ไม่มีอะไรค้างไว้ และไม่แตะข้อมูลของอู่เลย
  */
 import pg from 'pg';
+import { sslHint } from './sql-statements.mjs';
 
 const url = process.env.DATABASE_URL || process.env.ADMIN_URL;
 if (!url) {
@@ -229,7 +230,9 @@ try {
   }
   console.log('');
 } catch (err) {
+  const hint = sslHint(err);
   console.error(`\nต่อฐานข้อมูลไม่ได้ — ${err instanceof Error ? err.message : err}`);
+  if (hint) console.error(`\n${hint}`);
   process.exitCode = 2;
 } finally {
   await client.end().catch(() => {});

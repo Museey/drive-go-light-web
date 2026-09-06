@@ -22,7 +22,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import { runStatements } from './sql-statements.mjs';
+import { runStatements, sslHint } from './sql-statements.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = resolve(ROOT, process.env.DIR ?? 'db');
@@ -140,6 +140,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     await migrate(client, { mode });
   } catch (err) {
     console.error(`\n${err instanceof Error ? err.message : err}`);
+    const hint = sslHint(err);
+    if (hint) console.error(`\n${hint}`);
     process.exitCode = 1;
   } finally {
     await client.end().catch(() => {});

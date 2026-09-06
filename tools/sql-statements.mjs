@@ -65,3 +65,26 @@ export async function runStatements(client, text) {
     await client.query(stmt);
   }
 }
+
+/**
+ * บอกทางแก้เมื่อต่อไม่ได้เพราะใบรับรอง SSL
+ *
+ * ผู้ให้บริการ Postgres แบบ managed ส่วนใหญ่บังคับ SSL และ connection string
+ * ที่ให้มามักลงท้ายด้วย ?sslmode=require — แต่ pg รุ่นนี้ตีความ require
+ * เป็น verify-full ซึ่งตรวจสายใบรับรองเต็มรูปแบบ แล้วล้มกับใบที่ผู้ให้บริการออกเอง
+ *
+ * ข้อความจาก Node ตรงนี้อ่านไม่รู้เรื่องเลยถ้าไม่เคยเจอ จึงแปลให้
+ */
+export function sslHint(err) {
+  const m = String(err?.message ?? err);
+  if (!/certificate|SSL|self.signed|SELF_SIGNED/i.test(m)) return null;
+  return [
+    'ต่อไม่ได้เพราะการตรวจใบรับรอง SSL',
+    '',
+    'ลองเปลี่ยนท้าย connection string จาก  ?sslmode=require',
+    'เป็น  ?sslmode=no-verify  แล้วรันใหม่',
+    '',
+    'no-verify ยังเข้ารหัสการเชื่อมต่ออยู่ แค่ไม่ตรวจว่าใบรับรองออกโดยใคร',
+    'ซึ่งยอมรับได้เพราะเราต่อไปที่ชื่อโฮสต์ที่ผู้ให้บริการให้มาโดยตรง',
+  ].join('\n');
+}
