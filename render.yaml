@@ -19,8 +19,10 @@ services:
     plan: starter
     branch: main
 
+    # --include=dev เพราะ NODE_ENV=production ข้างล่างทำให้ npm ci ข้าม
+    # devDependencies ทั้งหมด ซึ่งรวม typescript กับ @types/* ที่ตอน build ต้องใช้
     buildCommand: >-
-      npm ci &&
+      npm ci --include=dev &&
       npm run build -w @drivegolight/core -w @drivegolight/importer &&
       npm run build -w @drivegolight/web
     startCommand: npm run start -w @drivegolight/web

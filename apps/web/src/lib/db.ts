@@ -43,8 +43,19 @@ function makePool(): pg.Pool {
   return new pg.Pool({ connectionString, max });
 }
 
-/** dev server รีโหลดโมดูลบ่อย — เก็บ pool ไว้บน globalThis กัน connection รั่ว */
-const pool: pg.Pool = globalThis.__dglPool ?? (globalThis.__dglPool = makePool());
+/**
+ * สร้าง pool ตอนเรียกใช้จริง ไม่ใช่ตอน import โมดูล
+ *
+ * `next build` จะ import โมดูลของทุกหน้าเพื่อเก็บข้อมูลหน้า ถ้าสร้าง pool
+ * ที่ระดับโมดูล การ build จะพังทันทีเมื่อไม่มี DATABASE_URL — ซึ่งเป็นเรื่องปกติ
+ * ของเครื่อง CI และของนักพัฒนาที่ยังไม่ได้ตั้งฐานข้อมูล **การ build ไม่ควรต้อง
+ * มีฐานข้อมูล** ให้พังตอนมีคนขอข้อมูลจริงแทน
+ *
+ * dev server รีโหลดโมดูลบ่อย — เก็บ pool ไว้บน globalThis กัน connection รั่ว
+ */
+function getPool(): pg.Pool {
+  return globalThis.__dglPool ?? (globalThis.__dglPool = makePool());
+}
 
 /**
  * ตรวจว่า role ที่ต่ออยู่ไม่ข้าม Row Level Security
@@ -112,7 +123,7 @@ export async function withTenant<T>(
   tenantId: string,
   fn: (client: pg.PoolClient) => Promise<T>,
 ): Promise<T> {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await assertRlsEnforced(client);
     await assertClockAgrees(client);
@@ -167,7 +178,7 @@ async function noteFailure(
  * ตาราง tenants มี RLS อยู่ด้วย จึงอ่านได้เฉพาะคอลัมน์ที่นโยบายอนุญาต
  */
 export async function withoutTenant<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await assertRlsEnforced(client);
     await assertClockAgrees(client);
