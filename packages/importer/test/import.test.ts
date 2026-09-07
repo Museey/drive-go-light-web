@@ -21,6 +21,7 @@ import {
 } from '@drivegolight/core';
 import { importBackup, normalizeBackup } from '../src/index.js';
 import type { ImportResult } from '../src/index.js';
+import { freshSchema } from '../../../tools/test-schema.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '../../..');
@@ -49,8 +50,7 @@ describe.skipIf(!DB_URL)('นำเข้าไฟล์สำรองข้อ
     await admin.connect();
 
     // เริ่มจากสคีมาเปล่าทุกครั้ง
-    await admin.query('drop schema if exists public cascade; create schema public;');
-    await admin.query(readFileSync(SCHEMA, 'utf8'));
+    await freshSchema(admin, ['db/001_init.sql']);
 
     await admin.query(`
       -- **ไม่ลบ role ทิ้ง** — role อยู่ระดับคลัสเตอร์ ถ้ามีฐานข้อมูลอื่นในเครื่องเดียวกัน

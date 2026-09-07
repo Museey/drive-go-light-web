@@ -16,6 +16,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
+import { freshSchema } from '../../../tools/test-schema.mjs';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -132,12 +133,9 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
     admin = new pg.Client({ connectionString: DB_URL });
     await admin.connect();
 
-    await admin.query(
-      'drop schema if exists ops cascade; drop schema if exists auth cascade; '
-      + 'drop schema if exists public cascade; create schema public;');
-    for (const f of ['001_init.sql', '002_auth.sql', '008_ops.sql', '011_ops_console.sql']) {
-      await admin.query(readFileSync(resolve(ROOT, 'db', f), 'utf8'));
-    }
+    await freshSchema(admin, [
+      'db/001_init.sql', 'db/002_auth.sql', 'db/008_ops.sql', 'db/011_ops_console.sql',
+    ]);
     await admin.query(`
       do $$ begin
         if exists (select 1 from pg_roles where rolname = 'dgl_app') then

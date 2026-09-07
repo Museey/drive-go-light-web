@@ -19,6 +19,7 @@ import { saveClaim } from '../src/lib/claims';
 import {
   addCountItems, applyCount, createCount, getCount, setCountedQty,
 } from '../src/lib/stock-counts';
+import { freshSchema } from '../../../tools/test-schema.mjs';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -48,9 +49,7 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     admin = new pg.Client({ connectionString: DB_URL });
     await admin.connect();
 
-    await admin.query('drop schema if exists auth cascade; drop schema if exists public cascade; create schema public;');
-    await admin.query(readFileSync(resolve(ROOT, 'db/001_init.sql'), 'utf8'));
-    await admin.query(readFileSync(resolve(ROOT, 'db/002_auth.sql'), 'utf8'));
+    await freshSchema(admin, ['db/001_init.sql', 'db/002_auth.sql']);
     await admin.query(`
       -- role อยู่ระดับคลัสเตอร์ จึงค้างข้ามการรันเทสต์และอาจถูกใช้โดยฐานข้อมูลอื่นอยู่
       -- ล้างเฉพาะสิทธิ์ในฐานข้อมูลนี้ แล้วให้ app-role.sql สร้างกลับ (รันซ้ำได้)
@@ -99,11 +98,20 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     }, null);
 
     /* เคลมสินค้าออกไปหนึ่งใบต่อทิศทาง ไฟล์สำรองจะได้มีใบเคลมให้พิสูจน์ */
-    const prod = await admin.query(
+    /**
+     * อ่านผ่าน role ของแอป ไม่ใช่ผู้ดูแล
+     *
+     * product_stock เป็นวิว ซึ่ง Postgres ประเมินสิทธิ์ด้วย **เจ้าของวิว**
+     * ไม่ใช่คนเรียก และเจ้าของวิวก็โดน force row level security เหมือนกัน
+     * ผู้ดูแลที่ไม่ได้ตั้ง app.tenant_id จึงได้ศูนย์แถวเสมอ
+     *
+     * บนเครื่องจริงเป็นแบบนี้อยู่แล้ว — ที่เคยผ่านเพราะฐานทดสอบมีเจ้าของ
+     * เป็น superuser ซึ่งข้าม RLS ได้เอง
+     */
+    const prod = await app.query(
       `select p.id, p.code, p.name, p.unit from products p
        join product_stock s on s.product_id = p.id
-       where p.tenant_id = $1 and s.qty_on_hand > 5 limit 1`,
-      [firstTenant],
+       where s.qty_on_hand > 5 limit 1`,
     );
     const part = prod.rows[0];
     const line = (q: number) => [{

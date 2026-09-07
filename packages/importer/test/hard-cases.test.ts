@@ -19,6 +19,7 @@ import {
   billnoteBackup, claimBackup, countBackup, duplicateDocNoBackup, emptyBackup, largeChainBackup, legacyV1Backup,
   messyBackup, vatInclusiveBackup, wrongVatModeBackup,
 } from './hard-cases.js';
+import { freshSchema } from '../../../tools/test-schema.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SCHEMA = resolve(here, '../../../db/001_init.sql');
@@ -32,8 +33,7 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: DB_URL });
     await admin.connect();
-    await admin.query('drop schema if exists public cascade; create schema public;');
-    await admin.query(readFileSync(SCHEMA, 'utf8'));
+    await freshSchema(admin, ['db/001_init.sql']);
     await admin.query(`
       -- **ไม่ลบ role ทิ้ง** — role อยู่ระดับคลัสเตอร์ ถ้ามีฐานข้อมูลอื่นในเครื่องเดียวกัน
       -- ที่ยังมีสิทธิ์ของ role นี้ค้างอยู่ (เช่นฐานที่เอาไว้ลองอะไรสักอย่าง)

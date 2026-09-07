@@ -19,7 +19,18 @@ do $$ begin
 end $$;
 
 -- กันพลาด: ถ้ามี role อยู่แล้วแต่ถูกยกระดับสิทธิ์ไว้ RLS จะถูกข้ามเงียบ ๆ
-alter role dgl_app nosuperuser nobypassrls nocreatedb nocreaterole;
+--
+-- ทำได้เฉพาะตอนรันในนาม superuser — บนบริการ Postgres แบบ managed ทำไม่ได้
+-- และไม่จำเป็น เพราะ role ที่สร้างใหม่ไม่มีสิทธิ์พวกนี้ติดมาอยู่แล้ว
+-- ข้ามไปพร้อมบอกให้รู้ ดีกว่าล้มทั้งไฟล์ในสภาพแวดล้อมที่ทำไม่ได้
+--
+-- ชั้นที่กันจริงคือ assertRlsEnforced() ในแอป ซึ่งปฏิเสธไม่ยอมทำงานเลย
+-- ถ้า role ที่ต่ออยู่ข้าม RLS ได้
+do $$ begin
+  execute 'alter role dgl_app nosuperuser nobypassrls nocreatedb nocreaterole';
+exception when insufficient_privilege then
+  raise notice 'ข้ามการลดสิทธิ์ของ dgl_app — ต้องเป็น superuser ถึงจะทำได้';
+end $$;
 
 -- เขตเวลาของกิจการ — ต้องตรงกับ SHOP_TZ ในแพ็กเกจ core
 --

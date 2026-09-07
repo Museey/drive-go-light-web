@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { licenseStatusWith, TRIAL_DAYS, addDays, todayIso } from '../src/lib/license-window';
+import { freshSchema } from '../../../tools/test-schema.mjs';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -30,9 +31,7 @@ describe.skipIf(!DB_URL)('สถานะการใช้งานจากฐ
     admin = new pg.Client({ connectionString: DB_URL });
     await admin.connect();
 
-    await admin.query('drop schema if exists auth cascade; drop schema if exists public cascade; create schema public;');
-    await admin.query(readFileSync(resolve(ROOT, 'db/001_init.sql'), 'utf8'));
-    await admin.query(readFileSync(resolve(ROOT, 'db/002_auth.sql'), 'utf8'));
+    await freshSchema(admin, ['db/001_init.sql', 'db/002_auth.sql']);
     await admin.query(`
       -- role อยู่ระดับคลัสเตอร์ จึงค้างข้ามการรันเทสต์และอาจถูกใช้โดยฐานข้อมูลอื่นอยู่
       -- ล้างเฉพาะสิทธิ์ในฐานข้อมูลนี้ แล้วให้ app-role.sql สร้างกลับ (รันซ้ำได้)
@@ -132,9 +131,7 @@ describe.skipIf(!DB_URL)('ลบข้อมูลของอู่', () => {
     admin = new pg.Client({ connectionString: DB_URL });
     await admin.connect();
 
-    await admin.query('drop schema if exists auth cascade; drop schema if exists public cascade; create schema public;');
-    await admin.query(readFileSync(resolve(ROOT, 'db/001_init.sql'), 'utf8'));
-    await admin.query(readFileSync(resolve(ROOT, 'db/002_auth.sql'), 'utf8'));
+    await freshSchema(admin, ['db/001_init.sql', 'db/002_auth.sql']);
     /* ชุดนี้ใช้สิทธิ์ผู้ดูแลอย่างเดียว แต่ให้สิทธิ์ role ของแอปกลับไว้ด้วย
        ไม่งั้นฐานข้อมูลที่ใช้รันเทสต์จะเปิดแอปต่อไม่ได้หลังเทสต์จบ */
     await admin.query(`

@@ -57,6 +57,9 @@ describe.skipIf(!DB_URL)('ฐานที่เจ้าของไม่ใช
           execute 'create role ${OWNER} login password ''${PW}'' createrole';
         end if;
       end $$;
+      -- ต้องเป็นสมาชิกถึงจะสร้างฐานข้อมูลที่มี role นี้เป็นเจ้าของได้
+      -- (สิทธิ์สร้าง role อย่างเดียวไม่พอ ถ้าคนรันไม่ใช่ superuser)
+      grant ${OWNER} to current_user with admin option;
     `);
     await root.query(`create database ${DB} owner ${OWNER}`);
 

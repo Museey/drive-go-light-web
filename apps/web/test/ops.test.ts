@@ -15,6 +15,7 @@ import pg from 'pg';
 import {
   healthChecksWith, listErrorsWith, markSeenWith, recordErrorWith, scrub,
 } from '../src/lib/ops-core';
+import { freshSchema } from '../../../tools/test-schema.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '../../..');
@@ -51,9 +52,10 @@ describe.skipIf(!DB_URL)('ตาราง ops.errors', () => {
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: DB_URL });
     await admin.connect();
-    await admin.query('drop schema if exists auth cascade; drop schema if exists ops cascade; drop schema if exists public cascade; create schema public;');
-    await admin.query(readFileSync(resolve(ROOT, 'db/001_init.sql'), 'utf8'));
-    await admin.query(readFileSync(resolve(ROOT, 'db/002_auth.sql'), 'utf8'));
+    await freshSchema(admin, [
+      'db/001_init.sql', 'db/002_auth.sql', 'db/008_ops.sql',
+      'db/011_ops_console.sql', 'db/013_ops_grants.sql',
+    ]);
     await admin.query(`
       do $$ begin
         if exists (select 1 from pg_roles where rolname = 'dgl_app') then
@@ -65,7 +67,6 @@ describe.skipIf(!DB_URL)('ตาราง ops.errors', () => {
       readFileSync(resolve(ROOT, 'db/app-role.sql'), 'utf8')
         .replace('เปลี่ยนรหัสนี้ก่อนใช้จริง', 'apppass'),
     );
-    await admin.query(readFileSync(resolve(ROOT, 'db/008_ops.sql'), 'utf8'));
   }, 60_000);
 
   afterAll(async () => { await admin?.end(); });

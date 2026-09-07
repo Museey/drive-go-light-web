@@ -20,6 +20,7 @@ import {
   removeCountItem, saveCountHead, scanIntoCount, setCountedQty,
 } from '../src/lib/stock-counts';
 import { consumeStock, lotsOfProduct, receiveStock } from '../src/lib/stock-cost';
+import { freshSchema } from '../../../tools/test-schema.mjs';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -39,9 +40,7 @@ describe.skipIf(!DB_URL)('ใบตรวจนับสต๊อก', () => {
     admin = new pg.Client({ connectionString: DB_URL });
     await admin.connect();
 
-    await admin.query('drop schema if exists auth cascade; drop schema if exists public cascade; create schema public;');
-    await admin.query(readFileSync(resolve(ROOT, 'db/001_init.sql'), 'utf8'));
-    await admin.query(readFileSync(resolve(ROOT, 'db/002_auth.sql'), 'utf8'));
+    await freshSchema(admin, ['db/001_init.sql', 'db/002_auth.sql']);
     await admin.query(`
       do $$ begin
         if exists (select 1 from pg_roles where rolname = 'dgl_app') then

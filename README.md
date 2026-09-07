@@ -35,9 +35,29 @@ npm test
 docker run -d --name dgl_pg -e POSTGRES_PASSWORD=x -e POSTGRES_DB=dgl -p 5433:5432 postgres:16-alpine
 ```
 
+เตรียมฐานทดสอบครั้งเดียว — **สร้าง role ธรรมดาขึ้นมาเป็นเจ้าของสคีมา**
+
+```bash
+npm run test:setup
+```
+
 ```bash
 DATABASE_URL=postgresql://postgres:x@localhost:5433/dgl npm test
 ```
+
+### ทำไมต้อง `test:setup`
+
+ฟังก์ชัน `SECURITY DEFINER` ทำงานในนาม *เจ้าของฟังก์ชัน* ซึ่งคือใครก็ตามที่รัน
+`create function` ถ้าชุดทดสอบสร้างสคีมาในนาม superuser ฟังก์ชันทั้งหมดก็เป็นของ
+superuser ซึ่ง **ข้าม Row Level Security ได้เอง** — ชุดทดสอบจะทำงานคนละแบบกับ
+เครื่องจริง แล้วเขียวทั้งที่ของจริงพัง
+
+เกิดขึ้นจริงมาแล้ว เจ้าของอู่ล็อกอินไม่ได้เลยบนเครื่องจริง ทั้งที่เทสต์ 430 ข้อ
+ผ่านหมด (ดู `db/012_auth_rls.sql`)
+
+`test:setup` จึงสร้าง role ธรรมดาชื่อ `dgl_test_owner` ขึ้นมา แล้วชุดทดสอบสร้าง
+สคีมาในนามนั้น ให้เหมือนบริการ Postgres แบบ managed ที่ใช้อยู่จริง —
+`apps/web/test/schema-owner.test.ts` ตรวจให้ว่าไม่มีฟังก์ชันไหนหลุดไปเป็นของ superuser
 
 ## เปิดเว็บดูข้อมูลจริง
 

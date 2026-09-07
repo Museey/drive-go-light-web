@@ -51,6 +51,7 @@ const DIR = resolve(ROOT, process.env.DIR ?? 'db');
  */
 export const FRESH_FILES = new Set([
   '001_init.sql', '002_auth.sql', '008_ops.sql', '011_ops_console.sql',
+  '013_ops_grants.sql',
 ]);
 
 /**
