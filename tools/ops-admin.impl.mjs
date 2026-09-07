@@ -20,6 +20,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { sslHint } from './sql-statements.mjs';
+import { emitSecret, linkShape } from './secret-out.mjs';
 
 const arg = (name) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -164,12 +165,15 @@ try {
 
   await client.query('select ops.issue_setup_token($1, $2, $3)', [id, hash, expires]);
 
-  console.log('\n─── บัญชีผู้ให้บริการ ───');
-  console.log(`  อีเมล      ${email}`);
-  console.log(`  ลิงก์ตั้งรหัสผ่าน (ใช้ได้ครั้งเดียว หมดอายุ ${expires.toLocaleDateString('th-TH')})`);
-  console.log(`  ${appUrl}/ops/setup/${token}`);
-  console.log('\n  รหัสผ่านต้องยาวอย่างน้อย 14 ตัวอักษร');
-  console.log('  ใครถือลิงก์ก็ตั้งรหัสผ่านได้ — เปิดเองทันที อย่าส่งต่อ');
+  console.log(`\n  อีเมล      ${email}`);
+  console.log(`  หมดอายุ    ${expires.toLocaleDateString('th-TH')} · ใช้ได้ครั้งเดียว`);
+  emitSecret(`${appUrl}/ops/setup/${token}`, {
+    title: 'ลิงก์ตั้งรหัสผ่านของผู้ให้บริการ',
+    shape: linkShape,
+    show: process.argv.includes('--show'),
+  });
+  console.log('  รหัสผ่านต้องยาวอย่างน้อย 14 ตัวอักษร');
+  console.log('  ใครถือลิงก์ก็ตั้งรหัสผ่านได้ — เปิดเองทันที อย่าส่งต่อ\n');
 } catch (err) {
   console.error(`\nทำงานไม่สำเร็จ`);
   console.error(err instanceof Error ? err.message : err);

@@ -3,6 +3,10 @@
  *
  *   ADMIN_URL='postgresql://...' node tools/setup-db.mjs
  *   ADMIN_URL='postgresql://...' node tools/setup-db.mjs --password='รหัสที่อยากใช้'
+ *   ADMIN_URL='postgresql://...' node tools/setup-db.mjs --show   พิมพ์ URL ลงหน้าจอ
+ *
+ * ค่าตั้งต้นจะ **ก๊อป URL ลงคลิปบอร์ด ไม่พิมพ์ลงหน้าจอ** เพราะการพิมพ์ออกมาเต็ม ๆ
+ * เชิญให้คนก๊อปทั้งก้อนไปวางในแชท ซึ่งเกิดขึ้นจริงมาแล้วสองครั้งในโปรเจกต์นี้
  *
  * ทำสิ่งเดียวกับ db/app-role-managed.sql แต่ไม่ต้องมี psql บนเครื่อง
  * (ไฟล์ SQL ยังอยู่ สำหรับคนที่มี psql อยู่แล้ว เช่นตอนดูแลเซิร์ฟเวอร์เอง)
@@ -12,6 +16,7 @@
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { sslHint } from './sql-statements.mjs';
+import { emitSecret } from './secret-out.mjs';
 
 const url = process.env.ADMIN_URL || process.env.DATABASE_URL;
 if (!url) {
@@ -88,10 +93,15 @@ try {
   u.password = password;
   if (!u.searchParams.get('sslmode')) u.searchParams.set('sslmode', 'no-verify');
 
-  console.log('\n═══ ตั้ง DATABASE_URL ของเว็บเป็นค่านี้ ═══\n');
-  console.log(u.toString());
-  console.log('\nเก็บไว้ให้ดี — คำสั่งนี้ไม่แสดงรหัสผ่านซ้ำอีก');
-  console.log('ถ้าทำหาย ให้รันคำสั่งนี้ใหม่ จะได้รหัสใหม่มาแทน\n');
+  emitSecret(u.toString(), {
+    title: 'ตั้ง DATABASE_URL ของเว็บเป็นค่านี้',
+    show: process.argv.includes('--show'),
+  });
+  console.log('  เก็บไว้ให้ดี — คำสั่งนี้ไม่แสดงรหัสผ่านซ้ำอีก');
+  console.log('  ถ้าทำหาย ให้รันคำสั่งนี้ใหม่ จะได้รหัสใหม่มาแทน');
+  console.log('');
+  console.log('  ค่านี้ใช้โฮสต์เดียวกับ ADMIN_URL ที่ใส่มา — ถ้าจะเอาไปตั้งบนเครื่องจริง');
+  console.log('  ที่แอปกับฐานข้อมูลอยู่ที่เดียวกัน ให้เปลี่ยนเป็นที่อยู่ภายในของผู้ให้บริการ\n');
 } catch (err) {
   console.error(`\n${err instanceof Error ? err.message : err}`);
   const hint = sslHint(err);
