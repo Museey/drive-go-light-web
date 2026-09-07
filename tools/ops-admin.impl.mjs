@@ -5,6 +5,9 @@
  *   node tools/ops-admin.mjs --email=you@example.com --name="ชื่อ" \
  *     --app-url=https://drivegolight.onrender.com
  *
+ *   node tools/ops-admin.mjs --status     ดูสถานะทุกบัญชี ไม่แก้อะไร
+ *   node tools/ops-admin.mjs --unlock --email=you@example.com   ปลดล็อกที่ติดจากกรอกผิด
+ *
  * ตัวแปร — ADMIN_URL หรือ DATABASE_URL (จำเป็น)
  *
  * **ไก่กับไข่** คอนโซลต้องล็อกอินก่อนถึงจะใช้ได้ แต่ยังไม่มีใครในระบบที่มีสิทธิ์
@@ -22,14 +25,18 @@ const arg = (name) => {
   return hit?.slice(name.length + 3);
 };
 
+const wantStatus = process.argv.includes('--status');
+const wantUnlock = process.argv.includes('--unlock');
 const email = arg('email');
 const name = arg('name') ?? '';
 const appUrl = (arg('app-url') ?? 'http://localhost:3100').replace(/\/+$/, '');
 const days = Number(arg('days') ?? 7);
 
-if (!email) {
+if (!email && !wantStatus) {
   console.error(
-    'ใช้: node tools/ops-admin.mjs --email=you@example.com [--name="ชื่อ"] [--app-url=...]',
+    'ใช้: node tools/ops-admin.mjs --email=you@example.com [--name="ชื่อ"] [--app-url=...]\n'
+    + '     node tools/ops-admin.mjs --status\n'
+    + '     node tools/ops-admin.mjs --unlock --email=you@example.com',
   );
   process.exit(2);
 }
@@ -44,6 +51,56 @@ const client = new pg.Client({ connectionString: url });
 
 try {
   await client.connect();
+
+  /**
+   * ดูสถานะอย่างเดียว ไม่แก้อะไร
+   *
+   * มีไว้ตอบคำถามว่า "ทำไมล็อกอินไม่ผ่าน" ซึ่งมีได้หลายสาเหตุที่หน้าเว็บ
+   * ตั้งใจไม่บอกให้ชัด (เพื่อไม่ให้คนเดาอีเมลได้) — ผู้ดูแลที่ต่อฐานได้ควรเห็นของจริง
+   */
+  if (wantStatus) {
+    const { rows } = await client.query(`
+      select o.email, o.name, o.active,
+             o.password_hash is not null as has_pw,
+             o.failed_attempts, o.locked_until, o.last_login_at,
+             (select count(*) from ops.sessions s
+               where s.operator_id = o.id and s.expires_at > now()) as live_sessions,
+             (select count(*) from ops.setup_tokens t
+               where t.operator_id = o.id and t.used_at is null and t.expires_at > now())
+               as open_links
+        from ops.operators o order by o.email`);
+
+    if (!rows.length) {
+      console.log('\nยังไม่มีบัญชีผู้ให้บริการเลย — สร้างด้วย --email=');
+    }
+    for (const r of rows) {
+      const locked = r.locked_until && new Date(r.locked_until) > new Date();
+      console.log(`\n─── ${r.email} ───`);
+      console.log(`  ชื่อ                ${r.name || '—'}`);
+      console.log(`  ตั้งรหัสผ่านแล้ว      ${r.has_pw ? 'ใช่' : '**ยังไม่ได้ตั้ง** — ต้องเปิดลิงก์ก่อน'}`);
+      console.log(`  เปิดใช้งาน           ${r.active ? 'ใช่' : '**ถูกปิดอยู่**'}`);
+      console.log(`  กรอกผิดติดกัน        ${r.failed_attempts} ครั้ง`);
+      console.log(`  ถูกล็อก             ${locked
+        ? `**ใช่ ถึง ${new Date(r.locked_until).toLocaleString('th-TH')}** — ปลดด้วย --unlock`
+        : 'ไม่'}`);
+      console.log(`  เข้าใช้ล่าสุด        ${r.last_login_at
+        ? new Date(r.last_login_at).toLocaleString('th-TH') : 'ยังไม่เคย'}`);
+      console.log(`  session ที่ยังไม่หมดอายุ ${r.live_sessions}`);
+      console.log(`  ลิงก์ตั้งรหัสผ่านที่ยังไม่ใช้ ${r.open_links}`);
+    }
+    console.log('');
+    await client.end();
+    process.exit(0);
+  }
+
+  if (wantUnlock) {
+    const { rowCount } = await client.query(
+      `update ops.operators set failed_attempts = 0, locked_until = null
+        where email = $1`, [email.trim().toLowerCase()]);
+    console.log(rowCount ? `\nปลดล็อก ${email} แล้ว` : `\nไม่พบบัญชี ${email}`);
+    await client.end();
+    process.exit(0);
+  }
 
   const { rows: exists } = await client.query(
     'select id, password_hash is not null as has_pw from ops.operators where email = $1',
