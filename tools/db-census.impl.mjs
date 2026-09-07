@@ -43,9 +43,34 @@ const TOTALS = [
 try {
   await client.connect();
 
-  const out = { at: new Date().toISOString(), database: '', tenants: [], tables: {}, totals: {}, migrations: [] };
+  const out = {
+    at: new Date().toISOString(), database: '', env: {},
+    tenants: [], tables: {}, totals: {}, migrations: [],
+  };
 
   out.database = (await client.query('select current_database() as d')).rows[0].d;
+
+  /**
+   * สภาพแวดล้อมของฐานข้อมูล — สิ่งที่ **ไม่ได้อยู่ในตาราง** จึงหายไปได้เงียบ ๆ ตอนกู้คืน
+   *
+   * บริการที่กู้คืนให้มักสร้างฐานข้อมูล **ชื่อใหม่** และค่าที่ผูกกับชื่อเดิม
+   * (เช่น `alter database dgl set timezone`) อาจไม่ตามมา ซึ่งจะทำให้แอปไม่ยอมเริ่ม
+   * เพราะ assertClockAgrees() ตรวจเจอว่าเขตเวลาไม่ตรง — เป็นเรื่องที่ต้องรู้
+   * ตอนซ้อม ไม่ใช่ตอนกู้จริงตอนตีสาม
+   *
+   * role ก็เหมือนกัน — ถ้า dgl_app ไม่ตามมา แอปต่อฐานที่กู้มาไม่ได้เลย
+   */
+  out.env.timezone = (await client.query('show timezone')).rows[0].TimeZone;
+  out.env.version = (await client.query('show server_version')).rows[0].server_version;
+
+  const { rows: roles } = await client.query(
+    `select rolname, rolsuper, rolbypassrls from pg_roles
+      where rolname not like 'pg\\_%' order by rolname`);
+  out.env.roles = roles.map((r) => r.rolname);
+  out.env.appRolePresent = roles.some((r) => r.rolname === 'dgl_app');
+  /* role ที่ข้าม RLS ได้ — ถ้ามีเพิ่มขึ้นมาโดยไม่รู้ตัว การแยกข้อมูลของอู่ไม่มีความหมาย */
+  out.env.rlsBypassRoles = roles.filter((r) => r.rolsuper || r.rolbypassrls)
+    .map((r) => r.rolname);
 
   /* จำนวนแถวของทุกตารางในสคีมา public และ ops — นับจริง ไม่ใช่ค่าประมาณจากสถิติ */
   const { rows: tables } = await client.query(`
@@ -85,7 +110,14 @@ try {
   if (asJson) {
     console.log(JSON.stringify(out, null, 2));
   } else {
-    console.log(`\nฐานข้อมูล ${out.database} · สำรวจเมื่อ ${out.at}\n`);
+    console.log(`\nฐานข้อมูล ${out.database} · Postgres ${out.env.version} · สำรวจเมื่อ ${out.at}`);
+    console.log(`เขตเวลา ${out.env.timezone}` +
+      (out.env.timezone === 'Asia/Bangkok' ? '' : '   ← ควรเป็น Asia/Bangkok แอปจะไม่ยอมเริ่ม'));
+    console.log(`role ของแอป (dgl_app) ${out.env.appRolePresent ? 'มี' : 'ไม่มี   ← แอปต่อฐานนี้ไม่ได้'}`);
+    if (out.env.rlsBypassRoles.length) {
+      console.log(`role ที่ข้าม RLS ได้: ${out.env.rlsBypassRoles.join(', ')}`);
+    }
+    console.log('');
 
     console.log(`อู่ ${out.tenants.length} อู่`);
     for (const t of out.tenants) console.log(`  ${t.id}  ${t.created}  ${t.name}`);
