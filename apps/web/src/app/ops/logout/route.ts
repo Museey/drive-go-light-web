@@ -1,8 +1,22 @@
-import { redirect } from 'next/navigation';
+import { NextResponse } from 'next/server';
 import { opsSignOut } from '@/lib/ops-auth';
 
-/** ออกจากคอนโซล — ไม่แตะ session ของอู่ที่อาจเปิดค้างอยู่ในเบราว์เซอร์เดียวกัน */
-export async function GET() {
+/**
+ * ออกจากคอนโซล — **ผ่าน POST เท่านั้น**
+ *
+ * เคยเขียนเป็น GET แล้วผูกกับ <Link> ซึ่งพังทันทีบนเครื่องจริง —
+ * Next โหลดล่วงหน้าให้กับลิงก์ที่โผล่อยู่ในหน้าจอ พอผู้ใช้ล็อกอินเสร็จแล้วเห็นแถบบน
+ * ซึ่งมีลิงก์ "ออกจากระบบ" อยู่ Next ก็ยิง GET ไปที่นี่เอง **แล้วลบ session ทิ้ง
+ * ตั้งแต่วินาทีแรกที่เข้ามา** หน้าที่เปิดอยู่ยังแสดงผลปกติเพราะเรนเดอร์ไปแล้ว
+ * แต่กดอะไรต่อก็เด้งกลับหน้าล็อกอินทุกครั้ง
+ *
+ * ไม่ได้เจอตอนพัฒนาเพราะทดสอบด้วย curl ซึ่งไม่โหลดล่วงหน้าให้
+ *
+ * กติกาทั่วไป — **GET ต้องไม่เปลี่ยนแปลงอะไร** ไม่ใช่แค่เรื่อง Next แต่เป็นเรื่อง
+ * ตัวสแกนลิงก์ ตัวเก็บหน้าเว็บ และปุ่มย้อนกลับของเบราว์เซอร์ด้วย
+ * ฝั่งอู่ทำถูกอยู่แล้ว (apps/web/src/app/logout/route.ts) — ทำให้เหมือนกัน
+ */
+export async function POST(request: Request) {
   await opsSignOut();
-  redirect('/ops/login');
+  return NextResponse.redirect(new URL('/ops/login', request.url), { status: 303 });
 }

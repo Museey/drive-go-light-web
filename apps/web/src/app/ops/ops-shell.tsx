@@ -48,7 +48,16 @@ export function OpsShell({
         </nav>
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 12.5, color: '#8FA3B0' }}>{email}</span>
-        <Link href="/ops/logout" style={{ fontSize: 12.5, color: '#B8C6D0' }}>ออกจากระบบ</Link>
+        {/* ต้องเป็น form + POST ห้ามเป็น <Link> — ดูคอมเมนต์ใน /ops/logout/route.ts */}
+        <form action="/ops/logout" method="post">
+          <button
+            type="submit"
+            style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              font: 'inherit', fontSize: 12.5, color: '#B8C6D0',
+            }}
+          >ออกจากระบบ</button>
+        </form>
       </div>
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px' }}>
