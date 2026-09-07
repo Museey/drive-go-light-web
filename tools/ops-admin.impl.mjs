@@ -6,6 +6,7 @@
  *     --app-url=https://drivegolight.onrender.com
  *
  *   node tools/ops-admin.mjs --status     ดูสถานะทุกบัญชี ไม่แก้อะไร
+ *   node tools/ops-admin.mjs --audit      ไทม์ไลน์ว่าเกิดอะไรขึ้นบ้าง
  *   node tools/ops-admin.mjs --unlock --email=you@example.com   ปลดล็อกที่ติดจากกรอกผิด
  *
  * ตัวแปร — ADMIN_URL หรือ DATABASE_URL (จำเป็น)
@@ -26,13 +27,14 @@ const arg = (name) => {
 };
 
 const wantStatus = process.argv.includes('--status');
+const wantAudit = process.argv.includes('--audit');
 const wantUnlock = process.argv.includes('--unlock');
 const email = arg('email');
 const name = arg('name') ?? '';
 const appUrl = (arg('app-url') ?? 'http://localhost:3100').replace(/\/+$/, '');
 const days = Number(arg('days') ?? 7);
 
-if (!email && !wantStatus) {
+if (!email && !wantStatus && !wantAudit) {
   console.error(
     'ใช้: node tools/ops-admin.mjs --email=you@example.com [--name="ชื่อ"] [--app-url=...]\n'
     + '     node tools/ops-admin.mjs --status\n'
@@ -65,6 +67,10 @@ try {
              o.failed_attempts, o.locked_until, o.last_login_at,
              (select count(*) from ops.sessions s
                where s.operator_id = o.id and s.expires_at > now()) as live_sessions,
+             (select count(*) from ops.sessions s
+               where s.operator_id = o.id) as all_sessions,
+             (select max(s.expires_at) from ops.sessions s
+               where s.operator_id = o.id) as last_expiry,
              (select count(*) from ops.setup_tokens t
                where t.operator_id = o.id and t.used_at is null and t.expires_at > now())
                as open_links
@@ -85,8 +91,37 @@ try {
         : 'ไม่'}`);
       console.log(`  เข้าใช้ล่าสุด        ${r.last_login_at
         ? new Date(r.last_login_at).toLocaleString('th-TH') : 'ยังไม่เคย'}`);
-      console.log(`  session ที่ยังไม่หมดอายุ ${r.live_sessions}`);
+      console.log(`  session ทั้งหมดในตาราง  ${r.all_sessions} (ยังไม่หมดอายุ ${r.live_sessions})`);
+      if (Number(r.all_sessions) > 0) {
+        console.log(`  อันที่หมดอายุช้าสุด    ${new Date(r.last_expiry).toLocaleString('th-TH')}`);
+      }
       console.log(`  ลิงก์ตั้งรหัสผ่านที่ยังไม่ใช้ ${r.open_links}`);
+    }
+    console.log('');
+    await client.end();
+    process.exit(0);
+  }
+
+  /**
+   * ไทม์ไลน์จาก ops.audit
+   *
+   * ตารางนี้เขียนโดยฟังก์ชันในฐานข้อมูลเอง ไม่ใช่โดยโค้ดหน้าเว็บ จึงเชื่อได้ว่าครบ
+   * มีไว้ตอบว่า "เกิดอะไรขึ้นตามลำดับ" ซึ่งเดาจากสถานะปลายทางอย่างเดียวไม่ได้
+   */
+  if (wantAudit) {
+    const { rows } = await client.query(`
+      select at, operator_email, action, tenant_id, detail
+        from ops.audit order by at desc limit 40`);
+
+    if (!rows.length) {
+      console.log('\nยังไม่มีบันทึกการใช้งานเลย — แปลว่ายังไม่เคยมีใครล็อกอินสำเร็จ');
+    } else {
+      console.log('\nใหม่สุดอยู่บนสุด\n');
+      for (const r of rows) {
+        const d = r.detail && Object.keys(r.detail).length ? '  ' + JSON.stringify(r.detail) : '';
+        console.log(`  ${new Date(r.at).toLocaleString('th-TH').padEnd(22)} `
+          + `${String(r.action).padEnd(20)} ${r.operator_email}${d}`);
+      }
     }
     console.log('');
     await client.end();
