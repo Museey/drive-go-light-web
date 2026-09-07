@@ -926,7 +926,18 @@ begin
                            'doc_edits','product_pics']
   loop
     execute format('alter table %I enable row level security', t);
-    execute format('alter table %I force row level security', t);
+    /**
+     * force มีผลกับ **เจ้าของตาราง** ด้วย — ฟังก์ชัน auth.* เป็น SECURITY DEFINER
+     * จึงทำงานในนามเจ้าของ และต้องหาผู้ใช้จากอีเมลข้ามทุกอู่ตอนล็อกอิน
+     * ซึ่งทำไม่ได้ถ้า force เปิดอยู่ (บนฐานที่เจ้าของไม่ใช่ superuser)
+     *
+     * users กับ tenants จึงไม่ force — role ที่ไม่ใช่เจ้าของ (dgl_app ที่แอปใช้)
+     * ยังโดน RLS กรองเต็มที่เหมือนเดิม การแยกข้อมูลของอู่ไม่เปลี่ยน
+     * ดูเหตุผลเต็มที่ db/012_auth_rls.sql
+     */
+    if t not in ('users', 'tenants') then
+      execute format('alter table %I force row level security', t);
+    end if;
     execute format(
       'create policy tenant_isolation on %I
        using (tenant_id = current_tenant_id())
@@ -936,7 +947,6 @@ end;
 $$;
 
 alter table tenants enable row level security;
-alter table tenants force row level security;
 create policy tenant_self on tenants
   using (id = current_tenant_id())
   with check (id = current_tenant_id());

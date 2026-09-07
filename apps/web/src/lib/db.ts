@@ -67,8 +67,19 @@ function getPool(): pg.Pool {
 async function assertRlsEnforced(client: pg.PoolClient): Promise<void> {
   if (globalThis.__dglRlsChecked) return;
 
-  const { rows } = await client.query<{ rolsuper: boolean; rolbypassrls: boolean }>(
-    `select rolsuper, rolbypassrls from pg_roles where rolname = current_user`,
+  const { rows } = await client.query<{
+    rolsuper: boolean; rolbypassrls: boolean; owns_unforced: string | null;
+  }>(
+    `select r.rolsuper, r.rolbypassrls,
+            (select string_agg(c.relname, ', ' order by c.relname)
+               from pg_class c
+               join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relkind = 'r'
+                and c.relrowsecurity
+                and not c.relforcerowsecurity
+                and pg_get_userbyid(c.relowner) = current_user) as owns_unforced
+       from pg_roles r where r.rolname = current_user`,
   );
   const role = rows[0];
   if (role?.rolsuper || role?.rolbypassrls) {
@@ -76,6 +87,26 @@ async function assertRlsEnforced(client: pg.PoolClient): Promise<void> {
       'แอปต่อฐานข้อมูลด้วย role ที่ข้าม Row Level Security ได้ ' +
       '(superuser หรือมี BYPASSRLS) — ข้อมูลจะรั่วข้ามอู่โดยไม่มีอาการให้เห็น\n' +
       'สร้าง role สำหรับแอปด้วย db/app-role.sql แล้วเปลี่ยน DATABASE_URL ไปใช้ role นั้น',
+    );
+  }
+
+  /**
+   * ชั้นที่มาแทน force row level security ของตาราง users กับ tenants
+   *
+   * สองตารางนั้นปิด force ไว้โดยตั้งใจ เพราะฟังก์ชัน auth.* ต้องหาผู้ใช้จากอีเมล
+   * ข้ามทุกอู่ตอนล็อกอิน (ดู db/012_auth_rls.sql) ผลข้างเคียงคือ **เจ้าของตาราง
+   * อ่านข้ามอู่ได้** ตราบใดที่แอปไม่ได้ต่อด้วย role ที่เป็นเจ้าของ ก็ไม่มีปัญหา
+   *
+   * ตรวจตรงนี้เพราะถ้าวันหนึ่งมีคนตั้ง DATABASE_URL ให้ชี้ไปที่ role เจ้าของ
+   * (ซึ่งเป็นสิ่งที่ทำง่ายมากตอนกู้ระบบตอนตีสาม) ข้อมูลจะรั่วข้ามอู่ทันที
+   * โดยไม่มีอาการอะไรให้เห็นเลย — ยอมให้พังตั้งแต่ต้นดีกว่า
+   */
+  if (role?.owns_unforced) {
+    throw new Error(
+      `แอปต่อฐานข้อมูลด้วย role ที่เป็นเจ้าของตาราง ${role.owns_unforced} ` +
+      'ซึ่งปิด force row level security ไว้ — เจ้าของตารางจึงอ่านข้ามอู่ได้ ' +
+      'และข้อมูลจะรั่วโดยไม่มีอาการให้เห็น\n' +
+      'ตั้ง DATABASE_URL ให้ชี้ไปที่ role ของแอป (dgl_app) ไม่ใช่ role ของผู้ดูแล',
     );
   }
   globalThis.__dglRlsChecked = true;

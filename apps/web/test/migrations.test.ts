@@ -169,18 +169,30 @@ describe.skipIf(!DB_URL)('ไมเกรชัน', () => {
    * ข้อที่พลาดแล้วเจ็บที่สุด — ฐานที่อัปเกรดมาแล้ว RLS ไม่ติดคือรอยรั่วข้ามอู่
    * ที่ไม่มีอาการอะไรให้เห็นเลย
    */
+  /**
+   * users กับ tenants ปิด force ไว้โดยตั้งใจ ตั้งแต่ไมเกรชัน 012
+   * เพราะฟังก์ชัน auth.* ต้องหาผู้ใช้จากอีเมลข้ามทุกอู่ตอนล็อกอิน
+   * ดูเหตุผลเต็มที่ db/012_auth_rls.sql และเทสต์ auth-managed-db.test.ts
+   */
+  const NO_FORCE = ['tenants', 'users'];
+
   it('RLS เปิดและ force ครบเท่ากันทั้งสองทาง', async () => {
     const a = await fingerprint(fresh);
     const b = await fingerprint(upgraded);
-    expect(b.rls).toEqual(a.rls);
+    expect(b.rls, 'ติดตั้งใหม่กับอัปเกรดต้องได้สถานะ RLS เหมือนกันเป๊ะ').toEqual(a.rls);
 
-    const tenantTables = a.rls.filter((r: any) =>
-      !['tenants'].includes(r.relname));
-    expect(tenantTables.length).toBeGreaterThan(15);
+    expect(a.rls.length).toBeGreaterThan(15);
     for (const t of a.rls) {
       expect(t.relrowsecurity, `${t.relname} ต้องเปิด RLS`).toBe(true);
-      expect(t.relforcerowsecurity, `${t.relname} ต้อง force RLS`).toBe(true);
+      expect(
+        t.relforcerowsecurity,
+        `${t.relname} ${NO_FORCE.includes(t.relname) ? 'ต้องไม่ force' : 'ต้อง force RLS'}`,
+      ).toBe(!NO_FORCE.includes(t.relname));
     }
+
+    const off = a.rls.filter((t: any) => !t.relforcerowsecurity)
+      .map((t: any) => t.relname).sort();
+    expect(off, 'ปิด force ได้เฉพาะสองตารางนี้').toEqual([...NO_FORCE].sort());
   });
 });
 

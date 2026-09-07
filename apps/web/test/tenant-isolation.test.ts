@@ -145,6 +145,21 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
     await admin?.end();
   });
 
+  /**
+   * ตารางที่ปิด force ไว้โดยตั้งใจ
+   *
+   * force มีผลกับ *เจ้าของตาราง* ด้วย และฟังก์ชัน auth.* ซึ่งเป็น SECURITY DEFINER
+   * ต้องหาผู้ใช้จากอีเมลข้ามทุกอู่ตอนล็อกอิน — ทำไม่ได้ถ้า force เปิดอยู่
+   * บนฐานที่เจ้าของไม่ใช่ superuser (ซึ่งคือบริการ Postgres แบบ managed ทุกเจ้า)
+   *
+   * ดู db/012_auth_rls.sql · การเพิ่มชื่อเข้ารายการนี้ต้องมีเหตุผลกำกับเสมอ
+   * และต้องมีเทสต์ยืนยันว่า role ของแอปยังอ่านข้ามอู่ไม่ได้
+   *
+   * (tenants ก็ปิดเหมือนกัน แต่ไม่อยู่ในรายการนี้เพราะมันไม่มีคอลัมน์ tenant_id
+   *  ตรวจแยกไว้ในข้อถัดไป)
+   */
+  const NO_FORCE = ['users'];
+
   it('มีตารางที่ผูกกับอู่ให้ตรวจจริง และทุกตารางเปิด RLS แบบบังคับ', async () => {
     expect(tables.length).toBeGreaterThanOrEqual(10);
 
@@ -154,8 +169,59 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
         where n.nspname = 'public' and c.relname = any($1)`,
       [tables],
     );
-    const bad = rows.filter((r) => !r.on || !r.forced).map((r) => r.t);
-    expect(bad).toEqual([]);
+
+    const noRls = rows.filter((r) => !r.on).map((r) => r.t);
+    expect(noRls, 'ทุกตารางต้องเปิด RLS ไม่มีข้อยกเว้น').toEqual([]);
+
+    const noForce = rows.filter((r) => !r.forced).map((r) => r.t).sort();
+    expect(noForce, 'ปิด force ได้เฉพาะตารางที่ auth ต้องใช้ข้ามอู่')
+      .toEqual([...NO_FORCE].sort());
+  });
+
+  it('ตาราง tenants เปิด RLS แต่ไม่ force ด้วยเหตุผลเดียวกัน', async () => {
+    const { rows } = await admin.query(
+      `select c.relrowsecurity as on, c.relforcerowsecurity as forced
+         from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relname = 'tenants'`,
+    );
+    expect(rows[0].on, 'ต้องเปิด RLS').toBe(true);
+    expect(rows[0].forced, 'ต้องไม่ force — auth.find_user_for_signin join ตารางนี้')
+      .toBe(false);
+  });
+
+  /**
+   * ข้อที่พิสูจน์ว่าการปิด force ไม่ได้ทำให้ข้อมูลรั่ว
+   *
+   * force บังคับ RLS กับเจ้าของตารางเท่านั้น — role ที่ไม่ใช่เจ้าของโดน RLS กรอง
+   * เต็มที่เสมอไม่ว่า force จะเปิดหรือปิด แอปต่อด้วย dgl_app ซึ่งไม่ใช่เจ้าของ
+   * การแยกข้อมูลของอู่จึงไม่เปลี่ยน
+   */
+  it('ตารางที่ปิด force ไว้ role ของแอปก็ยังอ่านข้ามอู่ไม่ได้', async () => {
+    /* ใส่ผู้ใช้ให้ทั้งสองอู่ก่อน — ไม่มีข้อมูลก็พิสูจน์อะไรไม่ได้ */
+    for (const [t, code] of [[mine, 'MINE'], [theirs, 'THEIRS']] as const) {
+      await admin.query(
+        `insert into users (tenant_id, code, name, email, role)
+         values ($1, $2, 'ทดสอบ', $3, 'owner')
+         on conflict (tenant_id, code) do nothing`,
+        [t, code, `${code.toLowerCase()}@example.com`],
+      );
+    }
+
+    for (const [t, col] of [['users', 'tenant_id'], ['tenants', 'id']] as const) {
+      const leak = await app.query(
+        `select count(*)::int as n from ${t} where ${col} <> $1`, [mine]);
+      expect(leak.rows[0].n, `${t} รั่วข้ามอู่`).toBe(0);
+
+      const own = await app.query(
+        `select count(*)::int as n from ${t} where ${col} = $1`, [mine]);
+      expect(own.rows[0].n, `${t} ของตัวเองต้องเห็น ไม่ใช่กรองจนไม่เหลืออะไร`)
+        .toBeGreaterThan(0);
+
+      /* ผู้ดูแลเห็นของอู่อื่น แปลว่ามีอยู่จริง ไม่ใช่ตารางว่าง */
+      const real = await admin.query(
+        `select count(*)::int as n from ${t} where ${col} = $1`, [theirs]);
+      expect(real.rows[0].n, `${t} ของอู่อื่นต้องมีอยู่จริง`).toBeGreaterThan(0);
+    }
   });
 
   it('อ่านข้อมูลของอู่อื่นไม่เห็นสักแถวเดียว ทุกตาราง', async () => {

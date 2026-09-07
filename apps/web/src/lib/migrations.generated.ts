@@ -14,4 +14,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '009_edits.sql',
   '010_pics.sql',
   '011_ops_console.sql',
+  '012_auth_rls.sql',
 ];
