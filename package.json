@@ -10,6 +10,7 @@
     "fixture": "node tools/make-demo-backup.mjs --date=2026-08-28",
     "test:setup": "SUPER_URL=${SUPER_URL:-postgresql://postgres:x@localhost:5433/postgres} node tools/setup-test-db.mjs",
     "test": "npm run test --workspaces --if-present",
+    "preflight": "node tools/preflight.mjs",
     "dev": "npm run dev -w @drivegolight/web",
     "dev:safe": "bash tools/with-node.sh npm run dev -w @drivegolight/web"
   },
