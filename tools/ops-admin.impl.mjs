@@ -3,7 +3,7 @@
  * สร้างบัญชีผู้ให้บริการคนแรก
  *
  *   node tools/ops-admin.mjs --email=you@example.com --name="ชื่อ" \
- *     --app-url=https://drivegolight.onrender.com
+ *     --app-url=https://app.drivegolight.com
  *
  *   node tools/ops-admin.mjs --status     ดูสถานะทุกบัญชี ไม่แก้อะไร
  *   node tools/ops-admin.mjs --audit      ไทม์ไลน์ว่าเกิดอะไรขึ้นบ้าง

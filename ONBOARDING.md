@@ -43,7 +43,7 @@
 
 ```bash
 ADMIN_URL="$ADMIN_URL" node tools/ops-admin.mjs \
-  --email=you@example.com --name="ชื่อคุณ" --app-url=https://app.drivebizbegin.com
+  --email=you@example.com --name="ชื่อคุณ" --app-url=https://app.drivegolight.com
 ```
 
 ### ทางสำรอง — ตัวนำเข้า
@@ -56,7 +56,7 @@ node packages/importer/dist/cli.js ไฟล์สำรองของอู่
   --name="อู่ ช่างเอ ออโต้เซอร์วิส" \
   --owner-email=owner@example.com \
   --owner-name="สมชาย ใจดี" \
-  --app-url=https://app.drivebizbegin.com
+  --app-url=https://app.drivegolight.com
 ```
 
 อู่ที่ยังไม่เคยใช้โปรแกรมเดิมมาก่อน ให้ก๊อป [`tools/new-shop.template.json`](tools/new-shop.template.json)
@@ -84,7 +84,7 @@ cp tools/new-shop.template.json /tmp/อู่ใหม่.json
 
 ```
 tenant_id = f08cb3b9-…
-https://app.drivebizbegin.com/setup/z_-d1JInXjJWSoJSqXCZiGWSlJweBw8EFxfkaTzRtOM
+https://app.drivegolight.com/setup/z_-d1JInXjJWSoJSqXCZiGWSlJweBw8EFxfkaTzRtOM
 ```
 
 **ส่งลิงก์นี้ให้เจ้าของอู่** — ระบบยังส่งอีเมลเองไม่ได้

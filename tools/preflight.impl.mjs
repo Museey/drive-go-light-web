@@ -2,7 +2,7 @@
 /**
  * ตรวจความพร้อมก่อนเปิดให้คนนอกใช้
  *
- *   APP_URL=https://drivegolight.onrender.com ADMIN_URL='postgresql://...' \
+ *   APP_URL=https://app.drivegolight.com ADMIN_URL='postgresql://...' \
  *     node tools/preflight.mjs
  *
  * **ทำไมเป็นสคริปต์ ไม่ใช่รายการให้ติ๊กเอง** — รายการที่ต้องเอาตาไล่มักถูกติ๊กผ่าน

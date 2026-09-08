@@ -83,7 +83,7 @@ postgresql://dgl_app:<APP_PASS>@dpg-xxxxx-a.singapore-postgres.render.com/dgl?ss
 ### 5. ตรวจว่าขึ้นแล้วใช้ได้
 
 ```bash
-curl -s https://<ชื่อบริการ>.onrender.com/healthz
+curl -s https://app.drivegolight.com/healthz
 ```
 
 ต้องได้ `{"ok":true,"failed":[]}` เท่านั้น
@@ -95,10 +95,31 @@ curl -s https://<ชื่อบริการ>.onrender.com/healthz
 ```bash
 DATABASE_URL="$ADMIN" node packages/importer/dist/cli.js <ไฟล์สำรอง>.json \
   --owner-email=<อีเมลเจ้าของอู่> \
-  --app-url=https://<ชื่อบริการ>.onrender.com
+  --app-url=https://app.drivegolight.com
 ```
 
 ใช้ `ADMIN_URL` เพราะตัวนำเข้าต้องเขียนข้ามอู่ตอนสร้างอู่ใหม่
+
+### 7. ต่อโดเมนของตัวเอง
+
+โดเมนอยู่ที่ GoDaddy ระบบอยู่ที่ **`app.drivegolight.com`** ไม่ใช่โดเมนตัวเปล่า
+เพราะลิงก์ตั้งรหัสผ่านที่ส่งให้เจ้าของอู่ไปแล้วย้ายทีหลังไม่ได้ — แยกไว้ตั้งแต่แรก
+เผื่อวันหนึ่งโดเมนตัวเปล่าต้องใช้ทำหน้าแนะนำสินค้า
+
+| ที่ | ตั้งอะไร |
+|---|---|
+| Render → บริการ `drivegolight` → Settings → Custom Domains | `app.drivegolight.com` |
+| GoDaddy → DNS | `CNAME` ชื่อ `app` ชี้ไป `drivegolight.onrender.com` |
+| GoDaddy → Forwarding | โดเมนตัวเปล่า → `https://app.drivegolight.com` แบบ 301 |
+
+ใบรับรอง Render ขอ Let's Encrypt ให้เองและต่ออายุเอง ไม่ต้องซื้อและไม่ต้องต่อ
+
+**`APP_URL` ต้องตรงกับโดเมนนี้เสมอ** ค่านี้อยู่ที่ [`render.yaml`](render.yaml)
+และเป็นตัวที่ `appUrl()` ใช้ประกอบลิงก์ตั้งรหัสผ่าน ตั้งผิดแล้วลิงก์จะชี้ไปผิดที่
+โดยไม่มีใครรู้จนกว่าจะมีคนกด — และตอนนั้นคือตอนที่เจ้าของอู่รายใหม่เปิดไม่ได้
+
+ลำดับสำคัญ: ต่อโดเมนให้ใช้ได้จริงก่อน แล้วค่อยเปลี่ยน `APP_URL` ถ้าสลับกัน
+ลิงก์ที่ออกในช่วงคาบเกี่ยวจะใช้ไม่ได้ทั้งหมด
 
 ---
 
