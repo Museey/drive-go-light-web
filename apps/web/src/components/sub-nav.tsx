@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Icon } from './icon';
-import { MENU, type SubItem } from './menu-map';
+import { MENU, permSubKey, type SubItem } from './menu-map';
 import { currentSession } from '@/lib/auth';
 import { canTab, type PermKey } from '@/lib/perms';
 
@@ -34,7 +34,7 @@ export async function SubNav({
   const session = await currentSession();
   const all = item?.subs ?? [];
   const subs = session && item?.perm
-    ? all.filter((s2) => canTab(session, item.perm as PermKey, s2.key))
+    ? all.filter((s2) => canTab(session, item.perm as PermKey, permSubKey(s2)))
     : all;
 
   if (subs.length === 0) return <>{children}</>;

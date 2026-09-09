@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './icon';
-import { BLANK_FORM, MENU, type MenuItem } from './menu-map';
+import { BLANK_FORM, MENU, permSubKey, type MenuItem } from './menu-map';
 import type { Session } from '@/lib/auth';
 import { canMenu, canTab, type PermKey } from '@/lib/perms';
 
@@ -83,7 +83,7 @@ export function MenuBar({ session, current }: { session: Session; current: strin
       {visible.map((m) => {
         /* ซ่อนแท็บที่คนนี้เข้าไม่ได้ — เมนูที่ไม่เหลือแท็บเลยก็ไม่ต้องแสดงแผงหล่น */
         const subs = m.perm
-          ? (m.subs ?? []).filter((sub) => canTab(session, m.perm as PermKey, sub.key))
+          ? (m.subs ?? []).filter((sub) => canTab(session, m.perm as PermKey, permSubKey(sub)))
           : (m.subs ?? []);
         const showing = open === m.key;
 

@@ -21,6 +21,14 @@ export interface SubItem {
   href: string;
   /** ยังไม่ได้ทำ — แสดงจาง ๆ กดไม่ได้ */
   todo?: boolean;
+  /**
+   * คีย์ของแท็บแม่ เช่น 03.2.1 มีแม่เป็น 03.2
+   *
+   * แท็บลูก**ใช้สิทธิ์ของแม่** ไม่มีสิทธิ์ของตัวเอง และไม่โผล่ในตารางติ๊กสิทธิ์
+   * ถ้าให้มีสิทธิ์แยก พนักงานเดิมที่เคยติ๊กสิทธิ์รายแท็บไว้จะถูกซ่อนแท็บลูกทันที
+   * เพราะ canTab ถือว่าคีย์ที่ไม่มีในรายการ = ไม่อนุญาต ไม่ใช่ยังไม่ได้ตั้ง (perms.ts)
+   */
+  parent?: string;
 }
 
 export interface MenuItem {
@@ -64,8 +72,16 @@ export const MENU: MenuItem[] = [
         icon: 'quote', color: '#1D8A5F', href: '/income?kind=QT',
       },
       {
-        key: 'invoice', no: '03.2', label: 'ใบส่งมอบงาน / ใบแจ้งหนี้', desc: 'ส่งมอบงานและตั้งลูกหนี้',
+        key: 'invoice', no: '03.2', label: 'ใบส่งมอบงาน/ใบแจ้งหนี้/ใบกำกับภาษี',
+        desc: 'ส่งมอบงานและตั้งลูกหนี้',
         icon: 'truck', color: '#0F5C3E', href: '/income?kind=IVT',
+      },
+      {
+        /* เอกสารเดียวกับ 03.2 แต่ไม่มี VAT — sales-rules บังคับ vatMode 'none' ให้เอง
+           ชนิด IV ทำเสร็จตั้งแต่แรกแล้ว แท็บนี้แค่เปิดทางเข้าให้ ไม่ใช่ของใหม่ */
+        key: 'ivnovat', no: '03.2.1', label: 'ใบส่งมอบงาน/ใบแจ้งหนี้ (ไม่มีVAT)',
+        desc: 'ส่งมอบงานแบบไม่คิดภาษีมูลค่าเพิ่ม',
+        icon: 'truck', color: '#2F7D5C', href: '/income?kind=IV', parent: 'invoice',
       },
       {
         key: 'receipt', no: '03.3', label: 'ใบเสร็จรับเงิน', desc: 'รับเงินและปิดยอดลูกหนี้',
@@ -188,11 +204,26 @@ export function menuOf(pathname: string): MenuItem | null {
  */
 export const SUB_KEYS: Record<string, string[]> =
   Object.fromEntries(
-    MENU.filter((m) => m.perm).map((m) => [m.perm as string, (m.subs ?? []).map((s) => s.key)]),
+    MENU.filter((m) => m.perm)
+      .map((m) => [m.perm as string, ownTabs(m.subs).map((s) => s.key)]),
   );
 
 /** ผังแท็บพร้อมเลขกำกับและชื่อ — ใช้วาดตารางติ๊กสิทธิ์ */
 export const SUB_ITEMS: Record<string, SubItem[]> =
   Object.fromEntries(
-    MENU.filter((m) => m.perm).map((m) => [m.perm as string, m.subs ?? []]),
+    MENU.filter((m) => m.perm).map((m) => [m.perm as string, ownTabs(m.subs)]),
   );
+
+/**
+ * คีย์ที่ใช้ตัดสินสิทธิ์ของแท็บหนึ่ง — แท็บลูกใช้สิทธิ์ของแม่
+ *
+ * ทุกที่ที่เรียก canTab ด้วยแท็บจากผังนี้ต้องผ่านตัวนี้ก่อน
+ * ส่งคีย์ของแท็บลูกเข้า canTab ตรง ๆ จะได้ผลว่าไม่อนุญาตเสมอสำหรับพนักงาน
+ * ที่ติ๊กสิทธิ์รายแท็บไว้ เพราะคีย์นั้นไม่เคยมีในตารางสิทธิ์ของใครเลย
+ */
+export const permSubKey = (s: SubItem): string => s.parent ?? s.key;
+
+/** เฉพาะแท็บที่มีสิทธิ์ของตัวเอง — ตัวลูกไม่นับ ไม่งั้นตารางติ๊กสิทธิ์จะมีแถวที่ติ๊กแล้วไม่มีผล */
+function ownTabs(subs: SubItem[] | undefined): SubItem[] {
+  return (subs ?? []).filter((s) => !s.parent);
+}
