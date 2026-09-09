@@ -1,6 +1,7 @@
 import 'server-only';
 import { recTotals, today, totalsOf, whtBaseOf, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
+import { resolveSourceForNewWith, syncVehicleFromDocWith } from './doc-chain';
 import { mutate } from './mutate';
 import { consumeStock, returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
@@ -211,6 +212,13 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
       }
     }
 
+    /* เลขไมล์กลับเข้าทะเบียนรถ — กติกาอยู่ที่ doc-chain.ts เพื่อให้ทดสอบได้ */
+    await syncVehicleFromDocWith(c, {
+      vehicleId: input.vehicleId,
+      mileage: String(input.vehicle?.mileage ?? ''),
+      docDate: input.docDate,
+    });
+
     /* ใบเสนอราคาที่ถูกนำไปออกเอกสารต่อ ให้ทำเครื่องหมายว่าออกบิลแล้ว */
     if (input.parentDocId && input.kind !== 'QT') {
       await c.query(
@@ -390,11 +398,26 @@ export async function searchCustomers(q: string, limit = 15): Promise<PickedCont
 }
 
 /** โหลดเอกสารต้นทางมาตั้งต้นเอกสารใหม่ในสายเดียวกัน */
-export async function loadDocForCopy(id: string): Promise<SalesDocInput | null> {
+/** ตัวห่อของ resolveSourceForNewWith — กติกาอยู่ที่ doc-chain.ts เพื่อให้ทดสอบได้ */
+export async function resolveSourceForNew(
+  fromId: string,
+  kind: SalesKind,
+): Promise<{ sourceId: string; movedTo: { id: string; docNo: string } | null }> {
+  return query((c) => resolveSourceForNewWith(c, fromId, kind));
+}
+
+/**
+ * @param allowVoid ยอมให้คัดลอกจากเอกสารที่ถูกยกเลิกแล้ว — ใช้ตอนกด "คัดลอกใบใหม่"
+ *   ซึ่งเป็นทางออกเดียวที่เหลือของใบที่ยกเลิกไปแล้ว ตัวใบเดิมไม่ถูกแตะต้อง
+ */
+export async function loadDocForCopy(
+  id: string,
+  allowVoid = false,
+): Promise<SalesDocInput | null> {
   return query(async (c) => {
     const { rows } = await c.query(
       `select d.*, d.kind::text as kind_text, d.vat_mode::text as vat_mode_text
-       from documents d where d.id = $1 and d.status <> 'void'`,
+       from documents d where d.id = $1 ${allowVoid ? '' : "and d.status <> 'void'"}`,
       [id],
     );
     const d = rows[0];

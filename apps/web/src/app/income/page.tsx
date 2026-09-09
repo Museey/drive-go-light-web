@@ -6,6 +6,8 @@ import { listIncomeDocs } from '@/lib/queries';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, KIND_SHORT, payLabel, thDate } from '@/lib/format';
+import { canTab } from '@/lib/perms';
+import { TodoCell } from './todo-cell';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +41,7 @@ export default async function IncomePage({
     from?: string; to?: string; month?: string; year?: string;
   }>;
 }) {
-  await requireTab('income', 'receipt');
+  const session = await requireTab('income', 'receipt');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const search = sp.q ?? '';
@@ -49,6 +51,19 @@ export default async function IncomePage({
 
   const { rows, total } = await listIncomeDocs({ search, kind, page, from, to, pageSize });
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
+
+  /*
+   * คอลัมน์เปลี่ยนตามแท็บ — รุ่น 6.4 มีหน้าแยกต่อชนิดเอกสาร แต่ละหน้าจึงมีคอลัมน์ของตัวเอง
+   * เรารวมเป็นหน้าเดียวที่กรองด้วย kind ถ้าใช้คอลัมน์ชุดกลางชุดเดียวเหมือนเดิม
+   * คอลัมน์เฉพาะทางของแต่ละชนิดจะหายหมด เช่นใบเสนอราคาไม่มีที่ให้บอกว่าออกใบต่อหรือยัง
+   */
+  const view = kind === 'QT' ? 'quote'
+    : kind === 'RC' ? 'receipt'
+    : kind === 'IV' || kind === 'IVT' ? 'invoice'
+    : 'all';
+
+  const mayInvoice = canTab(session, 'income', 'invoice');
+  const mayReceipt = canTab(session, 'income', 'receipt');
 
   /* ค่าที่ต้องติดไปกับทุกลิงก์ในหน้านี้ ไม่งั้นกดหน้าถัดไปแล้วตัวกรองหลุด */
   const keep: Record<string, string> = {
@@ -120,15 +135,26 @@ export default async function IncomePage({
               <thead>
                 <tr>
                   <th>เลขที่</th>
-                  <th>ชนิด</th>
+                  {view === 'receipt' ? <th>อ้างอิง</th> : null}
+                  {view === 'all' || view === 'invoice' ? <th>ชนิด</th> : null}
                   <th>วันที่</th>
                   <th>ลูกค้า</th>
-                  <th>ทะเบียน</th>
-                  <th className="num">ยอดรวม</th>
-                  <th className="num">รับชำระแล้ว</th>
-                  <th className="num">คงค้าง</th>
-                  <th>สถานะ</th>
-                  <th>ครบกำหนด</th>
+                  {view === 'all' ? <th>ทะเบียน</th> : null}
+                  <th className="num">{view === 'receipt' ? 'สุทธิรับ' : 'ยอดรวม'}</th>
+                  {view === 'quote' ? (
+                    <>
+                      <th>ใบส่งมอบ / แจ้งหนี้</th>
+                      <th>ใบเสร็จรับเงิน</th>
+                    </>
+                  ) : (
+                    <>
+                      {view === 'all' ? <th className="num">รับชำระแล้ว</th> : null}
+                      <th className="num">คงค้าง</th>
+                      {view === 'receipt' ? <th>การชำระ</th> : <th>สถานะ</th>}
+                      {view === 'all' ? <th>ครบกำหนด</th> : null}
+                    </>
+                  )}
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -139,8 +165,18 @@ export default async function IncomePage({
                       <td className="mono">
                         <Link href={`/income/${r.id}`} style={{ textDecoration: 'underline' }}>{r.docNo}</Link>
                       </td>
-                      <td>{KIND_SHORT[r.kind]}</td>
+
+                      {view === 'receipt' ? (
+                        <td className="mono">
+                          {r.parent
+                            ? <Link href={`/income/${r.parent.id}`}>{r.parent.docNo}</Link>
+                            : <span className="subtle">-</span>}
+                        </td>
+                      ) : null}
+
+                      {view === 'all' || view === 'invoice' ? <td>{KIND_SHORT[r.kind]}</td> : null}
                       <td>{thDate(r.docDate)}</td>
+
                       <td className="wrap">
                         {r.partyName || '-'}
                         {r.missing.length ? (
@@ -149,19 +185,54 @@ export default async function IncomePage({
                             ข้อมูลไม่ครบ
                           </span>
                         ) : null}
+                        {/* แท็บเฉพาะชนิดไม่มีคอลัมน์ทะเบียน เอาไว้ใต้ชื่อแทน ตามรุ่น 6.4 */}
+                        {view !== 'all' && r.vehiclePlate ? (
+                          <div className="mono subtle" style={{ fontSize: 11.5 }}>{r.vehiclePlate}</div>
+                        ) : null}
                       </td>
-                      <td className="mono">{r.vehiclePlate || '-'}</td>
+
+                      {view === 'all' ? <td className="mono">{r.vehiclePlate || '-'}</td> : null}
                       <td className="num">{baht(r.payable)}</td>
-                      <td className="num">{r.kind === 'QT' ? '-' : baht(r.paid)}</td>
-                      <td className="num">
-                        {r.kind === 'QT' ? '-' : r.outstanding > 0.004 ? baht(r.outstanding) : '-'}
+
+                      {view === 'quote' ? (
+                        <>
+                          <td>
+                            <TodoCell done={r.invoice} canMake={mayInvoice} voided={false}
+                                      href={`/income/new?kind=IVT&from=${r.id}`}
+                                      todoTitle="ยังไม่ได้ออกใบส่งมอบ — กดเพื่อจัดทำ" />
+                          </td>
+                          <td>
+                            <TodoCell done={r.receipt} canMake={mayReceipt} voided={false}
+                                      href={`/income/new?kind=RC&from=${r.id}`}
+                                      todoTitle="ยังไม่ได้ออกใบเสร็จ — กดเพื่อจัดทำ" />
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          {view === 'all' ? (
+                            <td className="num">{r.kind === 'QT' ? '-' : baht(r.paid)}</td>
+                          ) : null}
+                          <td className="num">
+                            {r.kind === 'QT' ? '-' : r.outstanding > 0.004 ? baht(r.outstanding) : '-'}
+                          </td>
+                          {view === 'receipt' ? (
+                            <td className="wrap">
+                              {r.payMethods.length ? r.payMethods.join(' · ') : <span className="subtle">-</span>}
+                            </td>
+                          ) : (
+                            <td>
+                              {r.kind === 'QT'
+                                ? <span className="chip">ใบเสนอราคา</span>
+                                : <span className={`chip ${st.tone}`}>{st.text}</span>}
+                            </td>
+                          )}
+                          {view === 'all' ? <td>{thDate(r.dueDate)}</td> : null}
+                        </>
+                      )}
+
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <Link className="btn sm" href={`/income/${r.id}/print`}>พิมพ์</Link>
                       </td>
-                      <td>
-                        {r.kind === 'QT'
-                          ? <span className="chip">ใบเสนอราคา</span>
-                          : <span className={`chip ${st.tone}`}>{st.text}</span>}
-                      </td>
-                      <td>{thDate(r.dueDate)}</td>
                     </tr>
                   );
                 })}

@@ -1,6 +1,7 @@
 import 'server-only';
 import { docMissing } from '@drivegolight/core';
 import { query } from './auth';
+import { quoteFollowUpsWith, type DocRef } from './doc-chain';
 
 /** ยอดเงินจาก Postgres มาเป็นสตริง แปลงเองเพื่อไม่ให้เสียความละเอียดระหว่างทาง */
 const money = (v: unknown): number => Number(v ?? 0);
@@ -204,7 +205,20 @@ export interface IncomeRow {
   dueDate: string | null;
   /** ข้อมูลที่ยังขาดบนเอกสารใบนี้ — ว่างคือครบ */
   missing: string[];
+  /** เอกสารแม่ที่ใบนี้ออกต่อมา — ใช้เป็นคอลัมน์ "อ้างอิง" ของใบเสร็จ */
+  parent: DocRef | null;
+  /**
+   * ใบที่ออกต่อจากใบนี้แล้ว — เติมเฉพาะตอนดูแท็บใบเสนอราคา
+   *
+   * `null` แปลว่ายังไม่ได้ออก ไม่ใช่ว่าไม่รู้ เพราะคิวรีถามเสมอเมื่ออยู่แท็บนั้น
+   */
+  invoice: DocRef | null;
+  receipt: DocRef | null;
+  /** วิธีชำระเงินที่ใช้จริงในใบนี้ ไม่ซ้ำ เรียงตามที่บันทึก */
+  payMethods: string[];
 }
+
+export type { DocRef } from './doc-chain';
 
 export interface IncomeListResult {
   rows: IncomeRow[];
@@ -269,15 +283,30 @@ export async function listIncomeDocs(opts: {
               d.grand_total, d.payable, d.due_date,
               d.party_id, d.party_type::text as party_type, d.party_tax_id,
               d.party_addr_text, d.party_addr,
-              coalesce(p.paid, 0) as paid
+              coalesce(p.paid, 0) as paid,
+              case when pd.id is null then null
+                   else json_build_object('id', pd.id, 'docNo', pd.doc_no) end as parent,
+              coalesce(pm.methods, '{}') as pay_methods
        from documents d
        left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
               on p.doc_id = d.id
+       left join documents pd on pd.id = d.parent_doc_id
+       left join (select doc_id, array_agg(distinct method) as methods
+                    from payments group by doc_id) pm
+              on pm.doc_id = d.id
        where ${whereSql}
        order by d.doc_date desc, d.doc_no desc
        ${limitSql}`,
       params,
     );
+
+    /*
+     * คอลัมน์งานค้างของใบเสนอราคา — ถามเฉพาะตอนอยู่แท็บนั้น
+     * คิวรีเดียวสำหรับทั้งหน้า ไม่ใช่ต่อแถว ใช้ดัชนี (tenant_id, parent_doc_id) ที่มีอยู่แล้ว
+     */
+    const follow = kind === 'QT'
+      ? await quoteFollowUpsWith(c, rows.map((r) => r.id as string))
+      : new Map<string, { invoice: DocRef | null; receipt: DocRef | null }>();
 
     return {
       total: totalRes.rows[0].c,
@@ -293,6 +322,10 @@ export async function listIncomeDocs(opts: {
         paid: money(r.paid),
         outstanding: Math.round((money(r.payable) - money(r.paid)) * 100) / 100,
         dueDate: r.due_date,
+        parent: r.parent ?? null,
+        invoice: follow.get(r.id)?.invoice ?? null,
+        receipt: follow.get(r.id)?.receipt ?? null,
+        payMethods: r.pay_methods ?? [],
         missing: docMissing({
           kind: r.kind,
           partyId: r.party_id,

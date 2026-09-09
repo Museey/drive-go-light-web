@@ -1,0 +1,301 @@
+/**
+ * การต่อสายเอกสารขาย และกระดานงานบนหน้าใบเสนอราคา
+ *
+ * ข้อที่สำคัญที่สุดคือ **ใบเสร็จที่ออกจากใบเสนอราคาซึ่งมีใบส่งมอบแล้ว ต้องต่อสาย
+ * จากใบส่งมอบ** ไม่ใช่จากใบเสนอราคา ถ้าต่อผิดจะได้ใบส่งมอบกับใบเสร็จเป็นพี่น้องกัน
+ * ใบส่งมอบจึงไม่มีอะไรมาปิดยอด ค้างเป็นลูกหนี้ตลอดไปทั้งที่เก็บเงินไปแล้ว
+ *
+ * เป็นความผิดพลาดที่ไม่มีอาการบนหน้าจอ — ยอดขายรวมยังถูก มีแต่ยอดลูกหนี้ที่บวม
+ * ขึ้นเรื่อย ๆ จนกว่าจะมีคนสงสัย
+ *
+ *   DATABASE_URL=postgresql://postgres:x@localhost:5433/dgl npm test -w @drivegolight/web
+ */
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import pg from 'pg';
+import {
+  quoteFollowUpsWith, resolveSourceForNewWith, syncVehicleFromDocWith,
+} from '../src/lib/doc-chain';
+import { freshSchema } from '../../../tools/test-schema.mjs';
+
+pg.types.setTypeParser(1082, (v) => v);
+
+const here = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(here, '../../..');
+const DB_URL = process.env.DATABASE_URL;
+
+describe.skipIf(!DB_URL)('การต่อสายเอกสารขาย', () => {
+  let admin: pg.Client;
+  let app: pg.Client;
+  let tenantId: string;
+  let otherTenant: string;
+
+  /**
+   * ใส่เอกสารผ่าน role ของแอปเพื่อให้ RLS ทำงานจริงเหมือนตอนใช้งาน
+   *
+   * ต้องเคารพ CHECK ของสคีมาด้วย — IV บังคับไม่มี VAT · IVT บังคับมี ·
+   * และเอกสารที่ยกเลิกต้องมีเวลายกเลิกกำกับ ไม่ใช่แค่เปลี่ยนสถานะ
+   */
+  const addDoc = async (
+    kind: string, no: string, parent: string | null = null, status = 'issued',
+  ): Promise<string> => {
+    const vatMode = kind === 'IV' ? 'none' : kind === 'IVT' ? 'ex' : 'ex';
+    const { rows } = await app.query(
+      `insert into documents
+         (tenant_id, kind, doc_no, doc_date, parent_doc_id, status, vat_mode, voided_at)
+       values (current_tenant_id(), $1, $2, current_date, $3, $4::doc_status, $5,
+               case when $4::text = 'void' then now() else null end)
+       returning id`,
+      [kind, no, parent, status, vatMode],
+    );
+    return rows[0].id as string;
+  };
+
+  beforeAll(async () => {
+    admin = new pg.Client({ connectionString: DB_URL });
+    await admin.connect();
+
+    await freshSchema(admin, ['db/001_init.sql', 'db/002_auth.sql']);
+    await admin.query(`
+      do $$ begin
+        if exists (select 1 from pg_roles where rolname = 'dgl_app') then
+          execute 'drop owned by dgl_app';
+        end if;
+      end $$;
+    `);
+    await admin.query(
+      readFileSync(resolve(ROOT, 'db/app-role.sql'), 'utf8')
+        .replace('เปลี่ยนรหัสนี้ก่อนใช้จริง', 'apppass'));
+
+    const t = await admin.query(
+      `insert into tenants (name) values ('อู่ทดสอบสายเอกสาร'), ('อู่ข้างบ้าน') returning id`);
+    tenantId = t.rows[0].id;
+    otherTenant = t.rows[1].id;
+
+    const url = new URL(DB_URL!);
+    url.username = 'dgl_app';
+    url.password = 'apppass';
+    app = new pg.Client({ connectionString: url.toString() });
+    await app.connect();
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
+  }, 60_000);
+
+  afterAll(async () => {
+    await app?.end();
+    await admin?.end();
+  });
+
+  /*
+   * ล้างผ่าน role ของแอปทีละอู่ ไม่ใช่ผ่าน admin
+   *
+   * `documents` เปิด force row level security ไว้ ซึ่งมีผลกับ**เจ้าของตาราง**ด้วย
+   * admin จึงลบไม่ได้เลยสักแถวเพราะไม่มี app.tenant_id — และไม่ error ด้วย
+   * ลบ 0 แถวเงียบ ๆ แล้วเทสต์ถัดไปไปชนกับเลขที่เอกสารเดิม
+   */
+  beforeEach(async () => {
+    /* ล้างอู่ข้างบ้านก่อน — ใบลูกของอู่นั้นชี้มาที่ใบแม่ของเรา ลบใบแม่ก่อนจะติด FK */
+    for (const t of [otherTenant, tenantId]) {
+      await app.query(`select set_config('app.tenant_id', $1, false)`, [t]);
+      await app.query('delete from documents');
+      await app.query('delete from vehicles');
+      await app.query('delete from contacts');
+    }
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
+  });
+
+  /* ---------------- ต้นทางของใบเสร็จ ---------------- */
+
+  it('ใบเสนอราคาที่ยังไม่มีใบส่งมอบ — ออกใบเสร็จต่อจากใบเสนอราคาตามเดิม', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    const r = await resolveSourceForNewWith(app, qt, 'RC');
+    expect(r.sourceId).toBe(qt);
+    expect(r.movedTo).toBeNull();
+  });
+
+  it('ใบเสนอราคาที่มีใบส่งมอบแล้ว — ใบเสร็จต้องต่อจากใบส่งมอบ', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    const ivt = await addDoc('IVT', 'IVT-001', qt);
+
+    const r = await resolveSourceForNewWith(app, qt, 'RC');
+    expect(r.sourceId).toBe(ivt);
+    expect(r.movedTo).toEqual({ id: ivt, docNo: 'IVT-001' });
+  });
+
+  it('ใบส่งมอบแบบไม่มี VAT ก็นับเหมือนกัน', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    const iv = await addDoc('IV', 'IV-001', qt);
+
+    expect((await resolveSourceForNewWith(app, qt, 'RC')).sourceId).toBe(iv);
+  });
+
+  it('ใบส่งมอบที่ถูกยกเลิกไม่นับ — กลับไปต่อจากใบเสนอราคา', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    await addDoc('IVT', 'IVT-001', qt, 'void');
+
+    const r = await resolveSourceForNewWith(app, qt, 'RC');
+    expect(r.sourceId).toBe(qt);
+    expect(r.movedTo).toBeNull();
+  });
+
+  it('ออกใบส่งมอบ (ไม่ใช่ใบเสร็จ) ไม่เปลี่ยนต้นทางไม่ว่ากรณีใด', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    await addDoc('IVT', 'IVT-001', qt);
+
+    for (const kind of ['IVT', 'IV', 'QT']) {
+      expect((await resolveSourceForNewWith(app, qt, kind)).sourceId).toBe(qt);
+    }
+  });
+
+  it('ต้นทางที่ไม่ใช่ใบเสนอราคา ไม่ถูกเปลี่ยน — ออกใบเสร็จจากใบส่งมอบตรง ๆ', async () => {
+    const ivt = await addDoc('IVT', 'IVT-001');
+    expect((await resolveSourceForNewWith(app, ivt, 'RC')).sourceId).toBe(ivt);
+  });
+
+  /* ---------------- กระดานงาน ---------------- */
+
+  it('ใบเสนอราคาที่ยังไม่ได้ออกอะไรเลย — ทั้งสองช่องว่าง', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    const m = await quoteFollowUpsWith(app, [qt]);
+    expect(m.get(qt)).toEqual({ invoice: null, receipt: null });
+  });
+
+  it('ออกครบทั้งสองใบ — เห็นเลขที่ทั้งสองช่อง', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    await addDoc('IVT', 'IVT-001', qt);
+    await addDoc('RC', 'RC-001', qt);
+
+    const got = (await quoteFollowUpsWith(app, [qt])).get(qt);
+    expect(got?.invoice?.docNo).toBe('IVT-001');
+    expect(got?.receipt?.docNo).toBe('RC-001');
+  });
+
+  /*
+   * ข้อนี้คือเหตุผลที่คิวรีต้องกรอง status — ถ้าไม่กรอง ใบเสนอราคาที่เคยออก
+   * ใบส่งมอบแล้วยกเลิกไป จะดูเหมือนงานเสร็จแล้วตลอดกาล แล้วไม่มีใครกลับมาออกใหม่
+   */
+  it('ใบส่งมอบที่ถูกยกเลิก ต้องกลับไปขึ้นว่ายังไม่ได้ออก', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    await addDoc('IVT', 'IVT-001', qt, 'void');
+
+    expect((await quoteFollowUpsWith(app, [qt])).get(qt)?.invoice).toBeNull();
+  });
+
+  it('ออกใบส่งมอบใหม่หลังจากยกเลิกใบเก่า — เห็นใบใหม่ ไม่ใช่ใบที่ยกเลิก', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    await addDoc('IVT', 'IVT-001', qt, 'void');
+    await addDoc('IVT', 'IVT-002', qt);
+
+    expect((await quoteFollowUpsWith(app, [qt])).get(qt)?.invoice?.docNo).toBe('IVT-002');
+  });
+
+  it('หลายใบในหน้าเดียว แต่ละใบได้ของตัวเอง ไม่ปนกัน', async () => {
+    const a = await addDoc('QT', 'QT-001');
+    const b = await addDoc('QT', 'QT-002');
+    const c = await addDoc('QT', 'QT-003');
+    await addDoc('IVT', 'IVT-001', a);
+    await addDoc('RC', 'RC-002', b);
+
+    const m = await quoteFollowUpsWith(app, [a, b, c]);
+    expect(m.get(a)?.invoice?.docNo).toBe('IVT-001');
+    expect(m.get(a)?.receipt).toBeNull();
+    expect(m.get(b)?.invoice).toBeNull();
+    expect(m.get(b)?.receipt?.docNo).toBe('RC-002');
+    expect(m.get(c)).toEqual({ invoice: null, receipt: null });
+  });
+
+  it('รายการว่างไม่ยิงคิวรีและไม่พัง', async () => {
+    expect((await quoteFollowUpsWith(app, [])).size).toBe(0);
+  });
+
+  /*
+   * ใบของอู่อื่นต้องมองไม่เห็น แม้จะรู้ id ของใบแม่ก็ตาม
+   * RLS ควรกันอยู่แล้ว แต่คิวรีนี้รับ id เป็นพารามิเตอร์จากภายนอก
+   * จึงเป็นจุดที่ต้องมีเทสต์ยืนยัน ไม่ใช่เชื่อว่ากันอยู่
+   */
+  it('ใบลูกของอู่อื่นไม่โผล่มาในกระดานของเรา', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [otherTenant]);
+    await app.query(
+      `insert into documents (tenant_id, kind, doc_no, doc_date, parent_doc_id)
+       values (current_tenant_id(), 'IVT', 'IVT-เพื่อนบ้าน', current_date, $1)`, [qt]);
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
+
+    expect((await quoteFollowUpsWith(app, [qt])).get(qt)?.invoice).toBeNull();
+  });
+
+  /* ---------------- เลขไมล์กลับเข้าทะเบียนรถ ---------------- */
+
+  describe('เขียนเลขไมล์กลับ', () => {
+    let vehicleId: string;
+
+    beforeEach(async () => {
+      const ct = await app.query(
+        `insert into contacts (tenant_id, kind, code, first_name, last_name)
+         values (current_tenant_id(), 'customer', 'C001', 'สมชาย', 'ใจดี') returning id`);
+      const v = await app.query(
+        `insert into vehicles (tenant_id, contact_id, brand, model, color, plate_a, plate_b, mileage)
+         values (current_tenant_id(), $1, 'Toyota', 'Vios', 'ขาว', '1กก', '1234', '50000')
+         returning id`, [ct.rows[0].id]);
+      vehicleId = v.rows[0].id;
+    });
+
+    const reg = async () => (await app.query(
+      `select brand, model, color, mileage, last_service_on::text as last_service_on
+         from vehicles where id = $1`, [vehicleId])).rows[0];
+
+    it('เลขไมล์ใหม่เข้าทะเบียนรถ พร้อมวันที่บริการล่าสุด', async () => {
+      await syncVehicleFromDocWith(app, {
+        vehicleId, mileage: '86500', docDate: '2569-01-15'.replace('2569', '2026'),
+      });
+      const v = await reg();
+      expect(v.mileage).toBe('86500');
+      expect(v.last_service_on).toBe('2026-01-15');
+    });
+
+    /*
+     * ข้อสำคัญที่สุดของกลุ่มนี้ — แก้ยี่ห้อบนเอกสารต้องไม่ไปแก้ทะเบียนรถ
+     * เอกสารเก็บภาพนิ่งไว้ ถ้าเขียนกลับหมดทุกช่อง การพิมพ์ผิดบนใบเดียว
+     * จะไปทับทะเบียนรถถาวร แล้วใบเก่าทุกใบก็ยังคงข้อความเดิมไว้ ไม่มีใครรู้ว่าอันไหนจริง
+     */
+    it('ยี่ห้อ รุ่น สี ที่แก้บนเอกสาร ไม่เขียนกลับ', async () => {
+      await syncVehicleFromDocWith(app, { vehicleId, mileage: '90000', docDate: '2026-02-01' });
+      const v = await reg();
+      expect({ brand: v.brand, model: v.model, color: v.color })
+        .toEqual({ brand: 'Toyota', model: 'Vios', color: 'ขาว' });
+    });
+
+    it('ออกใบย้อนหลัง ไม่ดึงวันที่บริการล่าสุดถอยกลับ', async () => {
+      await syncVehicleFromDocWith(app, { vehicleId, mileage: '90000', docDate: '2026-06-01' });
+      await syncVehicleFromDocWith(app, { vehicleId, mileage: '88000', docDate: '2026-01-01' });
+
+      const v = await reg();
+      expect(v.last_service_on).toBe('2026-06-01');
+      /* เลขไมล์ยังทับ เพราะเป็นค่าที่คนกรอกล่าสุด ไม่ใช่ค่าที่เรียงตามเวลา */
+      expect(v.mileage).toBe('88000');
+    });
+
+    it('ไม่ได้กรอกเลขไมล์ — ไม่แตะทะเบียนรถเลย', async () => {
+      await syncVehicleFromDocWith(app, { vehicleId, mileage: '   ', docDate: '2026-03-01' });
+      const v = await reg();
+      expect(v.mileage).toBe('50000');
+      expect(v.last_service_on).toBeNull();
+    });
+
+    it('รถขาจรที่ไม่ได้อยู่ในทะเบียน — ไม่มีอะไรให้เขียนกลับ ไม่พัง', async () => {
+      await expect(syncVehicleFromDocWith(app, {
+        vehicleId: null, mileage: '77000', docDate: '2026-03-01',
+      })).resolves.toBeUndefined();
+    });
+
+    it('รถของอู่อื่นแก้ไม่ได้ แม้จะรู้ id', async () => {
+      await app.query(`select set_config('app.tenant_id', $1, false)`, [otherTenant]);
+      await syncVehicleFromDocWith(app, { vehicleId, mileage: '999999', docDate: '2026-04-01' });
+      await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
+
+      expect((await reg()).mileage).toBe('50000');
+    });
+  });
+});

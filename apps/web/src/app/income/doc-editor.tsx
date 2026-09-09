@@ -8,6 +8,7 @@ import { saveDocAction, searchCustomersAction, searchProductsAction } from './ac
 import type { FormResult } from '@/lib/mutate';
 import type { DocItemInput, PickedContact, PickedProduct, SalesDocInput, SalesKind } from '@/lib/sales';
 import { baht, KIND_LABEL } from '@/lib/format';
+import { VehicleFields } from './vehicle-fields';
 
 const EPS = 0.004;
 const money = (n: number) => (Math.round(n * 100) / 100);
@@ -267,24 +268,45 @@ export function DocEditor({
             </div>
           </div>
 
+          {/* หน้าพิมพ์พิมพ์อีเมลออกมาอยู่แล้ว แต่ไม่เคยมีช่องให้กรอก จึงว่างเสมอ
+              เว้นแต่คัดลอกมาจากทะเบียนลูกค้า */}
+          <div className="field" style={{ marginTop: 12 }}>
+            <label>อีเมล</label>
+            <input className="in" type="email" value={doc.partyEmail}
+                   onChange={(e) => set('partyEmail', e.target.value)} />
+          </div>
+
           <div className="field" style={{ marginTop: 12 }}>
             <label>ที่อยู่บนเอกสาร</label>
             <textarea className="in" value={doc.partyAddrText}
                       onChange={(e) => set('partyAddrText', e.target.value)} />
           </div>
 
-          {picked && picked.vehicles.length > 0 ? (
-            <div className="field" style={{ marginTop: 12 }}>
-              <label>รถที่เข้ารับบริการ</label>
-              <select className="in" value={doc.vehicleId ?? ''}
-                      onChange={(e) => {
-                        const v = picked.vehicles.find((x) => x.id === e.target.value);
-                        setDoc((d) => ({ ...d, vehicleId: v?.id ?? null, vehicle: v?.data ?? null }));
-                      }}>
-                {picked.vehicles.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
-              </select>
-            </div>
-          ) : null}
+          {/* ---------- รถที่เข้ารับบริการ ---------- */}
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--line-2)' }}>
+            {picked && picked.vehicles.length > 0 ? (
+              <div className="field" style={{ marginBottom: 12 }}>
+                <label>เลือกจากทะเบียนรถของลูกค้า</label>
+                <select className="in" value={doc.vehicleId ?? ''}
+                        onChange={(e) => {
+                          const v = picked.vehicles.find((x) => x.id === e.target.value);
+                          setDoc((d) => ({
+                            ...d,
+                            vehicleId: v?.id ?? null,
+                            vehicle: v ? { ...v.data } : (d.vehicle ?? {}),
+                          }));
+                        }}>
+                  <option value="">— ไม่ใช่รถในทะเบียน กรอกเอง —</option>
+                  {picked.vehicles.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                </select>
+                <div className="subtle" style={{ fontSize: 12, marginTop: 4 }}>
+                  เลือกแล้วเติมช่องข้างล่างให้ · แก้ช่องไหนก็ได้ ค่าที่แก้จะอยู่บนเอกสารใบนี้เท่านั้น
+                </div>
+              </div>
+            ) : null}
+
+            <VehicleFields veh={doc.vehicle ?? {}} onChange={(veh) => set('vehicle', veh)} />
+          </div>
         </div>
       </div>
 

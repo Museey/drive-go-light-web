@@ -46,9 +46,21 @@ export default async function DocPage({
       ) : null}
       {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}
       {doc.status === 'void' ? (
-        <div className="err" style={{ marginBottom: 16 }}>
-          เอกสารนี้ถูกยกเลิกแล้ว — ไม่ถูกนับในยอดขายและภาษี
-        </div>
+        <>
+          <div className="err" style={{ marginBottom: 16 }}>
+            เอกสารนี้ถูกยกเลิกแล้ว — ไม่ถูกนับในยอดขายและภาษี และออกใบต่อจากใบนี้ไม่ได้
+            <br />
+            ถ้ายังต้องทำงานนี้ต่อ ให้<b>คัดลอกใบใหม่</b> แล้วออกใบต่อจากใบใหม่แทน
+          </div>
+          {/* ใบที่ยกเลิกแล้วต้องเหลือทางออก — ซ่อนปุ่มทั้งแถบทำให้ผู้ใช้ค้างอยู่ตรงนั้น
+              ไม่รู้ว่าต้องทำอะไรต่อ ซึ่งเป็นสิ่งที่รุ่น 6.4 บอกไว้ชัดกว่าเรา */}
+          <div className="tag-row" style={{ marginBottom: 16 }}>
+            <Link className="btn primary" href={`/income/new?kind=${doc.kind}&from=${doc.id}&copy=1`}>
+              คัดลอกใบใหม่
+            </Link>
+            <Link className="btn" href={`/income/${doc.id}/print`}>พิมพ์เอกสาร</Link>
+          </div>
+        </>
       ) : (
         <div style={{ marginBottom: 16 }}>
           <DocActions id={doc.id} kind={doc.kind} canEdit={editable.ok} editReason={editable.reason} />

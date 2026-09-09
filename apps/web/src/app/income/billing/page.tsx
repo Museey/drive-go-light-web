@@ -60,6 +60,7 @@ export default async function BillingPage({
                     <th className="num">ยอดที่แจ้งไป</th>
                     <th className="num">ค้างอยู่ตอนนี้</th>
                     <th>นัดรับเงิน</th><th>สถานะ</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -85,6 +86,9 @@ export default async function BillingPage({
                         {r.status === 'void'
                           ? <span className="chip due" title={r.voidedReason ?? ''}>ยกเลิกแล้ว</span>
                           : <span className="chip">วางบิลแล้ว</span>}
+                      </td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <Link className="btn sm" href={`/income/billing/${r.id}/print`}>พิมพ์</Link>
                       </td>
                     </tr>
                   ))}

@@ -309,6 +309,15 @@ table.tbl td.wrap { white-space: normal; min-width: 200px; }
 .chip.ok { color: var(--ok); border-color: #BFE0CE; background: #F1F9F4; }
 .chip.warn { color: var(--warn); border-color: #EEDBB4; background: #FCF7EC; }
 .chip.due { color: var(--due); border-color: #EEC4C4; background: #FCF1F1; }
+/* งานที่ยังไม่ได้ทำบนกระดานใบเสนอราคา — ต้องสะดุดตากว่าป้ายอื่นเพราะเป็นสิ่งที่ต้องไปทำต่อ */
+a.chip.todo {
+  color: #7A4E00; border-color: #E8CE79; background: #FCF3D8;
+  text-decoration: none; cursor: pointer;
+}
+a.chip.todo:hover { background: #F7E9BE; border-color: #DDBE5C; }
+a.chip.ok { text-decoration: none; }
+a.chip.ok:hover { background: #E3F3EA; border-color: #9FD1B6; }
+
 /* ป้ายสถานะสต๊อก — สีชุดเดียวกับรุ่น HTML เพื่อให้อู่ที่ย้ายมาอ่านตารางได้เหมือนเดิม */
 .chip.flag-min { color: #6B4E00; border-color: #E8CE79; background: #FCF3D8; }
 .chip.flag-max { color: #8A2C24; border-color: #F0CBC7; background: #FBE9E7; }
@@ -327,6 +336,8 @@ table.tbl td.wrap { white-space: normal; min-width: 200px; }
 }
 .btn:hover { border-color: var(--ink-3); }
 .btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+/* ปุ่มท้ายแถวในตาราง — ต้องเตี้ยกว่าปุ่มปกติ ไม่งั้นแถวสูงขึ้นทั้งตารางจนดูรายการได้น้อยลง */
+.btn.sm { padding: 3px 9px; font-size: 12px; }
 
 .in {
   padding: 7px 10px;
