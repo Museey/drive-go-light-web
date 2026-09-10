@@ -1,7 +1,7 @@
 import 'server-only';
 import { docMissing } from '@drivegolight/core';
 import { query } from './auth';
-import { quoteFollowUpsWith, type DocRef } from './doc-chain';
+import { quoteFollowUpsWith, receiptsOfWith, type DocRef } from './doc-chain';
 
 /** ยอดเงินจาก Postgres มาเป็นสตริง แปลงเองเพื่อไม่ให้เสียความละเอียดระหว่างทาง */
 const money = (v: unknown): number => Number(v ?? 0);
@@ -216,6 +216,9 @@ export interface IncomeRow {
   receipt: DocRef | null;
   /** วิธีชำระเงินที่ใช้จริงในใบนี้ ไม่ซ้ำ เรียงตามที่บันทึก */
   payMethods: string[];
+  /** ยกเลิกไปแล้วหรือยัง — แถวที่ยกเลิกต้องดูออกทันทีว่าต่างจากแถวปกติ */
+  voided: boolean;
+  voidedReason: string;
 }
 
 export type { DocRef } from './doc-chain';
@@ -237,6 +240,8 @@ export async function listIncomeDocs(opts: {
   /** ขอทุกแถวโดยไม่แบ่งหน้า — ใช้ตอนสั่งพิมพ์หรือส่งออก */
   all?: boolean;
   pageSize?: number;
+  /** รวมใบที่ยกเลิกแล้วในรายการด้วย */
+  includeVoid?: boolean;
 }): Promise<IncomeListResult> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -244,17 +249,36 @@ export async function listIncomeDocs(opts: {
 
   return query(async (c) => {
     // ค้นจากเลขที่เอกสาร ชื่อลูกค้า หรือทะเบียนรถ — สามอย่างที่หน้าเคาน์เตอร์ใช้จริง
-    const where: string[] = [`d.kind in ('QT','IV','IVT','RC')`, `d.status <> 'void'`];
+    const where: string[] = [`d.kind in ('QT','IV','IVT','RC')`];
     const params: unknown[] = [];
+
+    /*
+     * ใบที่ยกเลิกแล้วซ่อนไว้เป็นค่าปริยาย เพราะรายการที่ใช้ทุกวันไม่ควรรก
+     *
+     * **แต่ค้นด้วยเลขที่เอกสารต้องเจอเสมอ** คนที่พิมพ์เลขที่ใบมาค้นรู้อยู่แล้วว่า
+     * จะหาใบไหน การซ่อนคือการตอบว่า "ไม่มีใบนี้" ซึ่งไม่จริง และเป็นเหตุผลเดียว
+     * ที่ทำให้ปุ่มคัดลอกใบใหม่ของช่วงที่ 8 เดินไปถึงไม่ได้เลย
+     *
+     * หน้ารายจ่าย ใบซื้อ ใบวางบิล และใบเคลม แสดงใบที่ยกเลิกอยู่แล้ว
+     * ก่อนหน้านี้หน้ารายรับเป็นหน้าเดียวที่ต่างออกไป
+     */
+    /* ดันตัวค้นหาเข้าเป็นพารามิเตอร์ตัวแรก เพื่อให้อ้างเลขได้ทั้งสองที่ */
+    let sIdx = 0;
+    if (search) { params.push(`%${search}%`); sIdx = params.length; }
+
+    if (!opts.includeVoid) {
+      where.push(sIdx
+        ? `(d.status <> 'void' or d.doc_no ilike $${sIdx})`
+        : `d.status <> 'void'`);
+    }
 
     if (kind) {
       params.push(kind);
       where.push(`d.kind = $${params.length}`);
     }
-    if (search) {
-      params.push(`%${search}%`);
-      const i = params.length;
-      where.push(`(d.doc_no ilike $${i} or d.party_name ilike $${i} or d.vehicle_plate ilike $${i})`);
+    if (sIdx) {
+      where.push(`(d.doc_no ilike $${sIdx} or d.party_name ilike $${sIdx}
+                   or d.vehicle_plate ilike $${sIdx})`);
     }
     if (opts.from) {
       params.push(opts.from);
@@ -281,6 +305,7 @@ export async function listIncomeDocs(opts: {
     const { rows } = await c.query(
       `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.party_name, d.vehicle_plate,
               d.grand_total, d.payable, d.due_date,
+              d.status::text as status, coalesce(d.voided_reason, '') as voided_reason,
               d.party_id, d.party_type::text as party_type, d.party_tax_id,
               d.party_addr_text, d.party_addr,
               coalesce(p.paid, 0) as paid,
@@ -308,6 +333,13 @@ export async function listIncomeDocs(opts: {
       ? await quoteFollowUpsWith(c, rows.map((r) => r.id as string))
       : new Map<string, { invoice: DocRef | null; receipt: DocRef | null }>();
 
+    /* ใบส่งมอบในหน้านี้ ใบไหนออกใบเสร็จไปแล้ว — ใช้ตัดสินว่าจะโชว์ปุ่มออกใบเสร็จในแถวไหม
+       ถามทุกแท็บที่มีใบส่งมอบปนอยู่ ไม่ใช่เฉพาะแท็บใบส่งมอบ */
+    const invoiceIds = rows
+      .filter((r) => r.kind === 'IV' || r.kind === 'IVT')
+      .map((r) => r.id as string);
+    const rcOf = await receiptsOfWith(c, invoiceIds);
+
     return {
       total: totalRes.rows[0].c,
       rows: rows.map((r) => ({
@@ -324,8 +356,10 @@ export async function listIncomeDocs(opts: {
         dueDate: r.due_date,
         parent: r.parent ?? null,
         invoice: follow.get(r.id)?.invoice ?? null,
-        receipt: follow.get(r.id)?.receipt ?? null,
+        receipt: follow.get(r.id)?.receipt ?? rcOf.get(r.id) ?? null,
         payMethods: r.pay_methods ?? [],
+        voided: r.status === 'void',
+        voidedReason: r.voided_reason ?? '',
         missing: docMissing({
           kind: r.kind,
           partyId: r.party_id,

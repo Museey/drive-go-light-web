@@ -382,6 +382,29 @@ export interface PickedVendor {
   creditDays: number;
 }
 
+/**
+ * ดึงผู้ขายรายเดียว — ใช้ตอนเปิดใบซื้อจากแถวทะเบียนผู้ขาย
+ * ต้องได้ผลเหมือนกดเลือกจากช่องค้นหา ไม่ใช่แค่ชื่อ
+ */
+export async function pickVendorById(id: string): Promise<PickedVendor | null> {
+  return query(async (c) => {
+    const { rows } = await c.query(`select k.* from contacts k where k.id = $1`, [id]);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      id: r.id,
+      code: r.code,
+      name: r.type === 'company'
+        ? r.org_name
+        : [r.prefix, r.first_name, r.last_name].filter(Boolean).join(' '),
+      taxId: r.tax_id ?? '',
+      tel: r.tel,
+      addrText: r.addr_text || '',
+      creditDays: Number(r.credit_days),
+    };
+  });
+}
+
 export async function searchVendors(q: string, limit = 15): Promise<PickedVendor[]> {
   const term = q.trim();
   return query(async (c) => {

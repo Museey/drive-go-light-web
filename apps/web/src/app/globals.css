@@ -338,6 +338,8 @@ a.chip.ok:hover { background: #E3F3EA; border-color: #9FD1B6; }
 .btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
 /* ปุ่มท้ายแถวในตาราง — ต้องเตี้ยกว่าปุ่มปกติ ไม่งั้นแถวสูงขึ้นทั้งตารางจนดูรายการได้น้อยลง */
 .btn.sm { padding: 3px 9px; font-size: 12px; }
+/* ปุ่มท้ายแถวหลายปุ่ม — ต้องไม่ติดกันจนกดพลาด และไม่ตัดบรรทัดจนแถวสูงขึ้น */
+.row-acts { display: inline-flex; gap: 5px; justify-content: flex-end; }
 
 .in {
   padding: 7px 10px;

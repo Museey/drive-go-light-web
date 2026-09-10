@@ -3,7 +3,7 @@ import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
 import {
-  getDefaultWarranty, loadDocForCopy, resolveSourceForNew,
+  getDefaultWarranty, loadDocForCopy, pickContactById, resolveSourceForNew,
   type SalesDocInput, type SalesKind,
 } from '@/lib/sales';
 import { KIND_LABEL } from '@/lib/format';
@@ -43,7 +43,7 @@ function blank(kind: SalesKind, warranty: string, whtRate: number): SalesDocInpu
 export default async function NewDocPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string; from?: string; copy?: string }>;
+  searchParams: Promise<{ kind?: string; from?: string; copy?: string; party?: string }>;
 }) {
   await requireTab('income', 'receipt');
   const sp = await searchParams;
@@ -60,10 +60,12 @@ export default async function NewDocPage({
     ? await resolveSourceForNew(sp.from, kind)
     : { sourceId: sp.from ?? '', movedTo: null };
 
-  const [shop, warranty, source] = await Promise.all([
+  const [shop, warranty, source, party] = await Promise.all([
     getShop(),
     getDefaultWarranty(),
     sp.from ? loadDocForCopy(resolved.sourceId || sp.from, copying) : Promise.resolve(null),
+    /* เปิดใบจากแถวทะเบียนลูกค้า — ต้องได้ผลเหมือนกดเลือกจากช่องค้นหาทุกช่อง */
+    sp.party && !sp.from ? pickContactById(sp.party) : Promise.resolve(null),
   ]);
 
   let initial = blank(kind, warranty, shop.whtRate);
@@ -82,11 +84,31 @@ export default async function NewDocPage({
     };
   }
 
+  if (party) {
+    /* เติมให้เหมือน applyCustomer() ของฟอร์ม รวมรถคันแรกในทะเบียนของลูกค้ารายนี้ */
+    initial = {
+      ...initial,
+      partyId: party.id,
+      partyType: party.type,
+      partyName: party.name,
+      partyTaxId: party.taxId,
+      partyTel: party.tel,
+      partyEmail: party.email,
+      partyAddr: party.addr,
+      partyAddrText: party.addrText,
+      creditDays: initial.creditDays || party.creditDays,
+      vehicleId: party.vehicles[0]?.id ?? null,
+      vehicle: party.vehicles[0]?.data ?? null,
+    };
+  }
+
   return (
     <Shell doc
       current="/income"
       title={`ออก${KIND_LABEL[kind]}`}
-      sub={source
+      sub={party
+        ? `เปิดจากทะเบียนลูกค้า — ${party.name}${party.vehicles[0] ? ` · ${party.vehicles[0].label}` : ''}`
+        : source
         ? copying
           ? 'คัดลอกจากใบเดิมมาให้แล้ว ใบใหม่นี้ไม่ผูกกับใบเดิม — ตรวจสอบก่อนบันทึก'
           : 'คัดลอกข้อมูลจากเอกสารต้นทางมาให้แล้ว ตรวจสอบก่อนบันทึก'

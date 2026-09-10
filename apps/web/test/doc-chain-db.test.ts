@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import {
-  quoteFollowUpsWith, resolveSourceForNewWith, syncVehicleFromDocWith,
+  quoteFollowUpsWith, receiptsOfWith, resolveSourceForNewWith, syncVehicleFromDocWith,
 } from '../src/lib/doc-chain';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
@@ -338,6 +338,54 @@ describe.skipIf(!DB_URL)('การต่อสายเอกสารขาย
       await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
 
       expect((await reg()).mileage).toBe('50000');
+    });
+  });
+
+  /* ---------------- ปุ่มออกใบเสร็จในแถวของหน้าใบส่งมอบ ---------------- */
+
+  describe('ใบส่งมอบใบไหนออกใบเสร็จไปแล้ว', () => {
+    it('ยังไม่มีใบเสร็จ — ไม่มีชื่ออยู่ในผลลัพธ์ ปุ่มจึงขึ้น', async () => {
+      const ivt = await addDoc('IVT', 'IVT-001');
+      expect((await receiptsOfWith(app, [ivt])).has(ivt)).toBe(false);
+    });
+
+    it('ออกใบเสร็จแล้ว — เจอ ปุ่มจึงต้องหายไป', async () => {
+      const ivt = await addDoc('IVT', 'IVT-001');
+      await addDoc('RC', 'RC-001', ivt);
+      expect((await receiptsOfWith(app, [ivt])).get(ivt)?.docNo).toBe('RC-001');
+    });
+
+    /* งานที่ต้องทำใหม่ต้องกลับขึ้นกระดาน ไม่ใช่หายไปเพราะเคยออกแล้วครั้งหนึ่ง */
+    it('ใบเสร็จที่ถูกยกเลิก ไม่นับว่าออกแล้ว', async () => {
+      const ivt = await addDoc('IVT', 'IVT-001');
+      await addDoc('RC', 'RC-001', ivt, 'void');
+      expect((await receiptsOfWith(app, [ivt])).has(ivt)).toBe(false);
+    });
+
+    it('หลายใบในหน้าเดียว ไม่ปนกัน', async () => {
+      const a = await addDoc('IVT', 'IVT-001');
+      const b = await addDoc('IVT', 'IVT-002');
+      await addDoc('RC', 'RC-001', a);
+
+      const m = await receiptsOfWith(app, [a, b]);
+      expect(m.get(a)?.docNo).toBe('RC-001');
+      expect(m.has(b)).toBe(false);
+    });
+
+    it('ใบเสร็จของอู่อื่นไม่โผล่มา', async () => {
+      const ivt = await addDoc('IVT', 'IVT-001');
+
+      await app.query(`select set_config('app.tenant_id', $1, false)`, [otherTenant]);
+      await app.query(
+        `insert into documents (tenant_id, kind, doc_no, doc_date, parent_doc_id, vat_mode)
+         values (current_tenant_id(), 'RC', 'RC-เพื่อนบ้าน', current_date, $1, 'ex')`, [ivt]);
+      await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
+
+      expect((await receiptsOfWith(app, [ivt])).has(ivt)).toBe(false);
+    });
+
+    it('รายการว่างไม่พัง', async () => {
+      expect((await receiptsOfWith(app, [])).size).toBe(0);
     });
   });
 });

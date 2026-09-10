@@ -109,6 +109,7 @@ export default async function CustomersPage({
                   <th>โทรศัพท์</th><th>อีเมล</th><th>เลขผู้เสียภาษี</th>
                   <th className="num">รถ</th><th className="num">เครดิต</th>
                   <th className="num">ยอดสะสม</th><th className="num">คงค้าง</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -132,6 +133,22 @@ export default async function CustomersPage({
                     <td className="num mono"
                         style={{ color: c.owe > 0.004 ? 'var(--due)' : 'var(--ink-3)' }}>
                       {c.owe > 0.004 ? baht(c.owe) : '-'}
+                    </td>
+                    {/* เปิดใบได้จากแถวเลย ตามรุ่น 6.4 — ลูกค้าโทรมาแล้วเปิดทะเบียน
+                        ไม่ต้องข้ามไปเมนูรายรับแล้วพิมพ์ชื่อค้นซ้ำอีกรอบ */}
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <span className="row-acts">
+                        {c.kind === 'customer' ? (
+                          <Link className="btn sm" href={`/income/new?kind=QT&party=${c.id}`}>
+                            เปิดใบซ่อม
+                          </Link>
+                        ) : (
+                          <Link className="btn sm" href={`/expense/new?kind=PO&party=${c.id}`}>
+                            เปิดใบซื้อ
+                          </Link>
+                        )}
+                        <Link className="btn sm" href={`/customers/${c.id}`}>เปิด</Link>
+                      </span>
                     </td>
                   </tr>
                 ))}

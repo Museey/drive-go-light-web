@@ -6,7 +6,7 @@ import { listIncomeDocs } from '@/lib/queries';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, KIND_SHORT, payLabel, thDate } from '@/lib/format';
-import { canTab } from '@/lib/perms';
+import { canEdit, canTab } from '@/lib/perms';
 import { TodoCell } from './todo-cell';
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +38,7 @@ export default async function IncomePage({
 }: {
   searchParams: Promise<{
     q?: string; kind?: string; page?: string; size?: string;
-    from?: string; to?: string; month?: string; year?: string;
+    from?: string; to?: string; month?: string; year?: string; voided?: string;
   }>;
 }) {
   const session = await requireTab('income', 'receipt');
@@ -49,7 +49,10 @@ export default async function IncomePage({
   const { from, to } = rangeFromParams(sp);
   const pageSize = pageSizeOf(sp.size);
 
-  const { rows, total } = await listIncomeDocs({ search, kind, page, from, to, pageSize });
+  const includeVoid = sp.voided === '1';
+  const { rows, total } = await listIncomeDocs({
+    search, kind, page, from, to, pageSize, includeVoid,
+  });
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
   /*
@@ -64,6 +67,8 @@ export default async function IncomePage({
 
   const mayInvoice = canTab(session, 'income', 'invoice');
   const mayReceipt = canTab(session, 'income', 'receipt');
+  /* แก้ไขไม่ได้ก็ยกเลิกและคัดลอกไม่ได้ — ปุ่มที่กดแล้วโดนปฏิเสธไม่ควรมีให้เห็น */
+  const mayEdit = canEdit(session, 'income', 'receipt');
 
   /* ค่าที่ต้องติดไปกับทุกลิงก์ในหน้านี้ ไม่งั้นกดหน้าถัดไปแล้วตัวกรองหลุด */
   const keep: Record<string, string> = {
@@ -72,6 +77,7 @@ export default async function IncomePage({
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
     ...(sp.size ? { size: sp.size } : {}),
+    ...(includeVoid ? { voided: '1' } : {}),
   };
   /* เหมือน keep แต่ไม่มี size — ปุ่มเลือกจำนวนแถวใส่ค่าของตัวเอง */
   const { size: _size, ...filters } = keep;
@@ -120,6 +126,12 @@ export default async function IncomePage({
             {to ? <input type="hidden" name="to" value={to} /> : null}
             <input className="in" type="search" name="q" defaultValue={search}
                    placeholder="เลขที่เอกสาร ชื่อลูกค้า หรือทะเบียนรถ" style={{ width: 260 }} />
+            {/* ค้นด้วยเลขที่เอกสารเจอใบที่ยกเลิกเสมอ ตัวเลือกนี้มีไว้สำหรับตอนไล่ดูทั้งรายการ */}
+            <label className="chip" style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+                   title="ปกติซ่อนไว้ ค้นด้วยเลขที่เอกสารยังเจอใบที่ยกเลิกอยู่แล้ว">
+              <input type="checkbox" name="voided" value="1" defaultChecked={includeVoid} />
+              รวมใบที่ยกเลิก
+            </label>
             <button className="btn" type="submit">ค้นหา</button>
           </form>
         </div>
@@ -161,9 +173,18 @@ export default async function IncomePage({
                 {rows.map((r) => {
                   const st = payLabel(r.outstanding, r.paid);
                   return (
-                    <tr key={r.id}>
+                    <tr key={r.id} style={r.voided ? { opacity: 0.55 } : undefined}>
                       <td className="mono">
-                        <Link href={`/income/${r.id}`} style={{ textDecoration: 'underline' }}>{r.docNo}</Link>
+                        <Link href={`/income/${r.id}`}
+                              style={{ textDecoration: r.voided ? 'line-through' : 'underline' }}>
+                          {r.docNo}
+                        </Link>
+                        {r.voided ? (
+                          <span className="chip due" style={{ marginLeft: 6 }}
+                                title={r.voidedReason || 'ไม่ได้บันทึกเหตุผลไว้'}>
+                            ยกเลิกแล้ว
+                          </span>
+                        ) : null}
                       </td>
 
                       {view === 'receipt' ? (
@@ -231,7 +252,32 @@ export default async function IncomePage({
                       )}
 
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <Link className="btn sm" href={`/income/${r.id}/print`}>พิมพ์</Link>
+                        <span className="row-acts">
+                          <Link className="btn sm" href={`/income/${r.id}`}>เปิด</Link>
+                          <Link className="btn sm" href={`/income/${r.id}/print`}>พิมพ์</Link>
+
+                          {/* ออกใบเสร็จได้จากแถวใบส่งมอบที่ยังไม่มีใบเสร็จ ตามที่รุ่น 6.4 ทำ */}
+                          {!r.voided && mayReceipt && (r.kind === 'IV' || r.kind === 'IVT')
+                            && !r.receipt ? (
+                            <Link className="btn sm primary" href={`/income/new?kind=RC&from=${r.id}`}>
+                              ออกใบเสร็จ
+                            </Link>
+                          ) : null}
+
+                          {/* ใบที่ยกเลิกแล้วเหลือทางเดียวคือคัดลอกเป็นใบใหม่ — ต้องกดได้จากแถว
+                              ไม่งั้นเดินไปถึงไม่ได้เลยเพราะรายการปกติซ่อนใบพวกนี้ไว้ */}
+                          {r.voided && mayEdit ? (
+                            <Link className="btn sm"
+                                  href={`/income/new?kind=${r.kind}&from=${r.id}&copy=1`}>
+                              คัดลอกใบใหม่
+                            </Link>
+                          ) : null}
+
+                          {/* ยกเลิกไม่ทำทันทีจากแถว — พาไปแผงยืนยันที่ต้องกรอกเหตุผล */}
+                          {!r.voided && mayEdit ? (
+                            <Link className="btn sm danger" href={`/income/${r.id}?void=1`}>ยกเลิก</Link>
+                          ) : null}
+                        </span>
                       </td>
                     </tr>
                   );

@@ -144,3 +144,31 @@ export async function syncVehicleFromDocWith(
     [opts.vehicleId, mileage, opts.docDate],
   );
 }
+
+/**
+ * ใบเสร็จที่ออกต่อจากใบส่งมอบแต่ละใบ
+ *
+ * ใช้ตัดสินว่าจะโชว์ปุ่ม "ออกใบเสร็จ" ในแถวของหน้ารายการใบส่งมอบไหม
+ * ตรงกับที่รุ่น 6.4 ทำใน renderInvoice — ปุ่มขึ้นเฉพาะใบที่ยังไม่มีใบเสร็จ
+ *
+ * ใบเสร็จที่ถูกยกเลิกไม่นับว่ามีแล้ว งานนั้นต้องกลับขึ้นมาให้ทำใหม่
+ */
+export async function receiptsOfWith(
+  c: Client,
+  invoiceIds: string[],
+): Promise<Map<string, DocRef>> {
+  const out = new Map<string, DocRef>();
+  if (invoiceIds.length === 0) return out;
+
+  const { rows } = await c.query(
+    `select distinct on (x.parent_doc_id)
+            x.parent_doc_id as parent, x.id, x.doc_no
+       from documents x
+      where x.parent_doc_id = any($1::uuid[])
+        and x.status <> 'void' and x.kind = 'RC'
+      order by x.parent_doc_id, x.doc_date, x.doc_no`,
+    [invoiceIds],
+  );
+  for (const r of rows) out.set(r.parent, { id: r.id, docNo: r.doc_no });
+  return out;
+}

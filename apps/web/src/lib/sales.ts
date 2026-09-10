@@ -1,4 +1,5 @@
 import 'server-only';
+import type pg from 'pg';
 import { recTotals, today, totalsOf, whtBaseOf, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
 import { resolveSourceForNewWith, syncVehicleFromDocWith } from './doc-chain';
@@ -349,6 +350,20 @@ export interface PickedContact {
   vehicles: { id: string; label: string; data: Record<string, string> }[];
 }
 
+/**
+ * ดึงผู้ติดต่อรายเดียวมาในรูปแบบเดียวกับที่ช่องค้นหาคืนให้
+ *
+ * ใช้ตอนเปิดใบซ่อมจากแถวทะเบียนลูกค้า — ต้องได้ผลเหมือนกดเลือกด้วยมือทุกช่อง
+ * รวมถึงรถในทะเบียน ไม่ใช่แค่ชื่อกับเบอร์โทร
+ */
+export async function pickContactById(id: string): Promise<PickedContact | null> {
+  return query(async (c) => {
+    const { rows } = await c.query(`select k.* from contacts k where k.id = $1`, [id]);
+    if (!rows[0]) return null;
+    return (await toPicked(c, rows))[0] ?? null;
+  });
+}
+
 export async function searchCustomers(q: string, limit = 15): Promise<PickedContact[]> {
   const term = q.trim();
   return query(async (c) => {
@@ -362,6 +377,17 @@ export async function searchCustomers(q: string, limit = 15): Promise<PickedCont
        order by k.code limit $3`,
       [term, `%${term}%`, limit],
     );
+    return toPicked(c, rows);
+  });
+}
+
+/** แปลงแถว contacts เป็น PickedContact พร้อมรถในทะเบียน — ที่เดียวเพื่อให้ทุกทางเข้าได้ผลเท่ากัน */
+async function toPicked(
+  c: pg.PoolClient | pg.Client,
+  /* แถวดิบจาก pg — addr เป็น jsonb จึงไม่ใช่สตริงทั้งก้อน */
+  rows: Record<string, any>[],
+): Promise<PickedContact[]> {
+  {
 
     const ids = rows.map((r) => r.id);
     const veh = ids.length
@@ -374,14 +400,14 @@ export async function searchCustomers(q: string, limit = 15): Promise<PickedCont
       name: r.type === 'company'
         ? r.org_name
         : [r.prefix, r.first_name, r.last_name].filter(Boolean).join(' '),
-      type: r.type,
+      type: r.type as 'person' | 'company',
       taxId: r.tax_id ?? '',
       tel: r.tel,
       email: r.email ?? '',
       addr: r.addr ?? {},
       addrText: r.addr_text ?? '',
       creditDays: Number(r.credit_days),
-      vehicles: veh
+      vehicles: (veh as Record<string, string>[])
         .filter((v) => v.contact_id === r.id)
         .map((v) => ({
           id: v.id,
@@ -394,7 +420,7 @@ export async function searchCustomers(q: string, limit = 15): Promise<PickedCont
           },
         })),
     }));
-  });
+  }
 }
 
 /** โหลดเอกสารต้นทางมาตั้งต้นเอกสารใหม่ในสายเดียวกัน */

@@ -18,7 +18,7 @@ export default async function DocPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; void?: string }>;
 }) {
   const session = await requireTab('income', 'receipt');
   const { id } = await params;
@@ -63,7 +63,8 @@ export default async function DocPage({
         </>
       ) : (
         <div style={{ marginBottom: 16 }}>
-          <DocActions id={doc.id} kind={doc.kind} canEdit={editable.ok} editReason={editable.reason} />
+          <DocActions id={doc.id} kind={doc.kind} canEdit={editable.ok} editReason={editable.reason}
+                      startVoiding={sp.void === '1' && editable.ok} />
         </div>
       )}
 

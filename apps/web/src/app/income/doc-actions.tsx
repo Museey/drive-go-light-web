@@ -11,14 +11,21 @@ import { KIND_LABEL } from '@/lib/format';
  * ปุ่มที่ทำอะไรย้อนกลับไม่ได้ต้องยืนยันสองจังหวะและต้องบอกเหตุผล
  */
 export function DocActions({
-  id, kind, canEdit, editReason,
+  id, kind, canEdit, editReason, startVoiding = false,
 }: {
   id: string;
   kind: string;
   canEdit: boolean;
   editReason?: string;
+  /**
+   * เปิดแผงยืนยันการยกเลิกไว้เลยตั้งแต่เข้าหน้า
+   *
+   * ใช้กับปุ่มยกเลิกในแถวของหน้ารายการ ซึ่งพาผู้ใช้มาที่นี่แทนที่จะยกเลิกทันที
+   * ได้ความเร็วของการกดครั้งเดียวจากแถว โดยยังต้องกรอกเหตุผลและยืนยันเหมือนเดิม
+   */
+  startVoiding?: boolean;
 }) {
-  const [voiding, setVoiding] = useState(false);
+  const [voiding, setVoiding] = useState(startVoiding);
   const [reason, setReason] = useState('');
 
   const next = nextKinds(kind as SalesKind);
