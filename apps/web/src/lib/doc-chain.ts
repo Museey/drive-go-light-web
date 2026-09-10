@@ -35,23 +35,48 @@ export async function quoteFollowUpsWith(
   if (quoteIds.length === 0) return out;
   for (const id of quoteIds) out.set(id, { invoice: null, receipt: null });
 
+  /*
+   * ใบเสร็จหาได้สองทาง ตรงกับ rcOfQuote() ของรุ่น 6.4
+   *
+   *   r.quoteId === q.id  ||  (inv && r.invId === inv.id)
+   *
+   * เพราะ resolveSourceForNewWith() ต่อใบเสร็จเข้ากับ**ใบส่งมอบ**เมื่อมีใบส่งมอบแล้ว
+   * ถ้าตรงนี้มองแค่ลูกตรง ๆ ของใบเสนอราคา ใบเสร็จที่ออกไปแล้วจะไม่ถูกเห็น
+   * แล้วช่องนั้นขึ้นว่า "รอจัดทำ" ตลอดกาล ทั้งที่เก็บเงินไปเรียบร้อยแล้ว
+   */
   const { rows } = await c.query(
-    `select distinct on (x.parent_doc_id, side)
-            x.parent_doc_id as parent, x.id, x.doc_no,
-            case when x.kind = 'RC' then 'receipt' else 'invoice' end as side
-       from documents x
-      where x.parent_doc_id = any($1::uuid[])
-        and x.status <> 'void'
-        and x.kind in ('IV','IVT','RC')
-      order by x.parent_doc_id, side, x.doc_date, x.doc_no`,
+    `with ids as (select unnest($1::uuid[]) as quote_id),
+     inv as (
+       select distinct on (x.parent_doc_id)
+              x.parent_doc_id as quote_id, x.id, x.doc_no
+         from documents x
+        where x.parent_doc_id in (select quote_id from ids)
+          and x.status <> 'void' and x.kind in ('IV','IVT')
+        order by x.parent_doc_id, x.doc_date, x.doc_no
+     ),
+     rc as (
+       select distinct on (i.quote_id) i.quote_id, r.id, r.doc_no
+         from ids i
+         left join inv on inv.quote_id = i.quote_id
+         join documents r
+           on r.status <> 'void' and r.kind = 'RC'
+          and (r.parent_doc_id = i.quote_id or r.parent_doc_id = inv.id)
+        order by i.quote_id, r.doc_date, r.doc_no
+     )
+     select i.quote_id,
+            inv.id as inv_id, inv.doc_no as inv_no,
+            rc.id  as rc_id,  rc.doc_no  as rc_no
+       from ids i
+       left join inv on inv.quote_id = i.quote_id
+       left join rc  on rc.quote_id  = i.quote_id`,
     [quoteIds],
   );
 
   for (const r of rows) {
-    const slot = out.get(r.parent);
+    const slot = out.get(r.quote_id);
     if (!slot) continue;
-    if (r.side === 'receipt') slot.receipt = { id: r.id, docNo: r.doc_no };
-    else slot.invoice = { id: r.id, docNo: r.doc_no };
+    if (r.inv_id) slot.invoice = { id: r.inv_id, docNo: r.inv_no };
+    if (r.rc_id) slot.receipt = { id: r.rc_id, docNo: r.rc_no };
   }
   return out;
 }

@@ -161,14 +161,49 @@ describe.skipIf(!DB_URL)('การต่อสายเอกสารขาย
     expect(m.get(qt)).toEqual({ invoice: null, receipt: null });
   });
 
-  it('ออกครบทั้งสองใบ — เห็นเลขที่ทั้งสองช่อง', async () => {
+  it('ใบเสร็จที่ต่อจากใบเสนอราคาตรง ๆ (ไม่เคยออกใบส่งมอบ) — เห็นในช่องใบเสร็จ', async () => {
     const qt = await addDoc('QT', 'QT-001');
-    await addDoc('IVT', 'IVT-001', qt);
     await addDoc('RC', 'RC-001', qt);
+
+    const got = (await quoteFollowUpsWith(app, [qt])).get(qt);
+    expect(got?.invoice).toBeNull();
+    expect(got?.receipt?.docNo).toBe('RC-001');
+  });
+
+  /*
+   * สายที่แอปสร้างจริง — resolveSourceForNewWith() ต่อใบเสร็จเข้ากับใบส่งมอบ
+   * ไม่ใช่กับใบเสนอราคา กระดานจึงต้องมองข้ามชั้นไปหาให้เจอ
+   *
+   * เทสต์เดิมของข้อนี้สร้างทั้งสองใบเป็นลูกตรงของใบเสนอราคา ซึ่งเป็นรูปแบบที่
+   * แอปไม่เคยสร้างเลยหลังแก้การต่อสาย เทสต์จึงเขียว ทั้งที่ของจริงพัง —
+   * ผู้ใช้เจอว่าออกใบเสร็จแล้วแต่กระดานยังขึ้นว่ารอจัดทำ
+   */
+  it('สายจริงของแอป ใบเสนอราคา → ใบส่งมอบ → ใบเสร็จ — เห็นครบทั้งสองช่อง', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    const ivt = await addDoc('IVT', 'IVT-001', qt);
+    await addDoc('RC', 'RC-001', ivt);
 
     const got = (await quoteFollowUpsWith(app, [qt])).get(qt);
     expect(got?.invoice?.docNo).toBe('IVT-001');
     expect(got?.receipt?.docNo).toBe('RC-001');
+  });
+
+  it('ใบเสร็จที่ต่อจากใบส่งมอบซึ่งถูกยกเลิกไปแล้ว ไม่นับเป็นใบเสร็จของใบเสนอราคา', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    const ivt = await addDoc('IVT', 'IVT-001', qt, 'void');
+    await addDoc('RC', 'RC-001', ivt);
+
+    const got = (await quoteFollowUpsWith(app, [qt])).get(qt);
+    expect(got?.invoice).toBeNull();
+    expect(got?.receipt).toBeNull();
+  });
+
+  it('ใบเสร็จของใบส่งมอบอีกใบที่ไม่ได้มาจากใบเสนอราคานี้ ไม่โผล่มา', async () => {
+    const qt = await addDoc('QT', 'QT-001');
+    const other = await addDoc('IVT', 'IVT-อื่น');
+    await addDoc('RC', 'RC-อื่น', other);
+
+    expect((await quoteFollowUpsWith(app, [qt])).get(qt)?.receipt).toBeNull();
   });
 
   /*
@@ -203,6 +238,13 @@ describe.skipIf(!DB_URL)('การต่อสายเอกสารขาย
     expect(m.get(b)?.invoice).toBeNull();
     expect(m.get(b)?.receipt?.docNo).toBe('RC-002');
     expect(m.get(c)).toEqual({ invoice: null, receipt: null });
+
+    /* ใบเสร็จของ a ที่ห้อยใต้ใบส่งมอบ ต้องไม่ไปโผล่ที่ b หรือ c */
+    await addDoc('RC', 'RC-001', m.get(a)!.invoice!.id);
+    const m2 = await quoteFollowUpsWith(app, [a, b, c]);
+    expect(m2.get(a)?.receipt?.docNo).toBe('RC-001');
+    expect(m2.get(b)?.receipt?.docNo).toBe('RC-002');
+    expect(m2.get(c)?.receipt).toBeNull();
   });
 
   it('รายการว่างไม่ยิงคิวรีและไม่พัง', async () => {
