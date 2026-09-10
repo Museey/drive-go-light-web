@@ -32,82 +32,78 @@ const client = new pg.Client({ connectionString: url });
 pg.types.setTypeParser(1082, (v) => v);
 
 /**
- * ดูก่อนว่าเรามองเห็นอะไรบ้าง
+ * ไล่ทีละอู่โดยตั้ง app.tenant_id ให้เหมือนที่แอปทำ
  *
- * "ไม่มีใบเสร็จ" กับ "มองไม่เห็นใบเสร็จ" เป็นคนละเรื่องกัน แต่หน้าตาเหมือนกันเป๊ะ
- * ถ้าไม่ตรวจแยก — เคยรายงานว่าไม่มีใบเสร็จทั้งที่บนหน้าจอมีอยู่ชัด ๆ
+ * `documents` เปิด force row level security ซึ่ง**มีผลกับเจ้าของตารางด้วย**
+ * role ที่ Render ให้มาเป็นเจ้าของตาราง แต่ไม่ใช่ superuser จึงถูกกรองไปด้วย
+ * ไม่ตั้ง app.tenant_id แล้วยิงคิวรีจะได้ 0 แถวทุกครั้ง โดยไม่มี error ให้เห็น
+ * — เคยรายงานว่า "ไม่มีใบเสร็จในระบบ" ทั้งที่บนหน้าเว็บมีอยู่ชัด ๆ มาแล้ว
  *
- * สาเหตุที่ทำให้มองไม่เห็นมีสองอย่าง
- *   1. ต่อไปผิดฐาน (เช่นฐานสำเนาที่กู้ไว้ซ้อม ซึ่งเป็นภาพก่อนหน้านี้)
- *   2. role ที่ใช้ถูก RLS กรอง — documents เปิด force row level security ไว้
- *      ซึ่งมีผลกับเจ้าของตารางด้วย ถ้าไม่ได้ตั้ง app.tenant_id จะได้ 0 แถวเงียบ ๆ
+ * ตาราง `tenants` ถูกปิด force ไว้ (db/012_auth_rls.sql) จึงอ่านรายชื่ออู่ได้ก่อน
+ * แล้วค่อยวนตั้ง GUC ทีละตัว เป็นทางเดียวกับที่ withTenant() ของแอปใช้
+ * **ไม่ใช่การปิด RLS** ซึ่งจะทำให้การแยกข้อมูลของอู่ไม่มีความหมาย
  */
-async function survey() {
-  const q = async (sql) => Number((await client.query(sql)).rows[0].v);
-  const tenants = await q('select count(*)::int as v from tenants');
-  const docs = await q(`select count(*)::int as v from documents`);
-  const receipts = await q(`select count(*)::int as v from documents where kind = 'RC'`);
+async function forEachTenant(tenants, fn) {
+  const out = [];
+  for (const t of tenants) {
+    await client.query(`select set_config('app.tenant_id', $1, false)`, [t.id]);
+    out.push(...(await fn(t)));
+  }
+  await client.query(`select set_config('app.tenant_id', '', false)`);
+  return out;
+}
+
+const LABEL = [
+  ['from_invoice', 'ต่อจากใบส่งมอบ', ''],
+  ['from_quote_ok', 'ต่อจากใบเสนอราคา (ถูกต้อง)', 'ใบเสนอราคานั้นไม่เคยออกใบส่งมอบ'],
+  ['orphan', 'ไม่มีต้นทาง', 'ออกใบเสร็จขึ้นมาลอย ๆ ปกติของงานหน้าร้าน'],
+];
+
+async function main() {
+  await client.connect();
+
+  const { rows: tenants } = await client.query(`select id, name from tenants order by name`);
 
   const u = new URL(url);
   console.log('\n  ══ ต่ออยู่กับอะไร ══\n');
   console.log(`  โฮสต์      ${u.hostname}`);
   console.log(`  ฐานข้อมูล   ${u.pathname.slice(1)}`);
   console.log(`  ผู้ใช้      ${u.username}`);
-  console.log(`  อู่ ${tenants} · เอกสาร ${docs} · ใบเสร็จ ${receipts}\n`);
+  console.log(`  อู่ที่พบ     ${tenants.length}\n`);
 
-  if (tenants > 0 && docs === 0) {
-    console.log('  ⚠️  เห็นอู่แต่ไม่เห็นเอกสารเลยสักใบ — ผิดปกติ');
-    console.log('     ถ้าบนหน้าเว็บมีเอกสารอยู่ แปลว่าอ่านไม่ได้ ไม่ใช่ไม่มี');
-    console.log('     เช็คสองอย่าง');
-    console.log('       · ต่อถูกฐานไหม — ฐานสำเนาที่กู้ไว้ซ้อมเป็นภาพของอดีต');
-    console.log(`       · role "${u.username}" ถูก RLS กรองอยู่หรือเปล่า`);
-    console.log('         (documents เปิด force row level security ซึ่งมีผลกับเจ้าของตารางด้วย)\n');
+  if (tenants.length === 0) {
+    console.log('  ไม่มีอู่ในฐานนี้เลย — ต่อถูกฐานหรือเปล่า\n');
     process.exitCode = 1;
-    return false;
-  }
-  return true;
-}
-
-async function main() {
-  await client.connect();
-  if (!(await survey())) return;
-
-  const { rows: summary } = await client.query(`
-    select t.name as tenant,
-           count(*) filter (where rc.parent_kind is null)                      as orphan,
-           count(*) filter (where rc.parent_kind in ('IV','IVT'))              as from_invoice,
-           count(*) filter (where rc.parent_kind = 'QT' and not rc.qt_has_inv) as from_quote_ok,
-           count(*) filter (where rc.parent_kind = 'QT' and rc.qt_has_inv)     as mischained
-      from (
-        select d.tenant_id, d.id,
-               p.kind::text as parent_kind,
-               exists (select 1 from documents x
-                        where x.parent_doc_id = p.id and x.status <> 'void'
-                          and x.kind in ('IV','IVT')) as qt_has_inv
-          from documents d
-          left join documents p on p.id = d.parent_doc_id and p.status <> 'void'
-         where d.kind = 'RC' and d.status <> 'void'
-      ) rc
-      join tenants t on t.id = rc.tenant_id
-     group by t.name
-     order by t.name`);
-
-  if (summary.length === 0) {
-    console.log('  ยังไม่มีใบเสร็จในระบบ — ตัวเลขข้างบนยืนยันว่าอ่านได้จริง ไม่ใช่มองไม่เห็น\n');
     return;
   }
 
-  /* ชื่อคอลัมน์ใน SQL เป็น ASCII แล้วค่อยแปลตรงนี้ — ชื่อไทยใน alias เคยคืนมาไม่ตรงคีย์
-     แล้วสรุปกลายเป็น undefined กับ NaN โดยที่ตัวเลขในตารางรายละเอียดยังถูกอยู่ */
-  const LABEL = [
-    ['from_invoice',  'ต่อจากใบส่งมอบ', ''],
-    ['from_quote_ok', 'ต่อจากใบเสนอราคา (ถูกต้อง)', 'ใบเสนอราคานั้นไม่เคยออกใบส่งมอบ'],
-    ['orphan',        'ไม่มีต้นทาง', 'ออกใบเสร็จขึ้นมาลอย ๆ ปกติของงานหน้าร้าน'],
-  ];
+  const summary = await forEachTenant(tenants, async (t) => {
+    const { rows } = await client.query(`
+      select $1::text as tenant,
+             count(*) filter (where rc.parent_kind is null)                      as orphan,
+             count(*) filter (where rc.parent_kind in ('IV','IVT'))              as from_invoice,
+             count(*) filter (where rc.parent_kind = 'QT' and not rc.qt_has_inv) as from_quote_ok,
+             count(*) filter (where rc.parent_kind = 'QT' and rc.qt_has_inv)     as mischained
+        from (
+          select p.kind::text as parent_kind,
+                 exists (select 1 from documents x
+                          where x.parent_doc_id = p.id and x.status <> 'void'
+                            and x.kind in ('IV','IVT')) as qt_has_inv
+            from documents d
+            left join documents p on p.id = d.parent_doc_id and p.status <> 'void'
+           where d.kind = 'RC' and d.status <> 'void'
+        ) rc`, [t.name]);
+    return rows;
+  });
 
-  console.log('\n  ══ ใบเสร็จแยกตามต้นทางที่ต่อไว้ ══\n');
+  console.log('  ══ ใบเสร็จแยกตามต้นทางที่ต่อไว้ ══\n');
   let totalBad = 0;
+  let totalRc = 0;
   for (const r of summary) {
+    const n = LABEL.reduce((a, [k]) => a + Number(r[k] ?? 0), 0) + Number(r.mischained ?? 0);
+    totalRc += n;
+    if (n === 0) { console.log(`  ${r.tenant}   (ยังไม่มีใบเสร็จ)\n`); continue; }
+
     console.log(`  ${r.tenant}`);
     for (const [key, label, note] of LABEL) {
       console.log(`    ${label.padEnd(28)}${String(r[key] ?? 0).padStart(4)}` + (note ? `   ← ${note}` : ''));
@@ -117,29 +113,34 @@ async function main() {
     console.log(`  ${bad > 0 ? '⚠️' : '  '}  ${'ต่อผิด ควรต่อจากใบส่งมอบ'.padEnd(28)}${String(bad).padStart(4)}`);
     console.log('');
   }
-  if (totalBad === 0) console.log('  ✓ ทุกอู่ต่อสายถูกหมด\n');
 
-  const { rows: bad } = await client.query(`
-    select t.name as tenant, d.doc_no as ใบเสร็จ, d.doc_date as วันที่,
-           p.doc_no as ต่อจาก, inv.doc_no as ควรต่อจาก,
-           (inv.payable - coalesce(pay.paid, 0)) as ลูกหนี้ค้างของใบส่งมอบ
-      from documents d
-      join documents p   on p.id = d.parent_doc_id and p.kind = 'QT' and p.status <> 'void'
-      join tenants   t   on t.id = d.tenant_id
-      join lateral (
-        select x.id, x.doc_no, x.payable from documents x
-         where x.parent_doc_id = p.id and x.status <> 'void' and x.kind in ('IV','IVT')
-         order by x.doc_date, x.doc_no limit 1
-      ) inv on true
-      left join (select doc_id, sum(amount) as paid from payments group by doc_id) pay
-             on pay.doc_id = inv.id
-     where d.kind = 'RC' and d.status <> 'void'
-     order by t.name, d.doc_date, d.doc_no`);
-
-  if (bad.length === 0) {
-    console.log('  ✓ ไม่มีใบเสร็จที่ต่อผิด — ทุกใบต่อถูกที่แล้ว\n');
+  if (totalRc === 0) {
+    console.log('  ยังไม่มีใบเสร็จในระบบ — ไล่ครบทุกอู่แล้ว ไม่ใช่มองไม่เห็น\n');
     return;
   }
+  if (totalBad === 0) {
+    console.log('  ✓ ทุกอู่ต่อสายถูกหมด — ไม่มีใบไหนต้องแก้\n');
+    return;
+  }
+
+  const bad = await forEachTenant(tenants, async (t) => {
+    const { rows } = await client.query(`
+      select $1::text as tenant, d.doc_no as "ใบเสร็จ", d.doc_date as "วันที่",
+             p.doc_no as "ต่อจาก", inv.doc_no as "ควรต่อจาก",
+             (inv.payable - coalesce(pay.paid, 0))::float8 as "ลูกหนี้ค้างของใบส่งมอบ"
+        from documents d
+        join documents p on p.id = d.parent_doc_id and p.kind = 'QT' and p.status <> 'void'
+        join lateral (
+          select x.id, x.doc_no, x.payable from documents x
+           where x.parent_doc_id = p.id and x.status <> 'void' and x.kind in ('IV','IVT')
+           order by x.doc_date, x.doc_no limit 1
+        ) inv on true
+        left join (select doc_id, sum(amount) as paid from payments group by doc_id) pay
+               on pay.doc_id = inv.id
+       where d.kind = 'RC' and d.status <> 'void'
+       order by d.doc_date, d.doc_no`, [t.name]);
+    return rows;
+  });
 
   console.log(`  ══ ใบที่ต่อผิด ${bad.length} ใบ ══\n`);
   console.table(bad);
