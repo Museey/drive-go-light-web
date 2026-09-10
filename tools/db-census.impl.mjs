@@ -27,17 +27,23 @@ if (!url) {
 const client = new pg.Client({ connectionString: url });
 
 /** ตัวเลขที่บอกได้ว่าข้อมูลครบจริงไหม ไม่ใช่แค่ตารางมีอยู่ */
+/**
+ * [ป้าย, ตาราง, สิ่งที่คำนวณ]
+ *
+ * เก็บชื่อตารางแยกจากสูตร เพื่อให้เติม `where tenant_id = ...` ต่อท้ายได้
+ * ตอนนับทีละอู่ — ดูเหตุผลที่ tenantFilter()
+ */
 const TOTALS = [
-  ['เอกสารทั้งหมด', 'select count(*)::int as v from documents'],
-  ['ยอดรวมทุกเอกสาร', 'select coalesce(sum(grand_total), 0)::float8 as v from documents'],
-  ['รายการชำระเงิน', 'select count(*)::int as v from payments'],
-  ['ยอดชำระรวม', 'select coalesce(sum(amount), 0)::float8 as v from payments'],
-  ['การเคลื่อนไหวสต๊อก', 'select count(*)::int as v from stock_moves'],
-  ['ผู้ติดต่อ', 'select count(*)::int as v from contacts'],
-  ['สินค้า', 'select count(*)::int as v from products'],
-  ['ผู้ใช้งาน', 'select count(*)::int as v from users'],
-  ['รูปสินค้า', 'select count(*)::int as v from product_pics'],
-  ['พื้นที่รูปรวม (ไบต์)', 'select coalesce(sum(bytes), 0)::bigint as v from product_pics'],
+  ['เอกสารทั้งหมด', 'documents', 'count(*)::int'],
+  ['ยอดรวมทุกเอกสาร', 'documents', 'coalesce(sum(grand_total), 0)::float8'],
+  ['รายการชำระเงิน', 'payments', 'count(*)::int'],
+  ['ยอดชำระรวม', 'payments', 'coalesce(sum(amount), 0)::float8'],
+  ['การเคลื่อนไหวสต๊อก', 'stock_moves', 'count(*)::int'],
+  ['ผู้ติดต่อ', 'contacts', 'count(*)::int'],
+  ['สินค้า', 'products', 'count(*)::int'],
+  ['ผู้ใช้งาน', 'users', 'count(*)::int'],
+  ['รูปสินค้า', 'product_pics', 'count(*)::int'],
+  ['พื้นที่รูปรวม (ไบต์)', 'product_pics', 'coalesce(sum(bytes), 0)::bigint'],
 ];
 
 try {
@@ -72,19 +78,6 @@ try {
   out.env.rlsBypassRoles = roles.filter((r) => r.rolsuper || r.rolbypassrls)
     .map((r) => r.rolname);
 
-  /* จำนวนแถวของทุกตารางในสคีมา public และ ops — นับจริง ไม่ใช่ค่าประมาณจากสถิติ */
-  const { rows: tables } = await client.query(`
-    select n.nspname as schema, c.relname as name
-      from pg_class c join pg_namespace n on n.oid = c.relnamespace
-     where c.relkind = 'r' and n.nspname in ('public', 'ops', 'auth')
-     order by n.nspname, c.relname`);
-
-  for (const t of tables) {
-    const { rows } = await client.query(
-      `select count(*)::int as n from ${t.schema}.${t.name}`);
-    out.tables[`${t.schema}.${t.name}`] = rows[0].n;
-  }
-
   /* รายชื่ออู่ — ตัด id ให้สั้นพอระบุตัวได้ แต่ไม่ยาวจนอ่านไม่ไหว */
   const { rows: tenants } = await client.query(
     /* ::text เพราะ pg แปลงคอลัมน์ date เป็น Date ของ JS ตามเวลาเครื่อง
@@ -94,10 +87,71 @@ try {
     id: String(t.id).slice(0, 8), name: t.name, created: String(t.created).slice(0, 10),
   }));
 
-  for (const [label, sql] of TOTALS) {
+  /**
+   * ตารางที่ผูกกับอู่และเปิด RLS ไว้ — ต้องนับทีละอู่ ไม่ใช่นับรวดเดียว
+   *
+   * `force row level security` มีผลกับ**เจ้าของตาราง**ด้วย และ role ที่บริการ
+   * แบบ managed ให้มา (เช่น Render) เป็นเจ้าของตารางแต่ไม่ใช่ superuser
+   * นับรวดเดียวโดยไม่ตั้ง app.tenant_id จึงได้ **0 ทุกตารางโดยไม่มี error**
+   *
+   * เคยทำให้การซ้อมกู้คืนไร้ความหมายมาแล้ว — เทียบ census ของฐานเดิมกับฐานสำเนา
+   * แล้วเห็นว่า "เหมือนกันทุกตัวเลข" ทั้งที่ทั้งสองฝั่งเป็นศูนย์ ศูนย์เท่ากับศูนย์เสมอ
+   *
+   * หาเอาจากสคีมาโดยตรง (มีคอลัมน์ tenant_id + เปิด RLS) ไม่เขียนรายชื่อไว้
+   * ตารางใหม่ที่เพิ่มทีหลังจึงถูกนับถูกเองโดยไม่ต้องมาแก้ตรงนี้
+   */
+  const { rows: scoped } = await client.query(`
+    select n.nspname as schema, c.relname as name
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where c.relkind = 'r' and n.nspname = 'public' and c.relrowsecurity
+       and exists (select 1 from pg_attribute a
+                    where a.attrelid = c.oid and a.attname = 'tenant_id'
+                      and a.attnum > 0 and not a.attisdropped)`);
+  const perTenant = new Set(scoped.map((t) => `${t.schema}.${t.name}`));
+  out.env.perTenantTables = [...perTenant].sort();
+
+  /**
+   * รวมผลของทุกอู่ โดย**ใส่เงื่อนไข tenant_id ลงในคิวรีเอง**
+   *
+   * ตั้ง app.tenant_id อย่างเดียวไม่พอ เพราะกันการนับซ้ำไม่ได้ —
+   * ตาราง `users` กับ `tenants` ถูกปิด force ไว้ (db/012_auth_rls.sql)
+   * เจ้าของตารางจึงเห็นทุกแถวในทุกรอบ วนสองอู่แล้วบวกกันได้เลขเป็นสองเท่า
+   *
+   * ใส่เงื่อนไขเองแล้วถูกทั้งสองทาง — RLS จะกรองให้หรือไม่ก็ไม่ต่างกัน
+   * ส่วน set_config ยังต้องทำอยู่ เพราะตารางที่ force RLS ต้องมี GUC ถึงจะอ่านได้เลย
+   */
+  const sumOverTenants = async (table, expr) => {
+    let total = 0;
+    for (const t of tenants) {
+      await client.query(`select set_config('app.tenant_id', $1, false)`, [t.id]);
+      const { rows } = await client.query(
+        `select ${expr} as v from ${table} where tenant_id = $1`, [t.id]);
+      total += Number(rows[0].v ?? 0);
+    }
+    await client.query(`select set_config('app.tenant_id', '', false)`);
+    return total;
+  };
+
+  /* จำนวนแถวของทุกตารางในสคีมา public ops และ auth — นับจริง ไม่ใช่ค่าประมาณจากสถิติ */
+  const { rows: tables } = await client.query(`
+    select n.nspname as schema, c.relname as name
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where c.relkind = 'r' and n.nspname in ('public', 'ops', 'auth')
+     order by n.nspname, c.relname`);
+
+  for (const t of tables) {
+    const full = `${t.schema}.${t.name}`;
+    out.tables[full] = perTenant.has(full)
+      ? await sumOverTenants(full, 'count(*)::int')
+      : Number((await client.query(`select count(*)::int as v from ${full}`)).rows[0].v);
+  }
+
+  for (const [label, table, expr] of TOTALS) {
     try {
-      const { rows } = await client.query(sql);
-      out.totals[label] = Number(rows[0].v);
+      out.totals[label] = perTenant.has(`public.${table}`)
+        ? await sumOverTenants(table, expr)
+        : Number((await client.query(`select ${expr} as v from ${table}`)).rows[0].v);
     } catch {
       out.totals[label] = null;          /* ตารางยังไม่มีในฐานรุ่นเก่า */
     }
