@@ -100,6 +100,33 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
         <span className="hint">เติมให้อัตโนมัติตอนออกใบเสร็จ แก้รายใบได้</span>
       </div>
 
+      {/* ---------- บัญชีธนาคาร ---------- */}
+      <div className="field" style={{ marginTop: 4 }}>
+        <label>บัญชีรับโอนเงิน</label>
+        <span className="hint" style={{ display: 'block', marginBottom: 8 }}>
+          พิมพ์ลงบนใบเสร็จและใบวางบิล ให้ลูกค้ารู้ว่าจะโอนไปที่ไหน —
+          ไม่กรอกก็ได้ กระดาษจะเว้นเส้นไว้ให้เขียนด้วยมือแทน
+        </span>
+        <div className="row-fields f3">
+          <div className="field">
+            <label htmlFor="bankName">ธนาคาร</label>
+            <input className="in" id="bankName" name="bankName"
+                   defaultValue={v('bankName', shop.bankName)} placeholder="เช่น กสิกรไทย" />
+          </div>
+          <div className="field">
+            <label htmlFor="bankAccountNo">เลขที่บัญชี</label>
+            <input className="in mono" id="bankAccountNo" name="bankAccountNo"
+                   defaultValue={v('bankAccountNo', shop.bankAccountNo)} placeholder="xxx-x-xxxxx-x" />
+          </div>
+          <div className="field">
+            <label htmlFor="bankAccountName">ชื่อบัญชี</label>
+            <input className="in" id="bankAccountName" name="bankAccountName"
+                   defaultValue={v('bankAccountName', shop.bankAccountName)}
+                   placeholder="ชื่อเจ้าของบัญชี" />
+          </div>
+        </div>
+      </div>
+
       {/* ---------- โลโก้ ---------- */}
       <div className={bad('logo')}>
         <label>โลโก้บนหัวเอกสาร</label>

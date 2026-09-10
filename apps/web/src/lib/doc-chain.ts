@@ -245,3 +245,12 @@ export async function openDocsForWith(
     kind: r.kind,
   }));
 }
+
+/**
+ * ทะเบียนรถแบบข้อความ สำหรับคอลัมน์ที่ใช้ค้นหา
+ *
+ * ที่เดียวเพื่อให้เอกสารขายกับใบเคลมได้รูปแบบเดียวกัน — ค้นด้วยทะเบียนแล้วต้องเจอ
+ * ทั้งสองชนิด ไม่ใช่เจอเฉพาะที่บังเอิญประกอบสตริงเหมือนกัน
+ */
+export const plateOf = (v: Record<string, string> | null | undefined): string =>
+  v ? [v.plateA, v.plateB].filter(Boolean).join(' ') : '';

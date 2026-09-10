@@ -3,7 +3,7 @@ import type pg from 'pg';
 import { recTotals, today, totalsOf, whtBaseOf, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
 import {
-  openDocsForWith, resolveSourceForNewWith, syncVehicleFromDocWith,
+  openDocsForWith, plateOf, resolveSourceForNewWith, syncVehicleFromDocWith,
   type OpenDoc,
 } from './doc-chain';
 import { mutate } from './mutate';
@@ -260,9 +260,6 @@ function updateParams(
 
 const money = (v: number) => (Math.round(v * 100) / 100).toFixed(2);
 const digits = (v: string) => String(v ?? '').replace(/\D/g, '');
-const plateOf = (v: Record<string, string> | null) =>
-  v ? [v.plateA, v.plateB].filter(Boolean).join(' ') : '';
-
 function addDays(dateIso: string, days: number): string {
   const d = new Date(dateIso + 'T00:00:00');
   d.setDate(d.getDate() + days);

@@ -1,5 +1,6 @@
 import type pg from 'pg';
 import { consumeStock, returnClaimStock } from './stock-cost';
+import { syncVehicleFromDocWith } from './doc-chain';
 
 /**
  * ใบเคลมสินค้า — ของที่ออกจากคลังโดยไม่มีการเรียกเก็บเงิน
@@ -341,6 +342,15 @@ export async function saveClaim(
     ],
   );
   const id = head.rows[0].id as string;
+
+  /* เลขไมล์กลับเข้าทะเบียนรถ กติกาเดียวกับเอกสารขาย — รถคันเดียวกันที่เข้ามาเคลม
+     ก็คือรถที่วิ่งมาถึงเลขไมล์นั้นจริง เขียนกลับแค่เลขไมล์กับวันที่บริการล่าสุด
+     ช่องอื่นเป็นภาพนิ่งของใบนี้ และวันที่ขยับไปข้างหน้าอย่างเดียว */
+  await syncVehicleFromDocWith(c, {
+    vehicleId,
+    mileage: String((vehicle as Record<string, string> | null)?.mileage ?? ''),
+    docDate: input.claimDate,
+  });
 
   let cutQty = 0;
   let cost = 0;

@@ -3,6 +3,7 @@
 import { useActionState, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 import { saveClaimAction, searchClaimPartiesAction, searchClaimPartsAction } from './actions';
+import { VehicleFields } from '../../income/vehicle-fields';
 import { CLAIM_KINDS, CLAIM_SIDE, type ClaimSide } from '@/lib/claims';
 import type { FormResult } from '@/lib/mutate';
 import { baht } from '@/lib/format';
@@ -55,7 +56,10 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
   const [kind, setKind] = useState(kinds[0]!.key);
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [party, setParty] = useState<Party | null>(null);
-  const [vehicleIdx, setVehicleIdx] = useState(0);
+  /** -1 = ไม่ใช่รถในทะเบียน กรอกเอง */
+  const [vehicleIdx, setVehicleIdx] = useState(-1);
+  /** ภาพนิ่งของรถบนใบเคลมใบนี้ — แก้ได้ทุกช่อง ไม่กระทบทะเบียนรถ ยกเว้นเลขไมล์ */
+  const [vehData, setVehData] = useState<Record<string, string>>({});
 
   const [partyQuery, setPartyQuery] = useState('');
   const [partyHits, setPartyHits] = useState<Party[] | null>(null);
@@ -69,7 +73,14 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
   const total = lines.reduce((s, l) => s + l.qty * l.unitCost, 0);
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const unlinked = lines.filter((l) => !l.productId && l.name.trim()).length;
-  const veh = party?.vehicles?.[vehicleIdx] ?? null;
+  const veh = vehicleIdx >= 0 ? party?.vehicles?.[vehicleIdx] ?? null : null;
+
+  /* เลือกรถจากทะเบียนแล้วเติมช่องให้ — เลือก "กรอกเอง" แล้วปล่อยค่าที่พิมพ์ไว้ */
+  const pickVehicle = (i: number) => {
+    setVehicleIdx(i);
+    const picked = i >= 0 ? party?.vehicles?.[i] : null;
+    if (picked) setVehData({ ...picked.data });
+  };
 
   const addPart = (p: NonNullable<typeof partHits>[number]) => {
     setPartHits(null);
@@ -92,7 +103,8 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
       <input type="hidden" name="partyId" value={party?.id ?? ''} />
       <input type="hidden" name="vehicleId" value={side === 'customer' ? veh?.id ?? '' : ''} />
       <input type="hidden" name="vehicle"
-             value={side === 'customer' && veh ? JSON.stringify(veh.data) : ''} />
+             value={side === 'customer' && Object.values(vehData).some(Boolean)
+               ? JSON.stringify(vehData) : ''} />
 
       {state.error ? <div className="err">{state.error}</div> : null}
 
@@ -114,7 +126,11 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
                  defaultValue={today} required />
         </div>
         <div className="field">
-          <label htmlFor="refNo">เลขที่เอกสารอ้างอิง</label>
+          {/* 6.4 เรียกช่องนี้ต่างกันตามฝั่ง — เคลมผู้ขายคือการส่งของชำรุดคืนร้านอะไหล่
+              ซึ่งอ้างถึงใบซื้อ ไม่ใช่เอกสารของลูกค้า */}
+          <label htmlFor="refNo">
+            {side === 'vendor' ? 'เลขที่ใบซื้ออ้างอิง' : 'เลขที่เอกสารอ้างอิง'}
+          </label>
           <input className="in mono" id="refNo" name="refNo"
                  placeholder={side === 'vendor'
                    ? 'เช่น PO-202608-012 หรือเลขเคลมของผู้ขาย'
@@ -179,23 +195,27 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
       </div>
 
       {side === 'customer' ? (
-        <div className="row-fields f2">
-          <div className="field">
-            <label htmlFor="vehIdx">รถของลูกค้า</label>
-            <select className="in" id="vehIdx" value={vehicleIdx}
-                    onChange={(e) => setVehicleIdx(Number(e.target.value))}
-                    disabled={!party?.vehicles?.length}>
-              {party?.vehicles?.length
-                ? party.vehicles.map((v, i) => <option key={v.id} value={i}>{v.label}</option>)
-                : <option value={0}>— ไม่ระบุ —</option>}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="vehiclePlate">ทะเบียน</label>
-            <input className="in mono" id="vehiclePlate" name="vehiclePlate"
-                   defaultValue="" key={veh?.id ?? 'none'}
-                   placeholder={veh ? veh.label : 'เว้นว่างได้ถ้าเป็นของชำรุดในร้าน'} />
-          </div>
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line-2)' }}>
+          {party?.vehicles?.length ? (
+            <div className="field" style={{ marginBottom: 12 }}>
+              <label htmlFor="vehIdx">เลือกจากทะเบียนรถของลูกค้า</label>
+              <select className="in" id="vehIdx" value={vehicleIdx}
+                      onChange={(e) => pickVehicle(Number(e.target.value))}>
+                <option value={-1}>— ไม่ใช่รถในทะเบียน กรอกเอง —</option>
+                {party.vehicles.map((v, i) => <option key={v.id} value={i}>{v.label}</option>)}
+              </select>
+              <span className="hint">
+                เลือกแล้วเติมช่องข้างล่างให้ · แก้ช่องไหนก็ได้ ค่าที่แก้จะอยู่บนใบเคลมใบนี้เท่านั้น
+              </span>
+            </div>
+          ) : null}
+
+          {/*
+            ก่อนหน้านี้ช่องรถเป็นตัวเลือกจากทะเบียนอย่างเดียวและไม่มีช่องเลขไมล์เลย
+            ซึ่งเป็นอาการเดียวกับฟอร์มเอกสารขายก่อนช่วงที่ 8 — ตอนนั้นแก้ไม่ครบ
+            แก้เฉพาะฟอร์มขายแล้วไม่ได้ไล่ดูว่าฟอร์มอื่นเป็นเหมือนกันไหม
+          */}
+          <VehicleFields veh={vehData} onChange={setVehData} />
         </div>
       ) : null}
 

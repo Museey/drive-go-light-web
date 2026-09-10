@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import {
-  openDocsForWith, quoteFollowUpsWith, receiptsOfWith, resolveSourceForNewWith,
+  openDocsForWith, plateOf, quoteFollowUpsWith, receiptsOfWith, resolveSourceForNewWith,
   syncVehicleFromDocWith,
 } from '../src/lib/doc-chain';
 import { freshSchema } from '../../../tools/test-schema.mjs';
@@ -455,6 +455,29 @@ describe.skipIf(!DB_URL)('การต่อสายเอกสารขาย
       await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
 
       expect(await nos('invoice')).toEqual([]);
+    });
+  });
+
+  /* ---------------- ทะเบียนรถแบบข้อความ ---------------- */
+
+  describe('ทะเบียนที่ใช้ค้นหา', () => {
+    /*
+     * เอกสารขายกับใบเคลมต้องประกอบทะเบียนแบบเดียวกัน ไม่งั้นค้นด้วยทะเบียน
+     * แล้วเจอเฉพาะบางชนิดเอกสาร ซึ่งผู้ใช้จะสรุปว่าใบนั้นหายไป
+     */
+    it('ประกอบจากหมวดอักษรกับหมวดตัวเลข', () => {
+      expect(plateOf({ plateA: 'กค', plateB: '3279' })).toBe('กค 3279');
+    });
+
+    it('มีแค่ครึ่งเดียวก็ยังใช้ได้', () => {
+      expect(plateOf({ plateA: 'กค', plateB: '' })).toBe('กค');
+      expect(plateOf({ plateA: '', plateB: '3279' })).toBe('3279');
+    });
+
+    it('ไม่มีรถ — ได้ข้อความว่าง ไม่ใช่ null', () => {
+      expect(plateOf(null)).toBe('');
+      expect(plateOf(undefined)).toBe('');
+      expect(plateOf({})).toBe('');
     });
   });
 });

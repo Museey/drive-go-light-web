@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext } from '@drivegolight/core';
+import { BankLine } from '@/components/bank-line';
 import { query, requireTab } from '@/lib/auth';
 import { getBillnote } from '@/lib/billnotes';
 import { getShop } from '@/lib/queries';
@@ -118,6 +119,10 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
           <div style={{ fontSize: 11.5, marginTop: 6 }}>
             จำนวนเงิน (ตัวอักษร) <b>{bahttext(note.total)}</b>
           </div>
+
+          {/* ใบวางบิลคือใบที่ส่งไปให้แผนกการเงินของลูกค้าโอนเงิน
+              ขาดเลขบัญชีแล้วเขาต้องโทรกลับมาถาม */}
+          <BankLine shop={shop} />
 
           {note.note ? (
             <div className="box">

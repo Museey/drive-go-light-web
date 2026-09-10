@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext, whtBaseOf } from '@drivegolight/core';
+import { BankLine } from '@/components/bank-line';
 import { requireTab } from '@/lib/auth';
 import { getDocDetail, getShop } from '@/lib/queries';
 import { payAtIssue } from '@/lib/print';
@@ -241,6 +242,9 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
               <div style={{ marginTop: 5, fontSize: 11.5, borderTop: '1px dotted #999', paddingTop: 4 }}>
                 จำนวนเงิน (ตัวอักษร) <b>{bahttext(doc.payable)}</b>
               </div>
+
+              {/* บรรทัดบัญชีเฉพาะใบที่ลูกค้าต้องจ่ายเงิน — ใบเสนอราคายังไม่ถึงขั้นจ่าย */}
+              {doc.kind !== 'QT' ? <BankLine shop={shop} /> : null}
             </div>
 
             <table className="doc" style={{ width: '46%', marginTop: 0 }}>

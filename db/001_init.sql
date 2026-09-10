@@ -54,6 +54,11 @@ create table tenants (
   wht_rate        numeric(6,3) not null default 3,         -- % ค่าตั้งต้นของเอกสารขาย
   price_tier      char(1)      not null default 'A' check (price_tier in ('A','B','C')),
   logo_url        text,                                    -- ย้ายจาก base64 ไป object storage
+  -- บัญชีธนาคารของอู่ พิมพ์ลงบนใบเสร็จและใบวางบิล (ดู 014_shop_bank.sql)
+  -- ไม่บังคับรูปแบบ เพราะแต่ละธนาคารเขียนเลขบัญชีไม่เหมือนกัน
+  bank_name         text        not null default '',
+  bank_account_no   text        not null default '',
+  bank_account_name text        not null default '',
   proposer_name   text,
   warranty_text   text,
   ui_prefs        jsonb        not null default '{}'::jsonb,  -- DB.ui (เช่น stockHide)

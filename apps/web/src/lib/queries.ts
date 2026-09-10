@@ -15,12 +15,17 @@ export interface ShopInfo {
   tel2: string | null;
   vatRate: number;
   whtRate: number;
+  /** บัญชีธนาคารของอู่ — พิมพ์ลงบนใบเสร็จและใบวางบิลให้ลูกค้าโอนเงิน */
+  bankName: string;
+  bankAccountNo: string;
+  bankAccountName: string;
 }
 
 export async function getShop(): Promise<ShopInfo> {
   return query(async (c) => {
     const { rows } = await c.query(
-      `select id, name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate
+      `select id, name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
+              bank_name, bank_account_no, bank_account_name
        from tenants where id = current_tenant_id()`,
     );
     const r = rows[0];
@@ -28,6 +33,9 @@ export async function getShop(): Promise<ShopInfo> {
       id: r.id, name: r.name, taxId: r.tax_id, addrText: r.addr_text,
       tel: r.tel, tel2: r.tel2,
       vatRate: money(r.vat_rate), whtRate: money(r.wht_rate),
+      bankName: r.bank_name ?? '',
+      bankAccountNo: r.bank_account_no ?? '',
+      bankAccountName: r.bank_account_name ?? '',
     };
   });
 }

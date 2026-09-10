@@ -222,6 +222,12 @@ export function BlankForm({ kind, shop, rows = DEFAULT_FORM_ROWS }: {
             <div style={{ marginTop: 6, fontSize: 11.5, borderTop: '1px dotted #999', paddingTop: 4 }}>
               จำนวนเงิน (ตัวอักษร) <Wl />
             </div>
+            {/* แบบฟอร์มเปล่าใช้ตอนระบบล่มหรือออกนอกสถานที่ ต้องมีที่ให้เขียนเลขบัญชี
+                เหมือนที่ bankLine() ของรุ่น 6.4 ทำ */}
+            <div style={{ marginTop: 4, fontSize: 11.5 }}>
+              <b>ชำระเงินโอนเข้าบัญชี:</b> ธนาคาร <Wl w={90} /> เลขที่บัญชี <Wl w={130} />
+              {' '}ชื่อบัญชี <Wl w={130} />
+            </div>
           </div>
           <SumTable wht />
         </div>

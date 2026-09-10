@@ -54,6 +54,11 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
       priceTier: (['A', 'B', 'C'].includes(str(fd, 'priceTier')) ? str(fd, 'priceTier') : 'A') as 'A',
       proposerName: str(fd, 'proposerName'),
       warrantyText: str(fd, 'warrantyText'),
+      /* ไม่ตรวจรูปแบบเลขบัญชี — แต่ละธนาคารเขียนไม่เหมือนกัน
+         บังคับผิดแล้วอู่กรอกเลขบัญชีจริงของตัวเองไม่ได้ */
+      bankName: str(fd, 'bankName'),
+      bankAccountNo: str(fd, 'bankAccountNo'),
+      bankAccountName: str(fd, 'bankAccountName'),
       logoUrl,
     });
   } catch (err) {

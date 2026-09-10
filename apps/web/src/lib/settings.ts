@@ -22,6 +22,10 @@ export interface ShopSettings {
   priceTier: 'A' | 'B' | 'C';
   proposerName: string;
   warrantyText: string;
+  /** บัญชีธนาคารของอู่ — พิมพ์ลงบนใบเสร็จและใบวางบิล ว่างได้ */
+  bankName: string;
+  bankAccountNo: string;
+  bankAccountName: string;
   logoUrl: string;
 }
 
@@ -29,7 +33,8 @@ export async function getShopSettings(): Promise<ShopSettings> {
   return query(async (c) => {
     const { rows } = await c.query(
       `select name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
-              price_tier, proposer_name, warranty_text, logo_url
+              price_tier, proposer_name, warranty_text, logo_url,
+              bank_name, bank_account_no, bank_account_name
        from tenants where id = current_tenant_id()`,
     );
     const r = rows[0];
@@ -39,6 +44,9 @@ export async function getShopSettings(): Promise<ShopSettings> {
       vatRate: n(r.vat_rate), whtRate: n(r.wht_rate),
       priceTier: r.price_tier, proposerName: r.proposer_name ?? '',
       warrantyText: r.warranty_text ?? '', logoUrl: r.logo_url ?? '',
+      bankName: r.bank_name ?? '',
+      bankAccountNo: r.bank_account_no ?? '',
+      bankAccountName: r.bank_account_name ?? '',
     };
   });
 }
@@ -54,12 +62,14 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
     await c.query(
       `update tenants set name=$1, tax_id=$2, addr_text=$3, tel=$4, tel2=$5,
               vat_rate=$6, wht_rate=$7, price_tier=$8, proposer_name=$9,
-              warranty_text=$10, logo_url=$11
+              warranty_text=$10, logo_url=$11,
+              bank_name=$12, bank_account_no=$13, bank_account_name=$14
        where id = current_tenant_id()`,
       [
         input.name, input.taxId || null, input.addrText, input.tel, input.tel2,
         input.vatRate, input.whtRate, input.priceTier, input.proposerName,
         input.warrantyText || null, input.logoUrl || null,
+        input.bankName, input.bankAccountNo, input.bankAccountName,
       ],
     );
   }, { sub: 'shop', allowExpired: true });

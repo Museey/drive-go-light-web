@@ -9,6 +9,7 @@ import { isClaimSide, saveClaim, voidClaim, type ClaimItemInput } from '@/lib/cl
 import { searchProducts } from '@/lib/sales';
 import { searchCustomers } from '@/lib/sales';
 import { searchVendors } from '@/lib/purchases';
+import { plateOf } from '@/lib/doc-chain';
 
 function describe(err: unknown, fallback: string): string {
   if (err && typeof err === 'object' && 'code' in err) return friendlyDbError(err);
@@ -68,7 +69,9 @@ export async function saveClaimAction(_prev: FormResult, fd: FormData): Promise<
       refNo: str(fd, 'refNo'),
       vehicleId: str(fd, 'vehicleId') || null,
       vehicle,
-      vehiclePlate: str(fd, 'vehiclePlate'),
+      /* ทะเบียนมาจากข้อมูลรถที่กรอก ไม่ใช่ช่องแยก — ที่เดียวกับเอกสารขาย
+         ไม่งั้นค้นด้วยทะเบียนแล้วเจอเฉพาะบางชนิดเอกสาร */
+      vehiclePlate: plateOf(vehicle as Record<string, string> | null),
       reason: str(fd, 'reason'),
       byWhom: str(fd, 'byWhom'),
       note: str(fd, 'note'),
