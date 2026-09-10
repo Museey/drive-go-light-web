@@ -57,7 +57,9 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 5px;
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  /* ถอด -webkit-overflow-scrolling: touch ออก — เลิกใช้แล้วตั้งแต่ iOS 13
+     และเป็นตัวที่ทำให้ WebKit ตัดภาพลูกที่เป็น position: fixed
+     ซึ่งทำให้แผงหล่นบน Safari เหลือแค่แถบขาว (แผงย้ายไป body แล้วด้วย) */
   scrollbar-width: none;
   box-shadow: 0 2px 12px rgba(0,0,0,.22);
 }

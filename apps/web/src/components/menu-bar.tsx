@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './icon';
 import { BLANK_FORM, MENU, permSubKey, type MenuItem } from './menu-map';
 import type { Session } from '@/lib/auth';
@@ -25,6 +26,24 @@ export function MenuBar({ session, current }: { session: Session; current: strin
   const [at, setAt] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
   const barRef = useRef<HTMLElement>(null);
   const btnRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * แผงหล่นถูกย้ายไปแขวนที่ <body> ไม่ใช่วาดไว้ในแถบเมนู
+   *
+   * **อาการที่เจอบน Safari** — กดเมนูแล้วแผงขึ้นเป็นแถบขาวเปล่า เหมือนถูกทับ
+   * เพราะ `.rail` มี `overflow-x: auto` (ให้แถบเลื่อนซ้ายขวาบนมือถือ)
+   * ซึ่ง WebKit ใช้เป็นขอบเขตตัดภาพของลูกที่เป็น `position: fixed` ด้วย
+   * ต่างจาก Chrome ที่ปล่อยให้ fixed หลุดออกไปได้ แผงจึงถูกตัดเหลือแค่ส่วนที่
+   * อยู่ในแถบ ซึ่งสูงไม่กี่พิกเซล
+   *
+   * ย้ายออกไปนอกแถบแล้วไม่มีบรรพบุรุษตัวไหนตัดได้อีก ใช้ได้ทุกเบราว์เซอร์
+   * โดยไม่ต้องพึ่งว่าเบราว์เซอร์ไหนตีความ fixed อย่างไร
+   *
+   * ทำได้เฉพาะหลัง mount เพราะฝั่งเซิร์ฟเวอร์ไม่มี document
+   */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   /* แผงวางแบบ fixed จึงต้องวัดตำแหน่งปุ่มเอง
      วางชิดซ้ายปุ่ม แล้วดันกลับเข้ามาถ้าจะล้นขอบขวาของจอ */
@@ -47,7 +66,11 @@ export function MenuBar({ session, current }: { session: Session; current: strin
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (!barRef.current?.contains(e.target as Node)) setOpen(null);
+      const t = e.target as Node;
+      /* แผงอยู่นอกแถบแล้ว ต้องนับว่า "ข้างใน" ด้วย ไม่งั้นกดการ์ดในแผง
+         จะปิดแผงตั้งแต่ mousedown แล้วลิงก์ไม่ทันได้ทำงาน */
+      if (barRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(null);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(null); };
     /* แถบเลื่อนปุ่มเข้ามาในจอเองตอนกด ถ้าปิดแผงเมื่อเกิด scroll
@@ -113,8 +136,8 @@ export function MenuBar({ session, current }: { session: Session; current: strin
               <span className="car">▾</span>
             </button>
 
-            {showing ? (
-              <div className="mmenu" style={{ left: at.left, top: at.top }}>
+            {showing && mounted ? createPortal(
+              <div className="mmenu" ref={panelRef} style={{ left: at.left, top: at.top }}>
                 <div className="mcards">
                   {subs.map((s) => (
                     s.todo ? (
@@ -135,7 +158,8 @@ export function MenuBar({ session, current }: { session: Session; current: strin
                     )
                   ))}
                 </div>
-              </div>
+              </div>,
+              document.body,
             ) : null}
           </div>
         );
