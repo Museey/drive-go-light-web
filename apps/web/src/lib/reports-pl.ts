@@ -44,6 +44,12 @@ export interface PLMonth {
   key: string;
   revenue: number;
   cogs: number;
+  /**
+   * ยอดซื้อเข้าของงวด — **ไม่ใช่ต้นทุนขาย** และไม่ถูกนำไปคิดกำไรสุทธิ
+   * มีไว้ให้เห็นว่าเงินออกไปกับการเติมของเข้าร้านเท่าไหร่ ซึ่งเป็นคนละเรื่อง
+   * กับต้นทุนของที่ขายออกไปจริงในงวดเดียวกัน
+   */
+  buy: number;
   ops: number;
   netProfit: number;
 }
@@ -191,7 +197,13 @@ export async function profitAndLossWith(
          select to_char(d.doc_date, 'YYYY-MM') as key,
                 coalesce(sum(case when ${SALES_DOCS} then d.net_amount else 0 end), 0) as revenue,
                 coalesce(sum(case when d.kind = 'EX' and d.status <> 'void'
-                                  and d.expense_cat <> 'asset' then d.net_amount else 0 end), 0) as ops
+                                  and d.expense_cat <> 'asset' then d.net_amount else 0 end), 0) as ops,
+                /* ยอดซื้อเข้า — เงินที่จ่ายซื้อของเข้าร้านในงวดนี้
+                   **ไม่ใช่ต้นทุนขาย** ซึ่งคือต้นทุนของที่ขายออกไปจริง
+                   อู่ที่ซื้อยกล็อตเดือนหนึ่งแล้วขายไปหลายเดือนจะเห็นสองตัวนี้ต่างกันมาก
+                   ซึ่งเป็นเรื่องที่ควรเห็น ไม่ใช่ความผิดพลาด */
+                coalesce(sum(case when d.kind = 'PO' and d.status <> 'void'
+                                  then d.net_amount else 0 end), 0) as buy
          from documents d
          where d.status <> 'void' and d.kind <> 'QT'${r4}
          group by 1
@@ -233,6 +245,7 @@ export async function profitAndLossWith(
        select k.key,
               coalesce(a.revenue, 0) as revenue,
               coalesce(cg.cogs, 0)   as cogs,
+              coalesce(a.buy, 0)     as buy,
               coalesce(a.ops, 0) + coalesce(b.writeoff, 0) as ops
        from (select key from doc_side
              union select key from cogs_side
@@ -281,12 +294,14 @@ export async function profitAndLossWith(
       assetTotal: round2(assetTotal),
       netProfit: round2(revenue - cogs - opsTotal - writeOff.total),
       months: monthRes.rows
-        .filter((r) => n(r.revenue) !== 0 || n(r.cogs) !== 0 || n(r.ops) !== 0)
+        .filter((r) => n(r.revenue) !== 0 || n(r.cogs) !== 0 || n(r.ops) !== 0 || n(r.buy) !== 0)
         .map((r) => ({
           key: r.key,
           revenue: n(r.revenue),
           cogs: n(r.cogs),
+          buy: n(r.buy),
           ops: n(r.ops),
+          /* ยอดซื้อเข้าไม่เข้าสูตรกำไร — ต้นทุนขายเป็นตัวที่หักแล้ว ใส่ซ้ำคือหักสองรอบ */
           netProfit: round2(n(r.revenue) - n(r.cogs) - n(r.ops)),
         })),
     };

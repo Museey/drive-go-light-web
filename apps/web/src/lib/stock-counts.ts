@@ -57,20 +57,38 @@ export interface CountRow {
   lines: number;
   /** กรอกแล้วกี่รายการ */
   done: number;
+  /** นับได้ต่างจากระบบกี่รายการ */
+  offCount: number;
+  /**
+   * มูลค่าส่วนต่างรวม — ลบคือของหาย
+   *
+   * **ต้องซ่อนจากคนที่ไม่มีสิทธิ์เห็นต้นทุน** ตัวเลขนี้หารด้วยจำนวนที่ต่างกัน
+   * แล้วได้ต้นทุนต่อหน่วยกลับมา ซึ่งเป็นสิ่งที่อู่ตั้งใจไม่ให้พนักงานบางคนเห็น
+   */
+  offValue: number;
 }
 
 export interface StockCount extends CountRow {
   items: CountItem[];
-  /** รายการที่นับได้ต่างจากระบบ */
-  offCount: number;
-  /** มูลค่าส่วนต่างรวม — ลบคือของหาย */
-  offValue: number;
 }
 
+/*
+ * `off_lines` กับ `off_value` คิดเฉพาะบรรทัดที่กรอกแล้วและต่างจากระบบเกินค่าคลาดเคลื่อน
+ * — เงื่อนไขชุดเดียวกับที่หน้ารายละเอียดใช้ ตัวเลขสองหน้าจึงตรงกันเสมอ
+ */
 const HEAD = `
   select c.id, c.no, c.count_date::text as count_date, c.note, c.status::text as status,
          count(i.id)::int as lines,
-         count(i.counted_qty)::int as done
+         count(i.counted_qty)::int as done,
+         count(*) filter (
+           where i.counted_qty is not null
+             and abs(i.counted_qty - i.system_qty) > ${COUNT_EPS}
+         )::int as off_count,
+         coalesce(sum(
+           case when i.counted_qty is not null
+                 and abs(i.counted_qty - i.system_qty) > ${COUNT_EPS}
+                then (i.counted_qty - i.system_qty) * i.unit_cost else 0 end
+         ), 0) as off_value
   from stock_counts c
   left join stock_count_items i on i.count_id = c.id`;
 
@@ -83,6 +101,8 @@ const toRow = (r: Record<string, unknown>): CountRow => ({
   applied: r.status === 'applied',
   lines: n(r.lines),
   done: n(r.done),
+  offCount: n(r.off_count),
+  offValue: round2(n(r.off_value)),
 });
 
 export interface CountListResult {

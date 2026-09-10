@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { query, requireTab } from '@/lib/auth';
+import { canCost } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
@@ -15,7 +16,10 @@ export default async function CountPage({
 }: {
   searchParams: Promise<{ q?: string; from?: string; to?: string; month?: string; year?: string }>;
 }) {
-  await requireTab('stock', 'count');
+  const session = await requireTab('stock', 'count');
+  /* มูลค่าส่วนต่างเปิดเผยต้นทุนต่อหน่วยกลับไปได้ ถ้าเอาไปหารด้วยจำนวนที่ต่างกัน
+     จึงต้องซ่อนตามสิทธิ์ต้นทุนเหมือนที่รุ่น 6.4 ครอบด้วย canCost() */
+  const showValue = canCost(session);
   const sp = await searchParams;
   const { from, to } = rangeFromParams(sp);
 
@@ -79,6 +83,8 @@ export default async function CountPage({
                     <th>เลขที่</th><th>วันที่</th><th>หมายเหตุ</th>
                     <th className="num">รายการ</th>
                     <th className="num">กรอกแล้ว</th>
+                    <th className="num">ไม่ตรง</th>
+                    {showValue ? <th className="num">มูลค่าส่วนต่าง</th> : null}
                     <th>สถานะ</th>
                   </tr>
                 </thead>
@@ -94,6 +100,17 @@ export default async function CountPage({
                       <td className="wrap" style={{ fontSize: 12.5 }}>{r.note || '-'}</td>
                       <td className="num">{r.lines}</td>
                       <td className="num">{r.done}</td>
+                      <td className="num">
+                        {r.offCount > 0
+                          ? <b style={{ color: 'var(--warn)' }}>{r.offCount}</b>
+                          : <span className="subtle">-</span>}
+                      </td>
+                      {showValue ? (
+                        <td className="num mono"
+                            style={{ color: r.offValue < -0.004 ? 'var(--due)' : undefined }}>
+                          {Math.abs(r.offValue) > 0.004 ? baht(r.offValue) : '-'}
+                        </td>
+                      ) : null}
                       <td>
                         {r.applied
                           ? <span className="chip ok">ปรับยอดแล้ว</span>

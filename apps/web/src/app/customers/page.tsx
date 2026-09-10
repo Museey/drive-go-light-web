@@ -4,6 +4,7 @@ import { PageSize, pageSizeOf } from '@/components/page-size';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listContacts } from '@/lib/contacts';
+import { baht } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,7 +106,9 @@ export default async function CustomersPage({
               <thead>
                 <tr>
                   <th>รหัส</th><th>ชื่อ</th><th>ประเภท</th><th>บันทึกเป็น</th>
-                  <th>โทรศัพท์</th><th>เลขผู้เสียภาษี</th><th className="num">รถ</th><th className="num">เครดิต</th>
+                  <th>โทรศัพท์</th><th>อีเมล</th><th>เลขผู้เสียภาษี</th>
+                  <th className="num">รถ</th><th className="num">เครดิต</th>
+                  <th className="num">ยอดสะสม</th><th className="num">คงค้าง</th>
                 </tr>
               </thead>
               <tbody>
@@ -120,9 +123,16 @@ export default async function CustomersPage({
                       <span className="chip">{c.kind === 'vendor' ? 'ผู้ขาย' : 'ลูกค้า'}</span>
                     </td>
                     <td className="mono">{c.tel || '-'}</td>
+                    <td className="wrap" style={{ color: 'var(--ink-3)' }}>{c.email || '-'}</td>
                     <td className="mono" style={{ color: 'var(--ink-3)' }}>{c.taxId || '-'}</td>
                     <td className="num">{c.vehicleCount || '-'}</td>
                     <td className="num">{c.creditDays ? `${c.creditDays} วัน` : '-'}</td>
+                    <td className="num mono">{c.spent > 0.004 ? baht(c.spent) : '-'}</td>
+                    {/* คงค้างเป็นตัวเลขที่ต้องสะดุดตา เพราะเป็นเงินที่ยังตามไม่ได้ */}
+                    <td className="num mono"
+                        style={{ color: c.owe > 0.004 ? 'var(--due)' : 'var(--ink-3)' }}>
+                      {c.owe > 0.004 ? baht(c.owe) : '-'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

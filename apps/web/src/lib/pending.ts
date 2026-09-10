@@ -20,6 +20,13 @@ export interface PendingItem {
   totalQty: number;
   lastUsedOn: string;
   lastDocNo: string;
+  /**
+   * ราคาต่อหน่วยของบรรทัดล่าสุดที่พูดถึงชื่อนี้
+   *
+   * ใช้ตอนตั้งราคาขายให้สินค้าตัวนี้ตอนลงทะเบียนจริง — ไม่มีคอลัมน์นี้
+   * ต้องเปิดเอกสารย้อนไปดูเองว่าครั้งก่อนขายไปเท่าไหร่
+   */
+  lastPrice: number;
 }
 
 export async function listPendingItems(): Promise<PendingItem[]> {
@@ -28,7 +35,7 @@ export async function listPendingItems(): Promise<PendingItem[]> {
       `with lines as (
          select i.name,
                 lower(regexp_replace(btrim(i.name), '\\s+', ' ', 'g')) as name_norm,
-                i.qty, d.doc_date, d.doc_no,
+                i.qty, i.unit_price, d.doc_date, d.doc_no,
                 row_number() over (
                   partition by lower(regexp_replace(btrim(i.name), '\\s+', ' ', 'g'))
                   order by d.doc_date desc, d.doc_no desc
@@ -46,7 +53,8 @@ export async function listPendingItems(): Promise<PendingItem[]> {
               count(*)::int as line_count,
               sum(qty) as total_qty,
               max(doc_date) filter (where rn = 1) as last_used_on,
-              max(doc_no) filter (where rn = 1) as last_doc_no
+              max(doc_no) filter (where rn = 1) as last_doc_no,
+              max(unit_price) filter (where rn = 1) as last_price
        from lines
        where name_norm not in (select name_norm from ignored_item_names)
        group by name_norm
@@ -60,6 +68,7 @@ export async function listPendingItems(): Promise<PendingItem[]> {
       totalQty: Number(r.total_qty),
       lastUsedOn: r.last_used_on,
       lastDocNo: r.last_doc_no,
+      lastPrice: Number(r.last_price ?? 0),
     }));
   });
 }

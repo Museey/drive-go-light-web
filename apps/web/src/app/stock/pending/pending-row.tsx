@@ -24,7 +24,7 @@ export function PendingRow({ item }: { item: PendingItem }) {
   if (linkState.ok || createState.ok) {
     return (
       <tr>
-        <td colSpan={5} className="ok-msg" style={{ margin: 0 }}>
+        <td colSpan={6} className="ok-msg" style={{ margin: 0 }}>
           จัดการ “{item.name}” เรียบร้อยแล้ว
           {linkState.values?.linked ? ` — ผูกกับ ${linkState.values.linked} บรรทัด` : ''}
         </td>
@@ -38,6 +38,7 @@ export function PendingRow({ item }: { item: PendingItem }) {
         <td className="wrap"><b>{item.name}</b></td>
         <td className="num">{item.lineCount}</td>
         <td className="num">{item.totalQty.toLocaleString('en-US')}</td>
+        <td className="num mono">{item.lastPrice > 0.004 ? baht(item.lastPrice) : '-'}</td>
         <td>
           {thDate(item.lastUsedOn)}
           <span className="subtle"> · {item.lastDocNo}</span>
@@ -61,7 +62,7 @@ export function PendingRow({ item }: { item: PendingItem }) {
 
       {panel === 'link' ? (
         <tr>
-          <td colSpan={5} style={{ background: 'var(--bg)' }}>
+          <td colSpan={6} style={{ background: 'var(--bg)' }}>
             <form action={linkAction} className="form" style={{ padding: '6px 0' }}>
               <input type="hidden" name="nameNorm" value={item.nameNorm} />
               {linkState.error ? <div className="err">{linkState.error}</div> : null}
@@ -102,7 +103,7 @@ export function PendingRow({ item }: { item: PendingItem }) {
 
       {panel === 'create' ? (
         <tr>
-          <td colSpan={5} style={{ background: 'var(--bg)' }}>
+          <td colSpan={6} style={{ background: 'var(--bg)' }}>
             <form action={createAction} className="form" style={{ padding: '6px 0' }}>
               <input type="hidden" name="nameNorm" value={item.nameNorm} />
               {createState.error ? <div className="err">{createState.error}</div> : null}

@@ -55,6 +55,7 @@ export default async function PendingPage() {
                   <th>ชื่อที่พิมพ์ในเอกสาร</th>
                   <th className="num">จำนวนบรรทัด</th>
                   <th className="num">รวมจำนวน</th>
+                  <th className="num">ราคาล่าสุด</th>
                   <th>ใช้ล่าสุด</th>
                   <th style={{ width: 320 }}>จัดการ</th>
                 </tr>

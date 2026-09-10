@@ -1,6 +1,7 @@
 import 'server-only';
 import { query } from './auth';
 import { mutate } from './mutate';
+import { CONTACT_MONEY_SQL } from './contact-totals';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
@@ -45,6 +46,13 @@ export interface Contact {
   displayName: string;
   vehicleCount: number;
   vehicles?: Vehicle[];
+  /**
+   * ยอดสะสม — ผลรวมยอดที่ต้องชำระของเอกสารที่ผูกกับผู้ติดต่อรายนี้
+   * ผู้ติดต่อที่เป็นทั้งลูกค้าและผู้ขายได้ยอดของทั้งสองฝั่งรวมกัน ตามรุ่น 6.4
+   */
+  spent: number;
+  /** คงค้าง — ผลรวมส่วนที่ยังไม่ได้ชำระ ใบที่จ่ายเกินไม่ทำให้ติดลบ */
+  owe: number;
 }
 
 /** ชื่อสำหรับแสดง — ตรงกับ custName() ของโปรแกรมเดิม */
@@ -80,6 +88,8 @@ function toContact(r: any): Contact {
     createdOn: r.created_on,
     displayName: displayName(base),
     vehicleCount: Number(r.vehicle_count ?? 0),
+    spent: n(r.spent),
+    owe: n(r.owe),
   };
 }
 
@@ -132,8 +142,14 @@ export async function listContacts(opts: {
     if (!opts.all) params.push(size, (page - 1) * size);
 
     const { rows } = await c.query(
-      `select k.*, (select count(*) from vehicles v where v.contact_id = k.id) as vehicle_count
-       from contacts k ${whereSql}
+      `with money as (${CONTACT_MONEY_SQL})
+       select k.*,
+              (select count(*) from vehicles v where v.contact_id = k.id) as vehicle_count,
+              coalesce(m.spent, 0) as spent,
+              coalesce(m.owe, 0)   as owe
+       from contacts k
+       left join money m on m.party_id = k.id
+       ${whereSql}
        order by k.code
        ${limitSql}`,
       params,
@@ -146,8 +162,14 @@ export async function listContacts(opts: {
 export async function getContact(id: string): Promise<Contact | null> {
   return query(async (c) => {
     const { rows } = await c.query(
-      `select k.*, (select count(*) from vehicles v where v.contact_id = k.id) as vehicle_count
-       from contacts k where k.id = $1`,
+      `with money as (${CONTACT_MONEY_SQL})
+       select k.*,
+              (select count(*) from vehicles v where v.contact_id = k.id) as vehicle_count,
+              coalesce(m.spent, 0) as spent,
+              coalesce(m.owe, 0)   as owe
+       from contacts k
+       left join money m on m.party_id = k.id
+       where k.id = $1`,
       [id],
     );
     if (!rows[0]) return null;

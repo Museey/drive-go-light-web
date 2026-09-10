@@ -386,6 +386,47 @@ describe.skipIf(!DB_URL)('ใบตรวจนับสต๊อก', () => {
     expect(list.adjustedValue).toBe(-1250);                 // 5 ที่ 250 (ต้นทุนที่ตรึงไว้)
   });
 
+  /*
+   * หน้ารายการต้องบอกได้ตั้งแต่ยังไม่เปิดใบว่าใบไหนเจอของไม่ตรงกี่รายการ
+   * และคิดเป็นเงินเท่าไหร่ — ตัวเลขต้องตรงกับที่หน้ารายละเอียดคำนวณ
+   * ไม่งั้นเปิดสองหน้าแล้วเห็นเลขคนละตัวโดยไม่มีใครรู้ว่าอันไหนถูก
+   */
+  it('แต่ละแถวบอกจำนวนที่ไม่ตรงและมูลค่าส่วนต่าง ตรงกับหน้ารายละเอียด', async () => {
+    await twoLots(brake);
+    await twoLots(oil);
+    const id = await draft();
+    await setCountedQty(app, (await itemOf(id, brake)).id, 15);
+    await setCountedQty(app, (await itemOf(id, oil)).id, 30);
+    await applyCount(app, id, null);
+
+    const row = (await listCounts(app)).rows.find((r) => r.id === id)!;
+    const detail = (await getCount(app, id))!;
+
+    expect(row.offCount).toBe(detail.offCount);
+    expect(row.offValue).toBe(detail.offValue);
+    expect(row.offCount).toBeGreaterThan(0);
+  });
+
+  it('ใบที่นับแล้วตรงทุกรายการ — ไม่ตรงเป็นศูนย์ มูลค่าส่วนต่างเป็นศูนย์', async () => {
+    await twoLots(brake);
+    const id = await draft();
+    const item = await itemOf(id, brake);
+    await setCountedQty(app, item.id, item.systemQty!);
+    await applyCount(app, id, null).catch(() => {});
+
+    const row = (await listCounts(app)).rows.find((r) => r.id === id)!;
+    expect(row.offCount).toBe(0);
+    expect(row.offValue).toBe(0);
+  });
+
+  it('ใบร่างที่ยังไม่ได้กรอกเลย — ไม่ตรงเป็นศูนย์ ไม่ใช่นับทุกบรรทัดว่าต่าง', async () => {
+    await twoLots(brake);
+    const id = await draft();
+    const row = (await listCounts(app)).rows.find((r) => r.id === id)!;
+    expect(row.offCount).toBe(0);
+    expect(row.offValue).toBe(0);
+  });
+
   /**
    * บรรทัดที่ไม่เคยกรอกบนใบที่ปรับยอดแล้ว ต้องไม่แสดงว่า "ระบบว่ามี 0"
    * เพราะบรรทัดนั้นไม่ถูกแตะเลย ศูนย์จะทำให้อ่านย้อนหลังแล้วเข้าใจผิด

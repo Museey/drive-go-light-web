@@ -142,6 +142,9 @@ export default async function PLPage({
                 <tr>
                   <th>งวด</th>
                   <th className="num">รายได้</th><th className="num">ต้นทุนขาย</th>
+                  <th className="num" title="เงินที่จ่ายซื้อของเข้าร้านในงวดนี้ — ไม่ใช่ต้นทุนขาย และไม่ถูกหักในกำไรสุทธิ">
+                    ยอดซื้อเข้า
+                  </th>
                   <th className="num">ค่าใช้จ่าย</th><th className="num">กำไรสุทธิ</th>
                 </tr>
               </thead>
@@ -151,6 +154,10 @@ export default async function PLPage({
                     <td>{monthLabel(m.key)}</td>
                     <td className="num">{baht(m.revenue)}</td>
                     <td className="num">{baht(m.cogs)}</td>
+                    {/* จางกว่าช่องอื่นเพราะไม่ได้อยู่ในสมการกำไร อ่านประกอบเฉย ๆ */}
+                    <td className="num" style={{ color: 'var(--ink-3)' }}>
+                      {m.buy > 0.004 ? baht(m.buy) : '-'}
+                    </td>
                     <td className="num">{baht(m.ops)}</td>
                     <td className="num" style={{ fontWeight: 600, color: m.netProfit >= 0 ? 'var(--ok)' : 'var(--due)' }}>
                       {baht(m.netProfit)}
