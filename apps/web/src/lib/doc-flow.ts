@@ -39,3 +39,36 @@ export function todoState(opts: {
 export function newDocHref(fromId: string, target: 'invoice' | 'receipt'): string {
   return `/income/new?kind=${target === 'invoice' ? 'IVT' : 'RC'}&from=${fromId}`;
 }
+
+/**
+ * ปุ่มเปิดเอกสารใหม่ของแต่ละแท็บในหน้ารายรับ
+ *
+ * รุ่น 6.4 มีปุ่มเปิดเอกสารใหม่แยกต่อหน้า (`qNew` `ivNewFromList` `rcNewFromList`)
+ * ปุ่มจึงตรงกับสิ่งที่กำลังดูอยู่เสมอ ของเราเคยตรึงไว้สองปุ่มทุกแท็บ —
+ * เปิดหน้าใบส่งมอบแล้วปุ่มยังเขียนว่า "+ ใบเสนอราคา" ซึ่งอ่านแล้วสับสน
+ * และทำให้ต้องกดผิดก่อนหนึ่งครั้งจึงจะรู้
+ *
+ * แท็บ "ทั้งหมด" ไม่ได้เจาะจงชนิดใด จึงเสนอสองใบที่เปิดบ่อยที่สุด
+ *
+ * **เลขต้องตรงกับผังเมนู** มีเทสต์บังคับไว้ เพราะเลขที่พิมพ์มือแล้วเพี้ยน
+ * ไม่มีอะไรฟ้อง จนกว่าผู้ใช้เดิมจะกดตามเลขแล้วไปโผล่ผิดที่
+ */
+export interface NewDocBtn {
+  no: string;
+  kind: string;
+  label: string;
+  primary?: boolean;
+}
+
+export const NEW_BTNS: Record<string, NewDocBtn[]> = {
+  all: [
+    { no: '03.1', kind: 'QT', label: '+ ใบเสนอราคา' },
+    { no: '03.3', kind: 'RC', label: '+ ใบเสร็จ', primary: true },
+  ],
+  quote: [{ no: '03.1', kind: 'QT', label: '+ ใบเสนอราคา', primary: true }],
+  invoice: [
+    { no: '03.2', kind: 'IVT', label: '+ ใบส่งมอบ + ใบกำกับภาษี', primary: true },
+    { no: '03.2.1', kind: 'IV', label: '+ ใบส่งมอบ (ไม่มี VAT)' },
+  ],
+  receipt: [{ no: '03.3', kind: 'RC', label: '+ ใบเสร็จ', primary: true }],
+};

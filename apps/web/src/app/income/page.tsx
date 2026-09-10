@@ -8,6 +8,7 @@ import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, KIND_SHORT, payLabel, thDate } from '@/lib/format';
 import { canEdit, canTab } from '@/lib/perms';
 import { TodoCell } from './todo-cell';
+import { NEW_BTNS } from '@/lib/doc-flow';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,8 +26,6 @@ const TABS = [
   { key: 'RC', no: '03.5', label: 'ใบเสร็จรับเงิน' },
 ];
 
-/** เลขเมนูเดิมของหน้าออกเอกสารใหม่ */
-const NEW_NO = { QT: '03.1', RC: '03.4' } as const;
 
 /** แท็บย่อยในผังเมนูต่อกับตัวกรองชนิดเอกสาร — ใบส่งมอบสองแบบเป็นคนละแท็บ (03.2 / 03.2.1) */
 const SUB_OF: Record<string, string> = {
@@ -93,14 +92,17 @@ export default async function IncomePage({
       title="รายรับ"
       sub={`เอกสารขายทั้งหมด ${total.toLocaleString('en-US')} ฉบับ`}
       actions={
-        <div className="tag-row">
-          <Link className="btn" href="/income/new?kind=QT">
-            <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>{NEW_NO.QT}</span>+ ใบเสนอราคา
-          </Link>
-          <Link className="btn primary" href="/income/new?kind=RC">
-            <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>{NEW_NO.RC}</span>+ ใบเสร็จ
-          </Link>
-        </div>
+        mayEdit ? (
+          <div className="tag-row">
+            {(NEW_BTNS[view] ?? NEW_BTNS.all!).map((b) => (
+              <Link key={b.kind} className={b.primary ? 'btn primary' : 'btn'}
+                    href={`/income/new?kind=${b.kind}`}>
+                <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>{b.no}</span>
+                {b.label}
+              </Link>
+            ))}
+          </div>
+        ) : undefined
       }
     >
       <SubNav menu="income" current={SUB_OF[kind] ?? 'quote'}>

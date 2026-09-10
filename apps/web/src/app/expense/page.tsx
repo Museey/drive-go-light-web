@@ -60,12 +60,17 @@ export default async function ExpensePage({
       actions={
         <div className="tag-row">
           <Link className="btn" href={`/expense/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายการ</Link>
-          <Link className="btn" href="/expense/new?kind=PO">
-            <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>04.1</span>+ ใบซื้อ
-          </Link>
-          <Link className="btn primary" href="/expense/new?kind=EX">
-            <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>04.3</span>+ ค่าใช้จ่าย
-          </Link>
+          {/* ปุ่มตามแท็บที่เปิดอยู่ ตามรุ่น 6.4 ที่มีปุ่มเปิดเอกสารใหม่แยกต่อหน้า
+              (เลขเดิมเขียน 04.3 ซึ่งไม่ตรงกับผังเมนูที่เป็น 04.2) */}
+          {sp.kind === 'EX' ? (
+            <Link className="btn primary" href="/expense/new?kind=EX">
+              <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>04.2</span>+ ค่าใช้จ่าย
+            </Link>
+          ) : (
+            <Link className="btn primary" href="/expense/new?kind=PO">
+              <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>04.1</span>+ ใบซื้อ
+            </Link>
+          )}
         </div>
       }
     >

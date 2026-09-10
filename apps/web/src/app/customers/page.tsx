@@ -64,7 +64,17 @@ export default async function CustomersPage({
       actions={
         <div className="tag-row">
           <Link className="btn" href={`/customers/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายชื่อ</Link>
-          <Link className="btn primary" href="/customers/new">+ เพิ่มผู้ติดต่อ</Link>
+          {/* ปุ่มตามแท็บ — อยู่หน้าทะเบียนผู้ขายแล้วกดเพิ่ม ควรได้ฟอร์มผู้ขาย
+              ไม่ใช่ฟอร์มลูกค้าที่ต้องมาสลับชนิดเองอีกที */}
+          {sp.kind === 'vendor' ? (
+            <Link className="btn primary" href="/customers/new?kind=vendor">
+              <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>02.2</span>+ เพิ่มผู้ขาย
+            </Link>
+          ) : (
+            <Link className="btn primary" href="/customers/new?kind=customer">
+              <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>02.1</span>+ เพิ่มลูกค้า
+            </Link>
+          )}
         </div>
       }
     >
