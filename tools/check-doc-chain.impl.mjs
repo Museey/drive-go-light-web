@@ -31,8 +31,46 @@ const client = new pg.Client({ connectionString: url });
 /* วันที่เก็บเป็นข้อความ ไม่ให้ไดรเวอร์แปลงเป็น Date แล้วเลื่อนเขตเวลา */
 pg.types.setTypeParser(1082, (v) => v);
 
+/**
+ * ดูก่อนว่าเรามองเห็นอะไรบ้าง
+ *
+ * "ไม่มีใบเสร็จ" กับ "มองไม่เห็นใบเสร็จ" เป็นคนละเรื่องกัน แต่หน้าตาเหมือนกันเป๊ะ
+ * ถ้าไม่ตรวจแยก — เคยรายงานว่าไม่มีใบเสร็จทั้งที่บนหน้าจอมีอยู่ชัด ๆ
+ *
+ * สาเหตุที่ทำให้มองไม่เห็นมีสองอย่าง
+ *   1. ต่อไปผิดฐาน (เช่นฐานสำเนาที่กู้ไว้ซ้อม ซึ่งเป็นภาพก่อนหน้านี้)
+ *   2. role ที่ใช้ถูก RLS กรอง — documents เปิด force row level security ไว้
+ *      ซึ่งมีผลกับเจ้าของตารางด้วย ถ้าไม่ได้ตั้ง app.tenant_id จะได้ 0 แถวเงียบ ๆ
+ */
+async function survey() {
+  const q = async (sql) => Number((await client.query(sql)).rows[0].v);
+  const tenants = await q('select count(*)::int as v from tenants');
+  const docs = await q(`select count(*)::int as v from documents`);
+  const receipts = await q(`select count(*)::int as v from documents where kind = 'RC'`);
+
+  const u = new URL(url);
+  console.log('\n  ══ ต่ออยู่กับอะไร ══\n');
+  console.log(`  โฮสต์      ${u.hostname}`);
+  console.log(`  ฐานข้อมูล   ${u.pathname.slice(1)}`);
+  console.log(`  ผู้ใช้      ${u.username}`);
+  console.log(`  อู่ ${tenants} · เอกสาร ${docs} · ใบเสร็จ ${receipts}\n`);
+
+  if (tenants > 0 && docs === 0) {
+    console.log('  ⚠️  เห็นอู่แต่ไม่เห็นเอกสารเลยสักใบ — ผิดปกติ');
+    console.log('     ถ้าบนหน้าเว็บมีเอกสารอยู่ แปลว่าอ่านไม่ได้ ไม่ใช่ไม่มี');
+    console.log('     เช็คสองอย่าง');
+    console.log('       · ต่อถูกฐานไหม — ฐานสำเนาที่กู้ไว้ซ้อมเป็นภาพของอดีต');
+    console.log(`       · role "${u.username}" ถูก RLS กรองอยู่หรือเปล่า`);
+    console.log('         (documents เปิด force row level security ซึ่งมีผลกับเจ้าของตารางด้วย)\n');
+    process.exitCode = 1;
+    return false;
+  }
+  return true;
+}
+
 async function main() {
   await client.connect();
+  if (!(await survey())) return;
 
   const { rows: summary } = await client.query(`
     select t.name as tenant,
@@ -55,7 +93,7 @@ async function main() {
      order by t.name`);
 
   if (summary.length === 0) {
-    console.log('\n  ยังไม่มีใบเสร็จในระบบ\n');
+    console.log('  ยังไม่มีใบเสร็จในระบบ — ตัวเลขข้างบนยืนยันว่าอ่านได้จริง ไม่ใช่มองไม่เห็น\n');
     return;
   }
 
