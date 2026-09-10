@@ -2,7 +2,10 @@ import 'server-only';
 import type pg from 'pg';
 import { recTotals, today, totalsOf, whtBaseOf, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
-import { resolveSourceForNewWith, syncVehicleFromDocWith } from './doc-chain';
+import {
+  openDocsForWith, resolveSourceForNewWith, syncVehicleFromDocWith,
+  type OpenDoc,
+} from './doc-chain';
 import { mutate } from './mutate';
 import { consumeStock, returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
@@ -519,3 +522,13 @@ export async function getDefaultWarranty(): Promise<string> {
     return rows[0].w;
   });
 }
+
+/** ใบที่ยังค้าง ให้เลือกตอนออกเอกสารใหม่จากศูนย์ — กติกาอยู่ที่ doc-chain.ts */
+export async function openDocsFor(
+  target: 'invoice' | 'receipt',
+  search?: string,
+): Promise<OpenDoc[]> {
+  return query((c) => openDocsForWith(c, target, { search }));
+}
+
+export type { OpenDoc };

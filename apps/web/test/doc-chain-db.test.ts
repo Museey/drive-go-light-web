@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import {
-  quoteFollowUpsWith, receiptsOfWith, resolveSourceForNewWith, syncVehicleFromDocWith,
+  openDocsForWith, quoteFollowUpsWith, receiptsOfWith, resolveSourceForNewWith,
+  syncVehicleFromDocWith,
 } from '../src/lib/doc-chain';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
@@ -386,6 +387,74 @@ describe.skipIf(!DB_URL)('การต่อสายเอกสารขาย
 
     it('รายการว่างไม่พัง', async () => {
       expect((await receiptsOfWith(app, [])).size).toBe(0);
+    });
+  });
+
+  /* ---------------- กล่องเลือกใบตอนออกเอกสารจากศูนย์ ---------------- */
+
+  describe('ใบที่ยังค้าง ให้เลือกตอนออกเอกสารใหม่', () => {
+    const nos = async (t: 'invoice' | 'receipt', search?: string) =>
+      (await openDocsForWith(app, t, { search })).map((r) => r.docNo).sort();
+
+    it('ออกใบส่งมอบ — เสนอใบเสนอราคาที่ยังไม่ได้ออกอะไรเลย', async () => {
+      await addDoc('QT', 'QT-001');
+      expect(await nos('invoice')).toEqual(['QT-001']);
+    });
+
+    it('ใบเสนอราคาที่ออกใบส่งมอบไปแล้ว ไม่โผล่ให้เลือกอีก', async () => {
+      const qt = await addDoc('QT', 'QT-001');
+      await addDoc('IVT', 'IVT-001', qt);
+      expect(await nos('invoice')).toEqual([]);
+    });
+
+    it('ใบเสนอราคาที่ออกใบเสร็จตรง ๆ ไปแล้ว ก็ไม่โผล่', async () => {
+      const qt = await addDoc('QT', 'QT-001');
+      await addDoc('RC', 'RC-001', qt);
+      expect(await nos('invoice')).toEqual([]);
+    });
+
+    it('ใบต่อที่ถูกยกเลิก — ใบเสนอราคากลับมาให้เลือกใหม่', async () => {
+      const qt = await addDoc('QT', 'QT-001');
+      await addDoc('IVT', 'IVT-001', qt, 'void');
+      expect(await nos('invoice')).toEqual(['QT-001']);
+    });
+
+    it('ออกใบเสร็จ — เสนอทั้งใบส่งมอบที่ยังไม่เก็บเงิน และใบเสนอราคาที่ค้าง', async () => {
+      await addDoc('QT', 'QT-001');
+      await addDoc('IVT', 'IVT-900');
+      expect(await nos('receipt')).toEqual(['IVT-900', 'QT-001']);
+    });
+
+    it('ใบส่งมอบที่เก็บเงินแล้ว ไม่โผล่ให้ออกใบเสร็จซ้ำ', async () => {
+      const ivt = await addDoc('IVT', 'IVT-900');
+      await addDoc('RC', 'RC-001', ivt);
+      expect(await nos('receipt')).toEqual([]);
+    });
+
+    it('ตอนออกใบส่งมอบ ไม่เสนอใบส่งมอบด้วยกันเอง', async () => {
+      await addDoc('IVT', 'IVT-900');
+      expect(await nos('invoice')).toEqual([]);
+    });
+
+    it('ใบที่ถูกยกเลิกไม่โผล่ให้เลือก', async () => {
+      await addDoc('QT', 'QT-001', null, 'void');
+      expect(await nos('invoice')).toEqual([]);
+    });
+
+    it('ค้นด้วยเลขที่เอกสาร', async () => {
+      await addDoc('QT', 'QT-001');
+      await addDoc('QT', 'QT-002');
+      expect(await nos('invoice', 'QT-002')).toEqual(['QT-002']);
+    });
+
+    it('ใบของอู่อื่นไม่โผล่มาให้เลือก', async () => {
+      await app.query(`select set_config('app.tenant_id', $1, false)`, [otherTenant]);
+      await app.query(
+        `insert into documents (tenant_id, kind, doc_no, doc_date, vat_mode)
+         values (current_tenant_id(), 'QT', 'QT-เพื่อนบ้าน', current_date, 'ex')`);
+      await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
+
+      expect(await nos('invoice')).toEqual([]);
     });
   });
 });

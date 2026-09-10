@@ -3,9 +3,10 @@ import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
 import {
-  getDefaultWarranty, loadDocForCopy, pickContactById, resolveSourceForNew,
+  getDefaultWarranty, loadDocForCopy, openDocsFor, pickContactById, resolveSourceForNew,
   type SalesDocInput, type SalesKind,
 } from '@/lib/sales';
+import { PickSource } from './pick-source';
 import { KIND_LABEL } from '@/lib/format';
 import { DocEditor } from '../doc-editor';
 
@@ -43,7 +44,10 @@ function blank(kind: SalesKind, warranty: string, whtRate: number): SalesDocInpu
 export default async function NewDocPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string; from?: string; copy?: string; party?: string }>;
+  searchParams: Promise<{
+    kind?: string; from?: string; copy?: string; party?: string;
+    blank?: string; q?: string;
+  }>;
 }) {
   await requireTab('income', 'receipt');
   const sp = await searchParams;
@@ -54,6 +58,30 @@ export default async function NewDocPage({
    * ใช้กับใบที่ถูกยกเลิกไปแล้ว ซึ่งเป็นทางออกเดียวที่เหลือของมัน
    */
   const copying = sp.copy === '1';
+
+  /*
+   * ออกใบส่งมอบหรือใบเสร็จโดยไม่ได้มาจากเอกสารต้นทาง — เสนอใบที่ยังค้างให้เลือกก่อน
+   * ตามที่ invNewModal / rcNewModal ของรุ่น 6.4 ทำ
+   *
+   * ข้ามได้ด้วย blank=1 ซึ่งจำเป็นจริง — งานที่ไม่ได้เริ่มจากใบเสนอราคามีอยู่
+   * เช่นลูกค้าเดินเข้ามาซื้ออะไหล่ชิ้นเดียว
+   */
+  const pickTarget: 'invoice' | 'receipt' | null =
+    sp.from || sp.party || sp.blank === '1' ? null
+    : kind === 'IVT' || kind === 'IV' ? 'invoice'
+    : kind === 'RC' ? 'receipt'
+    : null;
+
+  if (pickTarget) {
+    const search = sp.q ?? '';
+    const rows = await openDocsFor(pickTarget, search);
+    return (
+      <Shell doc current="/income" title={`ออก${KIND_LABEL[kind]}`}
+             actions={<Link className="btn" href="/income">← กลับรายการ</Link>}>
+        <PickSource target={pickTarget} kind={kind} rows={rows} search={search} />
+      </Shell>
+    );
+  }
 
   /* ออกใบเสร็จจากใบเสนอราคาที่มีใบส่งมอบแล้ว ต้องต่อสายจากใบส่งมอบ ดู resolveSourceForNew */
   const resolved = sp.from && !copying

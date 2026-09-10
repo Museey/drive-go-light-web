@@ -172,3 +172,76 @@ export async function receiptsOfWith(
   for (const r of rows) out.set(r.parent, { id: r.id, docNo: r.doc_no });
   return out;
 }
+
+/** ใบที่ยังรอออกเอกสารต่อ — ใช้ในกล่องเลือกใบตอนออกเอกสารจากศูนย์ */
+export interface OpenDoc {
+  id: string;
+  docNo: string;
+  docDate: string;
+  partyName: string;
+  vehiclePlate: string;
+  amount: number;
+  /** 'QT' คือใบเสนอราคา · 'IV'/'IVT' คือใบส่งมอบ */
+  kind: string;
+}
+
+/**
+ * ใบที่ยังค้างอยู่ ให้เลือกตอนกดออกเอกสารใหม่โดยไม่ได้มาจากเอกสารต้นทาง
+ *
+ * ยกมาจาก `invNewModal` และ `rcNewModal` ของรุ่น 6.4 — กด "ออกใบส่งมอบ" แล้ว
+ * รุ่นเดิมเสนอใบเสนอราคาที่ยังค้างให้เลือกก่อน ไม่ใช่โยนฟอร์มเปล่าให้
+ * ซึ่งบังคับให้ผู้ใช้จำเลขที่ใบเองหรือย้อนไปหาในรายการอีกรอบ
+ *
+ *   ออกใบส่งมอบ → ใบเสนอราคาที่**ยังไม่มีทั้งใบส่งมอบและใบเสร็จ**
+ *   ออกใบเสร็จ  → ใบส่งมอบที่ยังไม่มีใบเสร็จ **บวก** ใบเสนอราคาที่ยังค้าง
+ *
+ * เรียงใบใหม่ขึ้นก่อน เพราะงานที่เพิ่งรับเข้ามาคือสิ่งที่กำลังตามอยู่
+ */
+export async function openDocsForWith(
+  c: Client,
+  target: 'invoice' | 'receipt',
+  opts: { search?: string; limit?: number } = {},
+): Promise<OpenDoc[]> {
+  const term = (opts.search ?? '').trim();
+  const limit = Math.min(opts.limit ?? 20, 100);
+
+  /* ใบส่งมอบที่ยังไม่มีใบเสร็จ — เฉพาะตอนออกใบเสร็จ */
+  const invoicePart = target === 'receipt'
+    ? `union all
+       select d.id, d.doc_no, d.doc_date, d.party_name, d.vehicle_plate,
+              d.payable as amount, d.kind::text as kind
+         from documents d
+        where d.kind in ('IV','IVT') and d.status <> 'void'
+          and not exists (select 1 from documents r
+                           where r.parent_doc_id = d.id and r.kind = 'RC'
+                             and r.status <> 'void')`
+    : '';
+
+  const { rows } = await c.query(
+    `select * from (
+       select d.id, d.doc_no, d.doc_date, d.party_name, d.vehicle_plate,
+              d.grand_total as amount, d.kind::text as kind
+         from documents d
+        where d.kind = 'QT' and d.status <> 'void'
+          and not exists (select 1 from documents x
+                           where x.parent_doc_id = d.id and x.status <> 'void'
+                             and x.kind in ('IV','IVT','RC'))
+       ${invoicePart}
+     ) o
+     where ($1 = '' or o.doc_no ilike $2 or o.party_name ilike $2
+            or o.vehicle_plate ilike $2)
+     order by o.doc_date desc, o.doc_no desc
+     limit ${limit}`,
+    [term, `%${term}%`],
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    docNo: r.doc_no,
+    docDate: r.doc_date,
+    partyName: r.party_name ?? '',
+    vehiclePlate: r.vehicle_plate ?? '',
+    amount: Number(r.amount ?? 0),
+    kind: r.kind,
+  }));
+}
