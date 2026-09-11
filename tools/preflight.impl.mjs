@@ -191,6 +191,37 @@ async function checkDb() {
       return [JSON.stringify(off) === JSON.stringify(NO_FORCE), off.join(', ') || '(ไม่มี)'];
     });
 
+    /*
+     * วิวต้องประเมินสิทธิ์ด้วยคนเรียก ไม่ใช่เจ้าของวิว
+     *
+     * ค่าปริยายของ Postgres คือใช้สิทธิ์ของเจ้าของวิว ซึ่งคือ role ที่รันไมเกรชัน —
+     * บนบริการแบบ managed เราไม่ได้เป็นคนเลือกว่าจะเป็น role ไหน
+     * ถ้าเป็น role ที่ข้าม RLS ได้ วิวจะอ่านข้ามอู่ทันทีโดยไม่มีอาการให้เห็น
+     */
+    await step('ทุกวิวตั้ง security_invoker', async () => {
+      const bad = await q(`
+        select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+         where n.nspname in ('public','auth','ops') and c.relkind = 'v'
+           and not coalesce('security_invoker=true' = any(c.reloptions), false)`);
+      return [bad.length === 0, bad.map((r) => r.relname).join(', ') || 'ครบทุกวิว'];
+    });
+
+    /*
+     * ฟังก์ชันสร้างเจ้าของอู่ต้องเป็นรุ่นที่เขียน perms เป็นออบเจกต์
+     *
+     * ไฟล์ 002_auth.sql เป็นภาพรวมสคีมาที่ไม่ได้ถูกรันซ้ำ ตอนที่ไมเกรชัน 007
+     * เปลี่ยน users.perms เป็น jsonb ฐานที่ติดตั้งไปแล้วจึงค้างฟังก์ชันรุ่นเก่าไว้
+     * แล้วพังทันทีที่เรียก — แปลว่า **เปิดอู่ใหม่ไม่ได้เลย** ทั้งจากคอนโซล
+     * และจากตัวนำเข้าไฟล์สำรอง โดยที่อู่เดิมใช้งานได้ทุกอย่างตามปกติ
+     * ไมเกรชัน 019 แก้แล้ว ข้อนี้เฝ้าไม่ให้กลับมาอีก
+     */
+    await step('ฟังก์ชันสร้างเจ้าของอู่เป็นรุ่นปัจจุบัน', async () => {
+      const [fn] = await q(
+        `select pg_get_functiondef('auth.create_owner(uuid,citext,text)'::regprocedure) as def`);
+      const ok = String(fn?.def ?? '').includes('jsonb_build_object');
+      return [ok, ok ? 'เขียน perms เป็นออบเจกต์' : 'ยังเป็นรุ่นเก่า — รันไมเกรชัน 019'];
+    });
+
     /* ฟังก์ชัน SECURITY DEFINER ที่เป็นของ role ซึ่งข้าม RLS ได้
        จะมองเห็นข้อมูลทุกอู่โดยไม่มีอะไรกั้น */
     await step('ไม่มีฟังก์ชัน SECURITY DEFINER ที่เป็นของ role ซึ่งข้าม RLS ได้', async () => {
