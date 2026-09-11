@@ -437,7 +437,10 @@ create index on stock_moves (tenant_id, product_id, moved_on desc);
 create index on stock_moves (tenant_id, doc_id);
 
 -- ยอดคงเหลือและเคลื่อนไหวล่าสุด — ใช้แทน products.qty / products.lastMove
-create view product_stock as
+-- security_invoker = ประเมินด้วยสิทธิ์ของคนเรียก ไม่ใช่ของเจ้าของวิว
+-- ไม่งั้นถ้าไมเกรชันถูกรันด้วย role ที่ข้าม RLS ได้ วิวนี้จะอ่านข้ามอู่ได้เงียบ ๆ
+-- (ดู db/017_view_security.sql — มีเทสต์พิสูจน์ด้วยการย้ายเจ้าของไปเป็น superuser)
+create view product_stock with (security_invoker = true) as
 select p.id           as product_id,
        p.tenant_id,
        coalesce(sum(m.qty_delta), 0) as qty_on_hand,

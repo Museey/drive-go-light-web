@@ -83,6 +83,22 @@ async function fingerprint(c: pg.Client) {
       where n.nspname = 'public' and c.relkind = 'r'
       order by 1`),
 
+    /*
+     * วิว — ทั้งนิยามและ **ตัวเลือกของวิว**
+     *
+     * เดิมไม่ได้เทียบวิวเลย ซึ่งเป็นช่องโหว่ที่เงียบที่สุดของเทสต์นี้ —
+     * `security_invoker` เป็นตัวเลือกของวิว ไม่ใช่คอลัมน์และไม่ใช่ constraint
+     * ติดตั้งใหม่อาจได้ ส่วนฐานที่อัปเกรดมาอาจไม่ได้ แล้วไม่มีอะไรฟ้อง
+     * ทั้งที่ผลคือฐานหนึ่งกันข้อมูลข้ามอู่ อีกฐานไม่กัน (ดู db/017_view_security.sql)
+     */
+    views: await q(`
+      select c.relname,
+             pg_get_viewdef(c.oid, true) as def,
+             coalesce(array_to_string(c.reloptions, ','), '') as opts
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname in ('public', 'auth', 'ops') and c.relkind = 'v'
+      order by 1`),
+
     functions: await q(`
       select n.nspname || '.' || p.proname as name,
              pg_get_function_identity_arguments(p.oid) as args
@@ -163,6 +179,27 @@ describe.skipIf(!DB_URL)('ไมเกรชัน', () => {
     const a = await fingerprint(fresh);
     const b = await fingerprint(upgraded);
     expect(b.functions).toEqual(a.functions);
+  });
+
+  /**
+   * วิวกับตัวเลือกของวิวเหมือนกัน
+   *
+   * `security_invoker` ไม่ใช่คอลัมน์และไม่ใช่ constraint จึงไม่มีข้อไหนข้างบนจับได้ —
+   * ฐานที่ติดตั้งใหม่อาจกันข้อมูลข้ามอู่ ส่วนฐานที่อัปเกรดมาไม่กัน แล้วเงียบสนิท
+   * (ดู db/017_view_security.sql และ view-rls.test.ts ที่พิสูจน์ผลจริงของตัวเลือกนี้)
+   */
+  it('วิวและตัวเลือกของวิวเหมือนกัน', async () => {
+    const a = await fingerprint(fresh);
+    const b = await fingerprint(upgraded);
+
+    expect(a.views.length, 'ต้องมีวิวให้เทียบจริง').toBeGreaterThan(0);
+    expect(b.views, 'ติดตั้งใหม่กับอัปเกรดต้องได้วิวเหมือนกันเป๊ะ').toEqual(a.views);
+
+    /* ระบุชื่อไว้ตรง ๆ ด้วย — วันที่วิวถูกลบทิ้งโดยไม่ตั้งใจ ข้อเทียบข้างบนจะยังเขียว
+       เพราะทั้งสองฝั่งไม่มีเหมือนกัน */
+    const stock = a.views.find((v: Record<string, unknown>) => v.relname === 'product_stock');
+    expect(stock, 'ไม่มีวิว product_stock').toBeTruthy();
+    expect(String(stock!.opts)).toContain('security_invoker=true');
   });
 
   /**
