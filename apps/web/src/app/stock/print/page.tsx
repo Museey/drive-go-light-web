@@ -63,6 +63,9 @@ export default async function StockPrintPage({
         <>
           <b>Min</b> = ถึงจุดสั่งซื้อ · <b>Max</b> = เกินระดับสูงสุด · <b>ค้าง</b> = ไม่เคลื่อนไหวตั้งแต่ 6 เดือน
           <br />
+          มูลค่าสต๊อกท้ายตารางคิดตามบัญชี — ต้นทุนของที่รับเข้าจริงลบของที่ตัดออกไปแล้ว
+          ตามลำดับเข้าก่อนออกก่อน จึงไม่เท่ากับคงเหลือคูณทุนล่าสุด
+          <br />
           ราคาที่พิมพ์เป็นราคาขายระดับ A เท่านั้น ระดับ B และ C ไม่พิมพ์ลงกระดาษที่อาจหลุดถึงมือลูกค้า
           {hiddenHere.length ? (
             <>
@@ -83,7 +86,7 @@ export default async function StockPrintPage({
             <th>ชื่อสินค้า</th>
             <th style={{ width: 76 }}>หมวดหมู่</th>
             <th style={{ width: 38 }}>หน่วย</th>
-            {show('cost') ? <th style={{ width: 64 }}>ต้นทุน</th> : null}
+            {show('cost') ? <th style={{ width: 64 }}>ทุนล่าสุด</th> : null}
             <th style={{ width: 64 }}>ราคาขาย</th>
             {show('qty') ? <th style={{ width: 46 }}>คงเหลือ</th> : null}
             {show('min') ? <th style={{ width: 36 }}>Min</th> : null}
@@ -123,7 +126,7 @@ export default async function StockPrintPage({
           <tfoot>
             <tr>
               <td colSpan={colsBeforeValue} style={{ textAlign: 'right' }}>
-                <b>มูลค่าสต๊อกตามต้นทุน ({total.toLocaleString('en-US')} รายการ)</b>
+                <b>มูลค่าสต๊อกตามบัญชี ({total.toLocaleString('en-US')} รายการ)</b>
               </td>
               <td colSpan={Math.max(1, colsAfterValue)}><b>{baht(stockValue)}</b> บาท</td>
             </tr>

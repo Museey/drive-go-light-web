@@ -12,7 +12,7 @@ import { mutate } from './mutate';
 
 /** คอลัมน์ที่ซ่อนได้ — ชุดเดียวกับ STOCK_COLS ของรุ่น 3.6 */
 export const STOCK_COLS = [
-  ['cost', 'ทุน'],
+  ['cost', 'ทุนล่าสุด'],
   ['pB', 'ราคา B'],
   ['pC', 'ราคา C'],
   ['qty', 'คงเหลือ'],

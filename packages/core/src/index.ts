@@ -16,7 +16,6 @@ export * from './date.js';
 export * from './totals.js';
 export * from './payments.js';
 export * from './vat.js';
-export * from './pl.js';
 export * from './expense-cats.js';
 export * from './stock.js';
 export * from './fifo.js';

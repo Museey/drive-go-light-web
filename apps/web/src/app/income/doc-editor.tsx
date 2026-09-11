@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState, useTransition } from 'react';
+import { useActionState, useEffect, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import { bahttext, expiredLines, recTotals, type VatMode } from '@drivegolight/core';
@@ -36,7 +36,7 @@ function Submit({ label }: { label: string }) {
 }
 
 export function DocEditor({
-  initial, vatRate, shopWhtRate, mode, lotExpiry, expiryWarnDays, today,
+  initial, vatRate, shopWhtRate, mode, lotExpiry, expiryWarnDays, today, cashOnOpen,
 }: {
   initial: SalesDocInput;
   vatRate: number;
@@ -46,6 +46,8 @@ export function DocEditor({
   lotExpiry: Record<string, string>;
   expiryWarnDays: number;
   today: string;
+  /** เปิดมาแบบขายหน้าร้าน — ตั้งรับเงินสดเต็มจำนวนไว้ให้ */
+  cashOnOpen?: boolean;
 }) {
   const [state, action] = useActionState<FormResult, FormData>(saveDocAction, {});
   const [doc, setDoc] = useState<SalesDocInput>(initial);
@@ -55,6 +57,14 @@ export function DocEditor({
   const [partResults, setPartResults] = useState<PickedProduct[] | null>(null);
   const [picked, setPicked] = useState<PickedContact | null>(null);
   const [pending, startTransition] = useTransition();
+
+  /*
+   * ขายหน้าร้าน — เงินสดที่รับวิ่งตามยอดไปเรื่อย ๆ จนกว่าจะมีคนแตะช่องรับเงินเอง
+   *
+   * ถ้าตั้งค่าไว้ครั้งเดียวตอนเปิดหน้า ยอดจะเป็นศูนย์เสมอเพราะยังไม่มีรายการสักบรรทัด
+   * แล้วพอใส่ของเสร็จกดบันทึก ใบจะกลายเป็นขายเชื่อทั้งที่รับเงินสดมาแล้ว
+   */
+  const [cashAuto, setCashAuto] = useState(Boolean(cashOnOpen));
 
   /*
    * วันหมดอายุของล็อตที่จะถูกตัด — ตั้งต้นจากอะไหล่ที่อยู่บนใบแล้ว
@@ -84,6 +94,17 @@ export function DocEditor({
     },
     { vatRate },
   );
+
+  useEffect(() => {
+    if (!cashAuto) return;
+    setDoc((d) => {
+      const want = money(t.payable);
+      const now = d.payments.length === 1 && d.payments[0]!.method === 'เงินสด'
+        ? d.payments[0]!.amount : null;
+      if (now === want || (now === null && want <= EPS)) return d;
+      return { ...d, payments: want > EPS ? [{ method: 'เงินสด', amount: want, ref: '' }] : [] };
+    });
+  }, [cashAuto, t.payable]);
 
   const paidNow = money(doc.payments.reduce((s, p) => s + p.amount, 0));
   const remain = money(t.payable - paidNow);
@@ -569,6 +590,7 @@ export function DocEditor({
                            placeholder="0.00"
                            onChange={(e) => {
                              const v = Number(e.target.value) || 0;
+                             setCashAuto(false);
                              setDoc((d) => {
                                const rest = d.payments.filter((p) => p.method !== method);
                                const ref = d.payments.find((p) => p.method === method)?.ref ?? '';
@@ -594,22 +616,23 @@ export function DocEditor({
             </div>
 
             <div className="tag-row" style={{ marginTop: 12 }}>
+              {/* กดเองแล้วยอดหยุดวิ่งตาม — คนที่กดปุ่มนี้ตั้งใจล็อกตัวเลข ณ ตอนนั้น */}
               <button className="btn" type="button"
-                      onClick={() => setDoc((d) => ({
+                      onClick={() => { setCashAuto(false); setDoc((d) => ({
                         ...d,
                         payments: [{ method: 'เงินสด', amount: t.payable, ref: '' }],
-                      }))}>
+                      })); }}>
                 รับเงินสดเต็มจำนวน
               </button>
               <button className="btn" type="button"
-                      onClick={() => setDoc((d) => ({
+                      onClick={() => { setCashAuto(false); setDoc((d) => ({
                         ...d,
                         payments: [{ method: 'เงินโอน', amount: t.payable, ref: '' }],
-                      }))}>
+                      })); }}>
                 รับโอนเต็มจำนวน
               </button>
               <button className="btn" type="button"
-                      onClick={() => setDoc((d) => ({ ...d, payments: [] }))}>
+                      onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [] })); }}>
                 ยังไม่รับเงิน (เครดิต)
               </button>
             </div>

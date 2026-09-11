@@ -30,11 +30,6 @@ export function PickSource({
     <div className="card" style={{ maxWidth: 780, margin: '0 auto' }}>
       <header>
         <h2>{title}</h2>
-        <div className="spacer" />
-        {/* ทางออกสำหรับงานที่ไม่ได้เริ่มจากใบเสนอราคา — อยู่ที่เดิมเสมอ */}
-        <Link className="btn" href={`/income/new?kind=${kind}&blank=1`}>
-          ข้าม — ออกใบเปล่า
-        </Link>
       </header>
 
       <div className="body">
@@ -51,7 +46,7 @@ export function PickSource({
           <div className="empty">
             {search
               ? 'ไม่พบใบที่ค้างตามคำค้นนี้'
-              : 'ไม่มีใบที่ค้างอยู่ — กด “ข้าม — ออกใบเปล่า” เพื่อเริ่มใบใหม่'}
+              : 'ไม่มีใบที่ค้างอยู่ — ใช้ปุ่มด้านล่างเพื่อเริ่มใบใหม่'}
           </div>
         ) : (
           <div className="tablewrap">
@@ -87,6 +82,23 @@ export function PickSource({
             </table>
           </div>
         )}
+
+        {/*
+          ทางออกสำหรับงานที่ไม่ได้เริ่มจากใบเสนอราคา — วางไว้ใต้ตารางพร้อมคำอธิบาย
+          ตามตำแหน่งของรุ่น 6.4 ("ไม่ดึงจากเอกสารเดิม: เปิดใบเสร็จเปล่า")
+          เดิมเป็นปุ่มเปล่าที่มุมขวาบน ซึ่งอ่านไม่ออกว่าข้ามไปแล้วได้อะไร
+        */}
+        <div className="tag-row" style={{ marginTop: 14, alignItems: 'center' }}>
+          <span className="hint">ไม่ได้มาจากเอกสารเดิม:</span>
+          <Link className="btn" href={`/income/new?kind=${kind}&blank=1`}>
+            เปิดใบเปล่ากรอกเอง
+          </Link>
+          {target === 'receipt' ? (
+            <Link className="btn primary" href={`/income/new?kind=${kind}&walkin=1`}>
+              ขายหน้าร้าน — รับเงินสด
+            </Link>
+          ) : null}
+        </div>
       </div>
     </div>
   );

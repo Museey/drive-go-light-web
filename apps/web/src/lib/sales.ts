@@ -13,7 +13,7 @@ import { REMAINING_LOTS_SQL } from './expiry';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
-export { forcedVatMode, nextKinds, type SalesKind } from './sales-rules';
+export { forcedVatMode, nextKinds, WALK_IN_CUSTOMER, type SalesKind } from './sales-rules';
 import { forcedVatMode, type SalesKind } from './sales-rules';
 
 export interface DocItemInput {

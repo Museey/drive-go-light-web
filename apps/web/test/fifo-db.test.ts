@@ -12,7 +12,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
-import { consumeStock, lotsOfProduct, receiveStock, returnDocStock } from '../src/lib/stock-cost';
+import {
+  bookValueOf, consumeStock, lotsOfProduct, receiveStock, returnDocStock,
+} from '../src/lib/stock-cost';
+import { fifoValue } from '@drivegolight/core';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
 pg.types.setTypeParser(1082, (v) => v);
@@ -210,6 +213,72 @@ describe.skipIf(!DB_URL)('ต้นทุนเข้าก่อนออกก
     expect(await consumeStock(app, {
       productId, qty: 10, movedOn: '2026-03-01', reason: 'sale', docId,
     })).toBe(1000);
+  });
+
+  /*
+   * มูลค่าสต๊อกที่หน้าจอรายงาน — ต้นทุนที่รับเข้า ลบต้นทุนที่ตัดออกไปแล้ว
+   *
+   * เดิมหน้าจอคิด คงเหลือ × ทุนล่าสุด ซึ่งพองเกินจริงทุกครั้งที่ราคาซื้อขยับขึ้น
+   * ข้อสำคัญที่สุดในกลุ่มนี้คือข้อที่เทียบกับการเล่นบัญชีจริง — ถ้าสองทางนี้
+   * เดินห่างกันเมื่อไหร่ มูลค่าสต๊อกกับต้นทุนขายในงบจะกระทบยอดกันไม่ได้
+   */
+  describe('มูลค่าสต๊อกตามบัญชี', () => {
+    it('ยังไม่มีการเคลื่อนไหว — ศูนย์ ไม่ใช่ทุนล่าสุด', async () => {
+      expect(await bookValueOf(app, productId)).toBe(0);
+    });
+
+    it('ซื้อสองราคาแล้วยังไม่ขาย — เท่ากับเงินที่จ่ายซื้อจริง ไม่ใช่คงเหลือ × ทุนล่าสุด', async () => {
+      await twoLots();
+      /* 20 ชิ้น จ่ายไปจริง 2,500 บาท — ถ้าคิดแบบเดิมจะได้ 20 × 150 = 3,000 */
+      expect(await bookValueOf(app, productId)).toBe(2500);
+    });
+
+    it('ขายไปบางส่วน — หักด้วยต้นทุนที่ตัดจริง ไม่ใช่ราคาเฉลี่ย', async () => {
+      await twoLots();
+      await consumeStock(app, {
+        productId, qty: 15, movedOn: '2026-03-01', reason: 'sale', docId,
+      });
+      /* ตัดไป 1,750 (10×100 + 5×150) เหลือ 5 ชิ้นของล็อตสอง = 750 */
+      expect(await bookValueOf(app, productId)).toBe(750);
+    });
+
+    it('ตรงกับการเล่นบัญชีล็อตจริงทุกบาท', async () => {
+      await twoLots();
+      await consumeStock(app, {
+        productId, qty: 7, movedOn: '2026-03-01', reason: 'sale', docId,
+      });
+      await receiveStock(app, {
+        productId, qty: 4, costAmount: 800, movedOn: '2026-04-01', reason: 'set',
+      });
+
+      const fromReplay = fifoValue(await lotsOfProduct(app, productId));
+      expect(await bookValueOf(app, productId)).toBe(fromReplay);
+    });
+
+    it('ซื้อแพงขึ้นหลังขายไปแล้ว ไม่ย้อนไปเพิ่มมูลค่าของเก่า', async () => {
+      await twoLots();
+      await consumeStock(app, {
+        productId, qty: 20, movedOn: '2026-03-01', reason: 'sale', docId,
+      });
+      expect(await bookValueOf(app, productId)).toBe(0);
+
+      /* ของหมดคลังแล้ว ต่อให้ทุนล่าสุดของสินค้าจะเป็นเท่าไร มูลค่าต้องเป็นศูนย์ */
+      await admin.query(`update products set last_cost = 999 where id = $1`, [productId]);
+      expect(await bookValueOf(app, productId)).toBe(0);
+    });
+
+    /* ข้อมูลที่ย้ายมาจากรุ่น HTML ลงยอดยกมาไว้พร้อมต้นทุนต่อหน่วย
+       แต่แถวเก่าบางแถวไม่มี cost_amount — ต้องถอยไปคิดจากจำนวน × ต้นทุนต่อหน่วย
+       ไม่ใช่ปล่อยให้มูลค่าหายไปเป็นศูนย์ */
+    it('แถวเก่าที่ไม่มีต้นทุนรวม ถอยไปใช้จำนวน × ต้นทุนต่อหน่วย', async () => {
+      await admin.query(
+        `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta,
+                                  unit_cost, cost_amount, reason, note)
+         values ($1, $2, '2026-01-01', 8, 120, null, 'opening', 'ยกมาจากรุ่นเดิม')`,
+        [tenantId, productId],
+      );
+      expect(await bookValueOf(app, productId)).toBe(960);
+    });
   });
 
   it('เบิกใช้ในอู่ตัดสต๊อกและคิดต้นทุนเหมือนขาย แต่แยกเหตุผลไว้ให้งบนับคนละช่อง', async () => {

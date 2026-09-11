@@ -758,11 +758,16 @@ create table stock_count_items (
   -- เผื่อมีการขายหรือรับของระหว่างที่นับค้างไว้ (คำอธิบายของรุ่น 6.4 เอง)
   system_qty      numeric(12,3),
   unit_cost       numeric(14,2),
+  -- เป็นเงินที่ตัดจริงตอนปรับยอด — ตัดตามล็อตแบบเข้าก่อนออกก่อน จึงไม่เท่ากับ
+  -- ส่วนต่าง × ต้นทุนต่อหน่วย หน้ารายการอ่านค่านี้เพื่อให้ตรงกับงบ
+  -- ค่าเป็นบวกเสมอ เครื่องหมายอยู่ที่ส่วนต่าง · ว่าง = ยังไม่ได้ปรับยอด หรือใบเก่า
+  cost_amount     numeric(14,2),
   note            text        not null default '',
   -- สินค้าตัวเดียวนับซ้ำในใบเดียวไม่ได้ — ทำให้ "ยิงซ้ำ = นับเพิ่ม"
   -- ไม่กลายเป็น "ยิงซ้ำ = เพิ่มแถวแล้วปรับยอดสองรอบ" โดยไม่ต้องเชื่อโค้ดฝั่งหน้าจอ
   unique (count_id, product_id),
-  unique (count_id, line_no)
+  unique (count_id, line_no),
+  constraint count_item_cost_positive check (cost_amount is null or cost_amount >= 0)
 );
 
 create index on stock_count_items (tenant_id, product_id);

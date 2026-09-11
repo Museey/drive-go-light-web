@@ -169,8 +169,14 @@ describe.skipIf(!DB_URL)('ใบตรวจนับสต๊อก', () => {
     expect(rows[0].note).toContain('CT-202603-001');
   });
 
-  it('นับได้มากกว่าระบบ รับเข้าที่ต้นทุนล่าสุด', async () => {
-    await twoLots(brake);
+  /*
+   * ของที่นับได้เกินไม่รู้ว่ามาจากล็อตไหน จึงตีมูลค่าเท่ากับของที่มีอยู่จริงในคลัง
+   * (มูลค่าตามบัญชีหารจำนวน) **ไม่ใช่ทุนล่าสุด** — ทุนล่าสุดอาจเป็นราคาที่ไม่เคย
+   * จ่ายจริงกับของกองนี้เลย และจะทำให้มูลค่าสต๊อกพองขึ้นเพราะไปตรวจนับ
+   * ซึ่งกลับหัวกลับหาง การนับของไม่ควรสร้างมูลค่าขึ้นมา
+   */
+  it('นับได้มากกว่าระบบ รับเข้าที่ต้นทุนตามบัญชีของที่มีอยู่ ไม่ใช่ทุนล่าสุด', async () => {
+    await twoLots(brake);                                   // 20 ชิ้น · 10@100 + 10@150
     const id = await draft();
     await setCountedQty(app, (await itemOf(id, brake)).id, 23);
 
@@ -178,10 +184,33 @@ describe.skipIf(!DB_URL)('ใบตรวจนับสต๊อก', () => {
 
     expect(r.up).toBe(1);
     expect(await onHand(brake)).toBe(23);
-    expect(r.value).toBe(750);                              // 3 × 250 (last_cost)
+    /* มูลค่าตามบัญชี 2,500 ÷ 20 ชิ้น = 125 ต่อชิ้น — ทุนล่าสุด 250 จะได้ 750 */
+    expect(r.value).toBe(375);
 
     const lots = await lotsOfProduct(app, brake);
-    expect(lots.at(-1)).toEqual({ qty: 3, unitCost: 250, on: '2026-03-01' });
+    expect(lots.at(-1)).toEqual({ qty: 3, unitCost: 125, on: '2026-03-01' });
+  });
+
+  /*
+   * ใบร่างต้องบอกมูลค่าส่วนต่างด้วยฐานเดียวกับตอนปรับยอดจริง
+   * ไม่งั้นคนนับดูตัวเลขบนใบร่างแล้วตัดสินใจ พอกดปรับยอดกลับได้อีกตัวเลข
+   */
+  it('ใบร่างตีมูลค่าด้วยต้นทุนตามบัญชี ไม่ใช่ทุนล่าสุด', async () => {
+    await twoLots(brake);                                   // 2,500 บาท / 20 ชิ้น = 125
+    const id = await draft();
+    await setCountedQty(app, (await itemOf(id, brake)).id, 16);
+
+    const line = (await getCount(app, id))!.items.find((i) => i.productId === brake)!;
+    expect(line.unitCost).toBe(125);
+    expect(line.diffValue).toBe(-500);                      // หาย 4 ชิ้น × 125
+  });
+
+  it('ของหมดคลังแล้วนับเจอ — ไม่มีล็อตให้อ้าง ถอยไปใช้ทุนล่าสุด', async () => {
+    const id = await draft();
+    await setCountedQty(app, (await itemOf(id, brake)).id, 4);
+
+    const r = await applyCount(app, id, null);
+    expect(r.value).toBe(1000);                             // 4 × 250 (ทุนล่าสุด)
   });
 
   /**
@@ -383,7 +412,10 @@ describe.skipIf(!DB_URL)('ใบตรวจนับสต๊อก', () => {
     expect(list.rows).toHaveLength(2);
     expect(list.drafts).toBe(1);
     expect(list.adjusted).toBe(1);
-    expect(list.adjustedValue).toBe(-1250);                 // 5 ที่ 250 (ต้นทุนที่ตรึงไว้)
+    /* หน้ารายการอ่านเป็นเงินที่ตัดจริง ไม่ใช่ส่วนต่าง × ต้นทุนต่อหน่วย —
+       หาย 5 ชิ้นถูกตัดจากล็อตแรกที่ 100 บาททั้งหมด ไม่ใช่ที่ราคาเฉลี่ยหรือทุนล่าสุด
+       ตัวเลขบนหน้ารายการจึงเท่ากับที่ลงงบกำไรขาดทุนพอดี */
+    expect(list.adjustedValue).toBe(-500);
   });
 
   /*

@@ -7,9 +7,10 @@ import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
 import {
   getDefaultWarranty, loadDocForCopy, lotExpiryOf, openDocsFor, pickContactById, resolveSourceForNew,
-  type SalesDocInput, type SalesKind,
+  WALK_IN_CUSTOMER, type SalesDocInput, type SalesKind,
 } from '@/lib/sales';
 import { PickSource } from './pick-source';
+import { pickSourceTarget } from '@/lib/doc-flow';
 import { KIND_LABEL } from '@/lib/format';
 import { DocEditor } from '../doc-editor';
 
@@ -44,7 +45,7 @@ export default async function NewDocPage({
 }: {
   searchParams: Promise<{
     kind?: string; from?: string; copy?: string; party?: string;
-    blank?: string; q?: string;
+    blank?: string; q?: string; walkin?: string;
   }>;
 }) {
   await requireTab('income', 'receipt');
@@ -58,17 +59,21 @@ export default async function NewDocPage({
   const copying = sp.copy === '1';
 
   /*
-   * ออกใบส่งมอบหรือใบเสร็จโดยไม่ได้มาจากเอกสารต้นทาง — เสนอใบที่ยังค้างให้เลือกก่อน
-   * ตามที่ invNewModal / rcNewModal ของรุ่น 6.4 ทำ
+   * ขายหน้าร้าน — ลูกค้าเดินเข้ามาซื้อของแล้วจ่ายสด
    *
-   * ข้ามได้ด้วย blank=1 ซึ่งจำเป็นจริง — งานที่ไม่ได้เริ่มจากใบเสนอราคามีอยู่
-   * เช่นลูกค้าเดินเข้ามาซื้ออะไหล่ชิ้นเดียว
+   * ข้ามหน้าเลือกเอกสารต้นทางไปเลย เพราะงานแบบนี้ไม่มีต้นทางให้เลือกอยู่แล้ว
+   * แล้วเติมชื่อลูกค้ากับการรับเงินสดไว้ให้ เหลือแค่ใส่ของกับกดบันทึก
    */
-  const pickTarget: 'invoice' | 'receipt' | null =
-    sp.from || sp.party || sp.blank === '1' ? null
-    : kind === 'IVT' || kind === 'IV' ? 'invoice'
-    : kind === 'RC' ? 'receipt'
-    : null;
+  const walkin = sp.walkin === '1' && kind === 'RC';
+
+  /* กติกาว่าจะเสนอให้เลือกเอกสารต้นทางเมื่อไร อยู่ที่ doc-flow.ts เพื่อให้ทดสอบได้ */
+  const pickTarget = pickSourceTarget({
+    kind,
+    hasFrom: Boolean(sp.from),
+    hasParty: Boolean(sp.party),
+    blank: sp.blank === '1',
+    walkin,
+  });
 
   if (pickTarget) {
     const search = sp.q ?? '';
@@ -95,6 +100,8 @@ export default async function NewDocPage({
   ]);
 
   let initial = blank(kind, warranty, shop.whtRate);
+
+  if (walkin) initial = { ...initial, partyName: WALK_IN_CUSTOMER };
 
   if (source) {
     /* คัดลอกลูกค้า รถ และรายการจากเอกสารต้นทาง แล้วเปลี่ยนชนิดเป็นใบใหม่ */
@@ -134,7 +141,9 @@ export default async function NewDocPage({
     <Shell doc
       current="/income"
       title={`ออก${KIND_LABEL[kind]}`}
-      sub={party
+      sub={walkin
+        ? 'ขายหน้าร้าน — เติมชื่อลูกค้าและรับเงินสดเต็มจำนวนไว้ให้แล้ว แก้ได้ทุกช่อง'
+        : party
         ? `เปิดจากทะเบียนลูกค้า — ${party.name}${party.vehicles[0] ? ` · ${party.vehicles[0].label}` : ''}`
         : source
         ? copying
@@ -162,7 +171,8 @@ export default async function NewDocPage({
       ) : null}
 
       <DocEditor initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="new"
-                 lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()} />
+                 lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
+                 cashOnOpen={walkin} />
     </Shell>
   );
 }

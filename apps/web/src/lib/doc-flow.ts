@@ -58,17 +58,60 @@ export interface NewDocBtn {
   kind: string;
   label: string;
   primary?: boolean;
+  /**
+   * เปิดใบเปล่าสำหรับขายหน้าร้าน — ข้ามหน้าเลือกเอกสารต้นทาง
+   *
+   * เลขกำกับยังเป็น 03.3 เพราะมันคือใบเสร็จรับเงินใบเดียวกัน
+   * ต่างแค่จุดเริ่ม ไม่ใช่เอกสารคนละชนิดและไม่ใช่แท็บใหม่ในผังเมนู
+   */
+  walkin?: boolean;
 }
 
 export const NEW_BTNS: Record<string, NewDocBtn[]> = {
   all: [
     { no: '03.1', kind: 'QT', label: '+ ใบเสนอราคา' },
     { no: '03.3', kind: 'RC', label: '+ ใบเสร็จ', primary: true },
+    { no: '03.3', kind: 'RC', label: '+ ขายหน้าร้าน', walkin: true },
   ],
   quote: [{ no: '03.1', kind: 'QT', label: '+ ใบเสนอราคา', primary: true }],
   invoice: [
     { no: '03.2', kind: 'IVT', label: '+ ใบส่งมอบ + ใบกำกับภาษี', primary: true },
     { no: '03.2.1', kind: 'IV', label: '+ ใบส่งมอบ (ไม่มี VAT)' },
   ],
-  receipt: [{ no: '03.3', kind: 'RC', label: '+ ใบเสร็จ', primary: true }],
+  receipt: [
+    { no: '03.3', kind: 'RC', label: '+ ใบเสร็จ', primary: true },
+    { no: '03.3', kind: 'RC', label: '+ ขายหน้าร้าน', walkin: true },
+  ],
 };
+
+/** ลิงก์ของปุ่มเปิดเอกสารใหม่ — ปุ่มขายหน้าร้านพาไปใบเปล่าที่เติมค่าให้แล้ว */
+export function newBtnHref(b: NewDocBtn): string {
+  return `/income/new?kind=${b.kind}${b.walkin ? '&walkin=1' : ''}`;
+}
+
+/**
+ * กดออกเอกสารใหม่แล้วควรเสนอให้เลือกเอกสารต้นทางก่อนไหม
+ *
+ * รุ่น 6.4 เสนอใบที่ยังค้างให้เลือกก่อน (invNewModal / rcNewModal) แทนที่จะโยน
+ * ฟอร์มเปล่าให้แล้วบังคับให้จำเลขที่ใบเอง — งานซ่อมส่วนใหญ่มีเอกสารต้นทางอยู่แล้ว
+ *
+ * แต่มีสี่ทางที่ต้องข้ามไปฟอร์มเลย และทั้งสี่ทางคือ "รู้อยู่แล้วว่าจะเริ่มจากอะไร"
+ * ถ้าขืนเสนอให้เลือกอีก คือถามคำถามที่ผู้ใช้ตอบไปแล้ว
+ */
+export function pickSourceTarget(opts: {
+  kind: string;
+  /** มาจากเอกสารต้นทางแล้ว */
+  hasFrom: boolean;
+  /** เปิดจากแถวในทะเบียนลูกค้า */
+  hasParty: boolean;
+  /** กดข้ามมาเอง */
+  blank: boolean;
+  /** ขายหน้าร้าน */
+  walkin: boolean;
+}): 'invoice' | 'receipt' | null {
+  if (opts.hasFrom || opts.hasParty || opts.blank || opts.walkin) return null;
+  if (opts.kind === 'IV' || opts.kind === 'IVT') return 'invoice';
+  if (opts.kind === 'RC') return 'receipt';
+  /* ใบเสนอราคาเป็นต้นสาย ไม่มีอะไรให้เลือกต้นทาง */
+  return null;
+}

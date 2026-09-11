@@ -3,6 +3,7 @@ import { docMissing, EXPIRY_WARN_DAYS } from '@drivegolight/core';
 import { query } from './auth';
 import { quoteFollowUpsWith, receiptsOfWith, type DocRef } from './doc-chain';
 import { expiringSummaryWith } from './expiry';
+import { BOOK_VALUE_SQL } from './stock-cost';
 
 /** ยอดเงินจาก Postgres มาเป็นสตริง แปลงเองเพื่อไม่ให้เสียความละเอียดระหว่างทาง */
 const money = (v: unknown): number => Number(v ?? 0);
@@ -150,14 +151,18 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
        order by s.qty_on_hand - p.qty_min, p.code`,
     );
 
+    /* เงินจมในชั้นวางคิดตามบัญชี ไม่ใช่ คงเหลือ × ทุนล่าสุด — ดู BOOK_VALUE_SQL
+       ตัวเลขนี้คือเงินที่จ่ายซื้อของกองนั้นไปจริงแล้วยังไม่ได้คืนกลับมา */
     const stockStats = await c.query(
       `select count(*)::int as total,
               count(*) filter (where s.last_move_on is null
                                   or s.last_move_on <= current_date - interval '6 months')::int as dead,
-              coalesce(sum(s.qty_on_hand * p.last_cost) filter (
+              coalesce(sum(bv.value) filter (
                 where s.last_move_on is null
                    or s.last_move_on <= current_date - interval '6 months'), 0) as dead_value
-       from products p join product_stock s on s.product_id = p.id
+       from products p
+       join product_stock s on s.product_id = p.id
+       left join ${BOOK_VALUE_SQL} bv on bv.product_id = p.id
        where p.active`,
     );
 

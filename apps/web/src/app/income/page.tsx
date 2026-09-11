@@ -8,7 +8,7 @@ import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, KIND_SHORT, payLabel, thDate } from '@/lib/format';
 import { canEdit, canTab } from '@/lib/perms';
 import { TodoCell } from './todo-cell';
-import { NEW_BTNS } from '@/lib/doc-flow';
+import { NEW_BTNS, newBtnHref } from '@/lib/doc-flow';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,8 +95,10 @@ export default async function IncomePage({
         mayEdit ? (
           <div className="tag-row">
             {(NEW_BTNS[view] ?? NEW_BTNS.all!).map((b) => (
-              <Link key={b.kind} className={b.primary ? 'btn primary' : 'btn'}
-                    href={`/income/new?kind=${b.kind}`}>
+              <Link key={`${b.kind}${b.walkin ? ':walkin' : ''}`}
+                    className={b.primary ? 'btn primary' : 'btn'}
+                    title={b.walkin ? 'ลูกค้าเดินเข้ามาซื้อของแล้วจ่ายสด — เข้าใบเปล่าทันที ไม่ต้องมีใบเสนอราคา' : undefined}
+                    href={newBtnHref(b)}>
                 <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>{b.no}</span>
                 {b.label}
               </Link>

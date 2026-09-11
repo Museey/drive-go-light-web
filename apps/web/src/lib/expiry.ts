@@ -28,7 +28,7 @@ type Client = pg.PoolClient | pg.Client;
  */
 export const REMAINING_LOTS_SQL = `
   with recv as (
-    select m.product_id, m.expires_on, m.qty_delta,
+    select m.product_id, m.expires_on, m.qty_delta, m.unit_cost,
            sum(m.qty_delta) over (
              partition by m.product_id
              order by (m.expires_on is null), m.expires_on, m.moved_on, m.created_at
@@ -47,7 +47,7 @@ export const REMAINING_LOTS_SQL = `
      * ล็อตที่คร่อมเส้นแบ่งถูกตัดไปแล้วบางส่วน ยอดสะสมลบยอดที่ตัดออกไปแล้ว
      * จึงได้เศษที่เหลือจริง ส่วนล็อตที่ยังไม่ถูกแตะเลยได้เต็มจำนวน
      */
-    select r.product_id, r.expires_on,
+    select r.product_id, r.expires_on, r.unit_cost,
            least(r.qty_delta, r.cum - coalesce(u.out_qty, 0)) as qty
       from recv r
       left join used u on u.product_id = r.product_id
@@ -78,55 +78,6 @@ export async function nearestExpiryWith(
   return new Map(rows.map((r) => [r.product_id as string, r.nearest as string]));
 }
 
-export interface ExpiringLot {
-  productId: string;
-  code: string;
-  name: string;
-  unit: string;
-  expiresOn: string;
-  /** เหลืออีกกี่วัน ติดลบคือเลยมาแล้ว */
-  daysLeft: number;
-  qtyOnHand: number;
-  lastCost: number;
-}
-
-/**
- * ของที่ใกล้หมดอายุหรือหมดอายุแล้ว เรียงจากด่วนที่สุด
- *
- * นับเฉพาะสินค้าที่ยังเปิดใช้งาน — ของที่ปิดไปแล้วไม่ต้องมาเตือนให้รก
- */
-export async function listExpiringWith(
-  c: Client,
-  warnDays: number,
-): Promise<ExpiringLot[]> {
-  const { rows } = await c.query(
-    `${REMAINING_LOTS_SQL}
-     select r.product_id, p.code, p.name, p.unit, p.last_cost,
-            min(r.expires_on)::text as expires_on,
-            (min(r.expires_on) - current_date)::int as days_left,
-            max(s.qty_on_hand) as qty_on_hand
-       from remaining r
-       join products p on p.id = r.product_id
-       join product_stock s on s.product_id = p.id
-      where p.active
-      group by r.product_id, p.code, p.name, p.unit, p.last_cost
-     having min(r.expires_on) <= current_date + ($1::int * interval '1 day')
-      order by 6, p.code`,
-    [warnDays],
-  );
-
-  return rows.map((r) => ({
-    productId: r.product_id,
-    code: r.code,
-    name: r.name,
-    unit: r.unit ?? '',
-    expiresOn: r.expires_on,
-    daysLeft: Number(r.days_left),
-    qtyOnHand: Number(r.qty_on_hand ?? 0),
-    lastCost: Number(r.last_cost ?? 0),
-  }));
-}
-
 export interface ExpiringLotRow {
   productId: string;
   code: string;
@@ -145,8 +96,8 @@ export interface ExpiringLotRow {
 /**
  * ของใกล้หมดอายุและหมดอายุแล้ว **แยกรายล็อต** เรียงจากด่วนที่สุด
  *
- * ต่างจาก listExpiringWith() ที่ตอบรายสินค้าด้วยล็อตที่ใกล้หมดที่สุด —
- * หน้า 05.1.1 ต้องบอกได้ว่าของที่ต้องจัดการมีกี่ชิ้น ไม่ใช่แค่ว่าสินค้าตัวนี้มีปัญหา
+ * ตอบรายล็อต ไม่ใช่รายสินค้า — หน้า 05.1.1 ต้องบอกได้ว่าของที่ต้องจัดการมีกี่ชิ้น
+ * ไม่ใช่แค่ว่าสินค้าตัวนี้มีปัญหา
  * น้ำมันเครื่อง 40 ขวดที่หมดอายุ 3 ขวด กับที่หมดอายุทั้ง 40 ขวด ต้องอ่านออกว่าต่างกัน
  *
  * ล็อตที่รับเข้าคนละครั้งแต่หมดอายุวันเดียวกันถูกรวมเป็นบรรทัดเดียว —
@@ -158,24 +109,25 @@ export async function listExpiringLotsWith(
 ): Promise<ExpiringLotRow[]> {
   const { rows } = await c.query(
     `${REMAINING_LOTS_SQL}
-     select r.product_id, p.code, p.name, p.unit, p.last_cost,
+     select r.product_id, p.code, p.name, p.unit,
             g.name as category_name,
             r.expires_on::text as expires_on,
             (r.expires_on - current_date)::int as days_left,
-            sum(r.qty) as qty
+            sum(r.qty) as qty,
+            sum(r.qty * r.unit_cost) as value
        from remaining r
        join products p on p.id = r.product_id
        left join product_categories g on g.id = p.category_id
       where p.active
         and r.expires_on <= current_date + ($1::int * interval '1 day')
-      group by r.product_id, p.code, p.name, p.unit, p.last_cost, g.name, r.expires_on
+      group by r.product_id, p.code, p.name, p.unit, g.name, r.expires_on
       order by r.expires_on, p.code`,
     [warnDays],
   );
 
   return rows.map((r) => {
     const qty = Number(r.qty ?? 0);
-    const unitCost = Number(r.last_cost ?? 0);
+    const value = Math.round(Number(r.value ?? 0) * 100) / 100;
     return {
       productId: r.product_id,
       code: r.code,
@@ -185,8 +137,10 @@ export async function listExpiringLotsWith(
       expiresOn: r.expires_on,
       daysLeft: Number(r.days_left),
       qty,
-      unitCost,
-      value: Math.round(qty * unitCost * 100) / 100,
+      /* ต้นทุนของล็อตนั้นเอง ไม่ใช่ทุนล่าสุดของสินค้า — ของที่ซื้อมาแพงขึ้นทีหลัง
+         ไม่ควรทำให้ล็อตเก่าที่กำลังจะหมดอายุดูมีมูลค่ามากกว่าที่จ่ายไปจริง */
+      unitCost: qty === 0 ? 0 : Math.round((value / qty) * 100) / 100,
+      value,
     };
   });
 }
@@ -216,7 +170,7 @@ export async function expiringSummaryWith(c: Client): Promise<ExpirySummary> {
     `${REMAINING_LOTS_SQL}
      select count(*)::int as n,
             count(*) filter (where r.expires_on < current_date)::int as past,
-            coalesce(sum(r.qty * p.last_cost), 0) as value
+            coalesce(sum(r.qty * r.unit_cost), 0) as value
        from remaining r
        join products p on p.id = r.product_id
        join tenants t on t.id = current_tenant_id()

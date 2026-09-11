@@ -18,4 +18,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '013_ops_grants.sql',
   '014_shop_bank.sql',
   '015_expiry.sql',
+  '016_count_cost.sql',
 ];

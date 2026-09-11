@@ -13,8 +13,11 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { makeLegacy } from './legacy.generated.mjs';
 import {
-  apDueOf, arDue, exTotals, poTotals, profitAndLoss, recTotals, salesDocs, totalsOf, vatChain,
+  apDueOf, arDue, exTotals, poTotals, recTotals, salesDocs, totalsOf, vatChain,
 } from '../src/index.js';
+/* สูตรงบของรุ่น 6.4 — นำเข้าจากไฟล์ตรง ๆ เพราะไม่ได้อยู่ใน index.ts อีกแล้ว
+   ดูคำเตือนในไฟล์นั้นว่าทำไมมันไม่ใช่งบจริงของระบบ */
+import { profitAndLoss } from '../src/pl.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(here, '../../../fixtures/demo-backup.json');
@@ -87,7 +90,9 @@ describe('ไฟล์สำรองข้อมูลชุดทดสอบ'
     expect(mine.length).toBeGreaterThanOrEqual(12);   // ข้อมูลย้อนหลัง 1 ปีเต็ม
   });
 
-  it('งบกำไรขาดทุนคำนวณจากมูลค่าก่อน VAT และไม่นับซื้อสินทรัพย์เป็นค่าใช้จ่าย', () => {
+  /* พิสูจน์ว่าเราอ่านสูตรของรุ่นเดิมถูก ไม่ใช่ว่าระบบเราคิดงบแบบนี้ —
+     งบจริงคิดต้นทุนขายจากของที่ขายออกไปจริงแบบเข้าก่อนออกก่อน ดู reports-pl.ts */
+  it('สูตรงบของรุ่น 6.4 ที่เก็บไว้เทียบ ให้ผลตรงกับ renderFinPL() ทุกบรรทัด', () => {
     const sales = salesDocs(db.invoices, db.receipts);
     const pl = profitAndLoss({ sales, purchases: db.purchases, expenses: db.expenses }, ctx);
 

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import {
-  expiringSummaryWith, listExpiringLotsWith, listExpiringWith, nearestExpiryWith,
+  expiringSummaryWith, listExpiringLotsWith, nearestExpiryWith,
 } from '../src/lib/expiry';
 import { lotsOfProduct } from '../src/lib/stock-cost';
 import { freshSchema } from '../../../tools/test-schema.mjs';
@@ -176,35 +176,6 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
     const m = await nearestExpiryWith(app);
     await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
     expect(m.has(prod)).toBe(false);
-  });
-
-  describe('รายการของใกล้หมดอายุ', () => {
-    it('เกินเกณฑ์ — ไม่ขึ้นในรายการ', async () => {
-      await receive(prod, 5, '2026-01-01', '2099-01-01');
-      expect(await listExpiringWith(app, 60)).toEqual([]);
-    });
-
-    it('หมดอายุไปแล้ว — ขึ้น พร้อมจำนวนวันติดลบ', async () => {
-      await receive(prod, 5, '2020-01-01', '2020-06-01');
-      const rows = await listExpiringWith(app, 60);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]!.code).toBe('OIL-01');
-      expect(rows[0]!.daysLeft).toBeLessThan(0);
-      expect(rows[0]!.qtyOnHand).toBe(5);
-    });
-
-    it('สินค้าที่ปิดใช้งานแล้ว ไม่มาเตือนให้รก', async () => {
-      await receive(prod, 5, '2020-01-01', '2020-06-01');
-      await app.query(`update products set active = false where id = $1`, [prod]);
-      expect(await listExpiringWith(app, 60)).toEqual([]);
-    });
-
-    it('เกณฑ์ที่ส่งเข้ามามีผลจริง', async () => {
-      const far = new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 10);
-      await receive(prod, 5, '2026-01-01', far);
-      expect(await listExpiringWith(app, 30)).toEqual([]);
-      expect(await listExpiringWith(app, 90)).toHaveLength(1);
-    });
   });
 
   /*

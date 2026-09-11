@@ -17,7 +17,7 @@ import pg from 'pg';
 // ถ้าปล่อยให้เป็น Date แล้วเรียก toISOString() จะเพี้ยนไป 1 วันในเขตเวลาไทย (UTC+7)
 pg.types.setTypeParser(1082, (v) => v);
 import {
-  arDue, exTotals, poTotals, recTotals, profitAndLoss, salesDocs, vatChain,
+  arDue, exTotals, poTotals, recTotals, salesDocs, vatChain,
 } from '@drivegolight/core';
 import { importBackup, normalizeBackup } from '../src/index.js';
 import type { ImportResult } from '../src/index.js';
@@ -198,22 +198,29 @@ describe.skipIf(!DB_URL)('นำเข้าไฟล์สำรองข้อ
     expect(checked).toBeGreaterThanOrEqual(10);
   });
 
-  it('รายได้ในงบกำไรขาดทุนตรงกับที่ core คำนวณ', async () => {
-    const pl = profitAndLoss(
-      { sales: salesDocs(db.invoices, db.receipts), purchases: db.purchases, expenses: db.expenses },
-      ctx,
-    );
+  /*
+   * เทียบยอดก่อน VAT ของใบซื้อและค่าใช้จ่ายที่นำเข้าไป กับที่ core คำนวณจากไฟล์ต้นทาง
+   *
+   * เคยเทียบผ่าน profitAndLoss() ของ core ซึ่งเป็นสูตรงบของรุ่น 6.4 —
+   * อ่านแล้วเหมือนกำลังบอกว่าเงินที่จ่ายซื้อของคือต้นทุนขาย ทั้งที่ระบบไม่ได้คิดแบบนั้น
+   * ตรงนี้สนใจแค่ว่า "ยอดที่นำเข้าไปตรงกับยอดในไฟล์ไหม" จึงบวกเองตรง ๆ ชัดกว่า
+   */
+  it('ยอดก่อน VAT ของใบซื้อและค่าใช้จ่ายที่นำเข้า ตรงกับที่ core คำนวณจากไฟล์', async () => {
+    const buys = db.purchases.reduce((s: number, p: any) => s + poTotals(p, ctx).net, 0);
+    const opsNet = db.expenses
+      .filter((e: any) => e.cat !== 'asset')
+      .reduce((s: number, e: any) => s + exTotals(e, ctx).net, 0);
 
     const { rows } = await app.query(`
-      select round(sum(net_amount), 2) as cogs from documents where kind = 'PO'
+      select round(sum(net_amount), 2) as buys from documents where kind = 'PO'
     `);
-    expect(n(rows[0].cogs)).toBeCloseTo(Math.round(pl.cogs * 100) / 100, 2);
+    expect(n(rows[0].buys)).toBeCloseTo(Math.round(buys * 100) / 100, 2);
 
     const ops = await app.query(`
       select round(sum(net_amount), 2) as ops
       from documents where kind = 'EX' and expense_cat <> 'asset'
     `);
-    expect(n(ops.rows[0].ops)).toBeCloseTo(Math.round(pl.opsTotal * 100) / 100, 2);
+    expect(n(ops.rows[0].ops)).toBeCloseTo(Math.round(opsNet * 100) / 100, 2);
   });
 
   it('สายเอกสาร ใบเสนอราคา → ใบส่งมอบ → ใบเสร็จ ถูกผูกไว้ครบ', async () => {

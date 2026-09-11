@@ -1,5 +1,5 @@
 import type pg from 'pg';
-import { consumeStock, receiveStock } from './stock-cost';
+import { BOOK_UNIT_COST_SQL, BOOK_VALUE_SQL, consumeStock, receiveStock } from './stock-cost';
 
 /**
  * ใบตรวจนับสต๊อก — เดินนับของจริงในชั้นวางแล้วปรับยอดในระบบให้ตรง
@@ -72,6 +72,21 @@ export interface StockCount extends CountRow {
   items: CountItem[];
 }
 
+/**
+ * มูลค่าส่วนต่างของบรรทัดหนึ่ง — **เป็นเงินที่ตัดจริง ไม่ใช่ส่วนต่าง × ต้นทุนต่อหน่วย**
+ *
+ * ของที่หายไปถูกตัดตามล็อตแบบเข้าก่อนออกก่อน หาย 15 ชิ้นอาจเป็น 10 ที่ 100
+ * บวก 5 ที่ 150 การคูณด้วยราคาต่อหน่วยราคาเดียวจึงไม่มีวันตรงกับที่ลงงบ
+ *
+ * ใบที่ยังเป็นร่างยังไม่มีอะไรถูกตัด และใบเก่าที่ปรับยอดไปก่อนมีคอลัมน์นี้
+ * ก็ไม่มีค่าเก็บไว้ — สองกรณีนั้นถอยไปประมาณจากต้นทุนต่อหน่วยเหมือนเดิม
+ * ดีกว่าแสดงศูนย์ซึ่งอ่านว่า "ตรวจแล้วไม่มีส่วนต่าง"
+ */
+const DIFF_VALUE_SQL = `
+  case when i.cost_amount is not null
+       then sign(i.counted_qty - i.system_qty) * i.cost_amount
+       else (i.counted_qty - i.system_qty) * i.unit_cost end`;
+
 /*
  * `off_lines` กับ `off_value` คิดเฉพาะบรรทัดที่กรอกแล้วและต่างจากระบบเกินค่าคลาดเคลื่อน
  * — เงื่อนไขชุดเดียวกับที่หน้ารายละเอียดใช้ ตัวเลขสองหน้าจึงตรงกันเสมอ
@@ -87,7 +102,7 @@ const HEAD = `
          coalesce(sum(
            case when i.counted_qty is not null
                  and abs(i.counted_qty - i.system_qty) > ${COUNT_EPS}
-                then (i.counted_qty - i.system_qty) * i.unit_cost else 0 end
+                then ${DIFF_VALUE_SQL} else 0 end
          ), 0) as off_value
   from stock_counts c
   left join stock_count_items i on i.count_id = c.id`;
@@ -148,7 +163,7 @@ export async function listCounts(
      from stock_counts c
      left join lateral (
        select count(*)::int as off_lines,
-              coalesce(sum((i.counted_qty - i.system_qty) * i.unit_cost), 0) as off_value
+              coalesce(sum(${DIFF_VALUE_SQL}), 0) as off_value
        from stock_count_items i
        where i.count_id = c.id and c.status = 'applied'
          and i.counted_qty is not null
@@ -179,13 +194,14 @@ export async function getCount(c: Client, id: string): Promise<StockCount | null
   const applied = head.status === 'applied';
 
   const items = await c.query(
-    `select i.id, i.product_id, i.counted_qty, i.note,
+    `select i.id, i.product_id, i.counted_qty, i.note, i.cost_amount,
             p.code, p.name, p.unit,
             case when $2 then i.system_qty else coalesce(s.qty_on_hand, 0) end as system_qty,
-            case when $2 then i.unit_cost  else p.last_cost end as unit_cost
+            case when $2 then i.unit_cost  else ${BOOK_UNIT_COST_SQL} end as unit_cost
      from stock_count_items i
      join products p on p.id = i.product_id
      left join product_stock s on s.product_id = i.product_id
+     left join ${BOOK_VALUE_SQL} bv on bv.product_id = i.product_id
      where i.count_id = $1
      order by i.line_no`,
     [id, applied],
@@ -196,6 +212,9 @@ export async function getCount(c: Client, id: string): Promise<StockCount | null
     const system = r.system_qty === null ? null : n(r.system_qty);
     const cost = n(r.unit_cost);
     const diff = (counted === null || system === null) ? null : round3(counted - system);
+    /* เป็นเงินที่ตัดจริงถ้ามี ไม่งั้นประมาณจากต้นทุนต่อหน่วย — ดู DIFF_VALUE_SQL */
+    const booked = r.cost_amount === null || r.cost_amount === undefined
+      ? null : n(r.cost_amount);
     return {
       id: r.id,
       productId: r.product_id,
@@ -207,7 +226,9 @@ export async function getCount(c: Client, id: string): Promise<StockCount | null
       unitCost: cost,
       note: r.note ?? '',
       diff,
-      diffValue: diff === null ? null : round2(diff * cost),
+      diffValue: diff === null ? null
+        : booked === null ? round2(diff * cost)
+        : round2(Math.sign(diff) * booked),
     };
   });
 
@@ -459,10 +480,12 @@ export async function applyCount(
   /* ยอดสด ณ ตอนนี้ ไม่ใช่ตอนเปิดใบ · เฉพาะบรรทัดที่กรอกแล้วเท่านั้น */
   const { rows } = await c.query(
     `select i.id, i.product_id, i.counted_qty,
-            coalesce(s.qty_on_hand, 0) as system_qty, p.last_cost
+            coalesce(s.qty_on_hand, 0) as system_qty,
+            ${BOOK_UNIT_COST_SQL} as unit_cost
      from stock_count_items i
      join products p on p.id = i.product_id
      left join product_stock s on s.product_id = i.product_id
+     left join ${BOOK_VALUE_SQL} bv on bv.product_id = i.product_id
      where i.count_id = $1 and i.counted_qty is not null
      order by i.line_no
      for update of i`,
@@ -476,7 +499,7 @@ export async function applyCount(
   for (const r of rows) {
     const counted = n(r.counted_qty);
     const system = n(r.system_qty);
-    const cost = n(r.last_cost);
+    const cost = n(r.unit_cost);
     const diff = round3(counted - system);
 
     /* ตรึงยอดระบบและต้นทุนลงทุกบรรทัดที่กรอกแล้ว แม้บรรทัดที่ตรงกันพอดี
@@ -488,22 +511,36 @@ export async function applyCount(
 
     if (Math.abs(diff) <= COUNT_EPS) continue;   /* ตรงกับระบบ ไม่แตะเลย */
 
+    /* เป็นเงินที่ตัดหรือรับเข้าจริงของบรรทัดนี้ เป็นบวกเสมอ
+       เครื่องหมายอยู่ที่ส่วนต่าง เหมือน stock_moves.cost_amount */
+    let booked: number;
+
     if (diff > 0) {
-      /* ของโผล่มา ไม่รู้ว่ามาจากล็อตไหน ลงเป็นล็อตใหม่ที่ต้นทุนล่าสุด */
+      /* ของโผล่มา ไม่รู้ว่ามาจากล็อตไหน ตีมูลค่าเท่ากับของที่มีอยู่ในคลังตอนนี้
+         (มูลค่าตามบัญชีหารจำนวน) ไม่ใช่ทุนล่าสุด ซึ่งอาจเป็นราคาที่ไม่เคยจ่ายจริง
+         กับของกองนี้เลย และจะทำให้มูลค่าสต๊อกพองขึ้นจากการตรวจนับ */
+      booked = round2(diff * cost);
       await receiveStock(c, {
-        productId: r.product_id, qty: diff, costAmount: round2(diff * cost),
+        productId: r.product_id, qty: diff, costAmount: booked,
         movedOn, reason: 'count', note: label, userId,
       });
       up++;
-      value += diff * cost;
+      value += booked;
     } else {
       /* ของหาย ตัดตามล็อตจริงเพื่อให้รู้ว่าเสียเงินไปเท่าไร */
-      const lost = await consumeStock(c, {
+      booked = await consumeStock(c, {
         productId: r.product_id, qty: -diff, movedOn,
         reason: 'count', note: label, userId,
       });
-      value -= lost;
+      value -= booked;
     }
+
+    /* เก็บเป็นเงินที่เกิดขึ้นจริงลงบรรทัดด้วย — หน้ารายการจะได้ไม่ต้องเดา
+       จากส่วนต่าง × ต้นทุนต่อหน่วย ซึ่งไม่ตรงกับงบเมื่อของมาจากหลายล็อต */
+    await c.query(
+      `update stock_count_items set cost_amount = $2 where id = $1`,
+      [r.id, round2(booked).toFixed(2)],
+    );
     adjusted++;
   }
 

@@ -4,7 +4,7 @@ import { stockFlags, today, type StockFlag } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
 import { listExpiringLotsWith, REMAINING_LOTS_SQL, type ExpiringLotRow } from './expiry';
-import { consumeStock, receiveStock } from './stock-cost';
+import { BOOK_VALUE_SQL, consumeStock, receiveStock } from './stock-cost';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
@@ -110,13 +110,16 @@ export async function listProducts(opts: {
 
     const whereSql = where.length ? `where ${where.join(' and ')}` : '';
 
+    /* มูลค่าคิดตามบัญชี ไม่ใช่ คงเหลือ × ทุนล่าสุด — ดู BOOK_VALUE_SQL
+       และต้องคิดจาก "ทุกแถวที่ตรงเงื่อนไข" ไม่ใช่เฉพาะหน้าที่เปิดอยู่ */
     const totalRes = await c.query(
       `${REMAINING_LOTS_SQL}
        select count(*)::int as c,
-              coalesce(sum(s.qty_on_hand * p.last_cost), 0) as value
+              coalesce(sum(bv.value), 0) as value
        from products p
        join product_stock s on s.product_id = p.id
        join tenants t on t.id = current_tenant_id()
+       left join ${BOOK_VALUE_SQL} bv on bv.product_id = p.id
        left join (select product_id, min(expires_on) as nearest_expiry
                     from remaining group by product_id) x on x.product_id = p.id
        ${whereSql}`,

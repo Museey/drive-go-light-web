@@ -68,7 +68,7 @@ export default async function StockPage({
       title="ทะเบียนสินค้า"
       sub={
         `${total.toLocaleString('en-US')} รายการ` +
-        (show('cost') ? ` · มูลค่าสต๊อกตามต้นทุน ${baht(stockValue)} บาท` : '')
+        (show('cost') ? ` · มูลค่าสต๊อกตามบัญชี ${baht(stockValue)} บาท` : '')
       }
       actions={
         <div className="tag-row">
@@ -136,7 +136,7 @@ export default async function StockPage({
                   {show('qty') ? <th className="num">คงเหลือ</th> : null}
                   {show('min') ? <th className="num">จุดสั่ง</th> : null}
                   {show('max') ? <th className="num">สูงสุด</th> : null}
-                  {show('cost') ? <th className="num">ทุน</th> : null}
+                  {show('cost') ? <th className="num" title="ราคาซื้อครั้งล่าสุด ใช้ตั้งราคาและประมาณเงินที่ต้องใช้สั่งของ — ไม่ใช่ตัวที่ใช้คิดมูลค่าสต๊อก">ทุนล่าสุด</th> : null}
                   <th className="num">ราคา A</th>
                   {show('pB') ? <th className="num">ราคา B</th> : null}
                   {show('pC') ? <th className="num">ราคา C</th> : null}
@@ -199,6 +199,18 @@ export default async function StockPage({
             </table>
           </div>
         )}
+
+        {/* คนอ่านตารางจะเอาคอลัมน์ทุนล่าสุดคูณคงเหลือเองแล้วได้ไม่ตรงกับยอดรวมด้านบน
+            ถ้าไม่บอกว่าสองอย่างนี้คิดคนละแบบและเพราะอะไร */}
+        {show('cost') ? (
+          <div className="body" style={{ paddingBottom: 0 }}>
+            <div className="note">
+              <b>มูลค่าสต๊อกคิดตามบัญชี</b> — ต้นทุนของที่รับเข้าจริง ลบต้นทุนของที่ตัดออกไปแล้ว
+              ตามลำดับเข้าก่อนออกก่อน จึงไม่เท่ากับคงเหลือคูณทุนล่าสุดเมื่อราคาซื้อเปลี่ยนไป
+              ส่วนคอลัมน์ <b>ทุนล่าสุด</b> คือราคาซื้อครั้งหลังสุด ใช้ตั้งราคาขายและประมาณเงินที่ต้องใช้สั่งของ
+            </div>
+          </div>
+        ) : null}
 
         <div className="pager">
           <span>หน้า {page} จาก {lastPage}</span>
