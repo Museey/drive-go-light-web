@@ -130,11 +130,26 @@ export function ProductForm({
           <input className="in mono" id="qtyMax" name="qtyMax" inputMode="decimal"
                  defaultValue={v('qtyMax', product?.qtyMax ?? 0)} />
         </div>
+        {/* อายุการเก็บเป็นตัวช่วยกรอก ไม่ได้ใช้ตัดสินอะไรตอนตัดสต๊อก
+            ตัวที่ใช้จริงคือวันหมดอายุของแต่ละล็อตที่รับเข้า */}
+        <div className="field">
+          <label htmlFor="shelfLifeMonths">อายุการเก็บ (เดือน)</label>
+          <input className="in mono" id="shelfLifeMonths" name="shelfLifeMonths"
+                 inputMode="numeric"
+                 defaultValue={v('shelfLifeMonths', product?.shelfLifeMonths ?? '')} />
+          <span className="hint">
+            เว้นว่างถ้าของไม่มีวันหมดอายุ · ใส่แล้วระบบเติมวันหมดอายุให้ตอนรับของ
+          </span>
+        </div>
         {isNew ? (
           <div className="field">
             <label htmlFor="openingQty">ยอดยกมา</label>
             <input className="in mono" id="openingQty" name="openingQty" inputMode="decimal" defaultValue={v('openingQty', 0)} />
             <span className="hint">จำนวนที่มีอยู่ในร้านตอนนี้</span>
+            <label htmlFor="openingExpiresOn" style={{ marginTop: 8 }}>วันหมดอายุของยอดยกมา</label>
+            <input className="in mono" id="openingExpiresOn" name="openingExpiresOn" type="date"
+                   defaultValue={v('openingExpiresOn', '')} />
+            <span className="hint">เว้นว่างได้ถ้าของไม่มีวันหมดอายุ</span>
           </div>
         ) : (
           <div className="field">

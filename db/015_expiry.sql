@@ -35,6 +35,16 @@ create index if not exists stock_moves_expiry_idx
   on stock_moves (tenant_id, expires_on)
   where expires_on is not null;
 
+-- วันหมดอายุที่คีย์ไว้บนบรรทัดใบซื้อ
+--
+-- **ต้องเก็บที่นี่ด้วย ไม่ใช่แค่ที่ stock_moves** — การแก้ใบซื้อลบแถวสต๊อกทิ้ง
+-- แล้วสร้างใหม่จากบรรทัดในใบ ถ้าวันหมดอายุอยู่แค่ที่แถวสต๊อก เปิดใบมาแก้อะไรก็ได้
+-- แล้วกดบันทึก วันหมดอายุจะหายไปเงียบ ๆ โดยไม่มีอะไรบอก
+alter table doc_items add column if not exists expires_on date;
+
+comment on column doc_items.expires_on is
+  'วันหมดอายุที่คีย์บนบรรทัดใบซื้อ — ต้นทางของ stock_moves.expires_on';
+
 -- เกณฑ์ว่ากี่วันถึงนับว่าใกล้หมดอายุ — อู่ขายเร็วอยากได้ 30 อู่เก็บนานอยากได้ 90
 alter table tenants add column if not exists expiry_warn_days integer not null default 60;
 

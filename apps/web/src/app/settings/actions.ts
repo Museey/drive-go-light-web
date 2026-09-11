@@ -34,6 +34,13 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
   const vatRate = money(fd, 'vatRate');
   if (vatRate < 0 || vatRate > 30) return { error: 'อัตราภาษีมูลค่าเพิ่มไม่สมเหตุสมผล', field: 'vatRate' };
 
+  /* ฐานบังคับ 1–3650 อยู่แล้ว ดักที่นี่ด้วยเพื่อให้ข้อความอ่านรู้เรื่อง
+     ไม่ใช่ชื่อ constraint ดิบ ๆ โผล่ขึ้นหน้าจอ */
+  const warnDays = Math.round(money(fd, 'expiryWarnDays')) || 60;
+  if (warnDays < 1 || warnDays > 3650) {
+    return { error: 'เกณฑ์เตือนใกล้หมดอายุต้องอยู่ระหว่าง 1 ถึง 3650 วัน', field: 'expiryWarnDays' };
+  }
+
   const logoUrl = str(fd, 'logoUrl');
   if (logoUrl && logoUrl.length > MAX_LOGO_BYTES) {
     return {
@@ -59,6 +66,7 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
       bankName: str(fd, 'bankName'),
       bankAccountNo: str(fd, 'bankAccountNo'),
       bankAccountName: str(fd, 'bankAccountName'),
+      expiryWarnDays: warnDays,
       logoUrl,
     });
   } catch (err) {

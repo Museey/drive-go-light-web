@@ -3,7 +3,9 @@
 import { useActionState, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
-import { bahttext, EXPENSE_CATS, exTotals, poTotals, type VatMode } from '@drivegolight/core';
+import {
+  addMonths, bahttext, EXPENSE_CATS, exTotals, poTotals, type VatMode,
+} from '@drivegolight/core';
 import { saveBuyDocAction, searchVendorsAction } from './actions';
 import { searchProductsAction } from '../income/actions';
 import type { FormResult } from '@/lib/mutate';
@@ -16,6 +18,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const emptyItem = (): BuyItemInput => ({
   productId: null, code: '', oem: '', name: '', unit: '', qty: 1, unitPrice: 0,
+  expiresOn: null,
 });
 
 function Submit({ label }: { label: string }) {
@@ -94,6 +97,8 @@ export function BuyEditor({
         items: [...d.items, {
           productId: p.id, code: p.code, oem: p.oem, name: p.name, unit: p.unit,
           qty: 1, unitPrice: 0,
+          /* เติมวันหมดอายุให้จากอายุการเก็บของสินค้า แก้รายบรรทัดได้ถ้าของจริงไม่ตรง */
+          expiresOn: addMonths(d.docDate, p.shelfLifeMonths),
         }],
       };
     });
@@ -318,6 +323,7 @@ export function BuyEditor({
                   <th style={{ width: 70 }}>หน่วย</th>
                   <th style={{ width: 110 }} className="num">ราคา/หน่วย</th>
                   <th style={{ width: 110 }} className="num">จำนวนเงิน</th>
+                  {isPurchase ? <th style={{ width: 130 }}>วันหมดอายุ</th> : null}
                   <th style={{ width: 44 }} />
                 </tr>
               </thead>
@@ -353,6 +359,16 @@ export function BuyEditor({
                              onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) || 0 })} />
                     </td>
                     <td className="num">{baht(round2(it.qty * it.unitPrice))}</td>
+                    {isPurchase ? (
+                      <td>
+                        {/* เฉพาะบรรทัดที่ผูกทะเบียนสินค้า — บรรทัดที่พิมพ์ชื่อเองไม่เข้าสต๊อก
+                            จึงไม่มีล็อตให้ผูกวันหมดอายุ */}
+                        {it.productId ? (
+                          <input className="in mono" type="date" value={it.expiresOn ?? ''}
+                                 onChange={(e) => setItem(i, { expiresOn: e.target.value || null })} />
+                        ) : <span className="subtle">—</span>}
+                      </td>
+                    ) : null}
                     <td>
                       <button className="btn danger" type="button" style={{ padding: '2px 8px' }}
                               onClick={() => setDoc((d) => ({ ...d, items: d.items.filter((_, j) => j !== i) }))}>

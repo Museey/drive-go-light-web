@@ -42,7 +42,10 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
       qtyMin: qty(fd, 'qtyMin'),
       qtyMax: qty(fd, 'qtyMax'),
       active: flag(fd, 'active'),
+      /* ว่าง = ไม่มีวันหมดอายุ ไม่ใช่ 0 เดือน — 0 จะทำให้ของหมดอายุทันทีที่รับเข้า */
+      shelfLifeMonths: Math.round(money(fd, 'shelfLifeMonths')) || null,
       openingQty: id ? undefined : qty(fd, 'openingQty'),
+      openingExpiresOn: id ? undefined : (str(fd, 'openingExpiresOn') || null),
     });
   } catch (err) {
     return {

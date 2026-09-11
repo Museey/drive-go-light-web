@@ -316,13 +316,16 @@ export interface PickedProduct {
   priceB: number;
   priceC: number;
   qtyOnHand: number;
+  /** อายุการเก็บ ใช้เติมวันหมดอายุให้ตอนรับของเข้าใบซื้อ — ว่าง = ไม่มีวันหมดอายุ */
+  shelfLifeMonths: number | null;
 }
 
 export async function searchProducts(q: string, limit = 15): Promise<PickedProduct[]> {
   const term = q.trim();
   return query(async (c) => {
     const { rows } = await c.query(
-      `select p.id, p.code, p.oem, p.name, p.unit, p.price_a, p.price_b, p.price_c, s.qty_on_hand
+      `select p.id, p.code, p.oem, p.name, p.unit, p.price_a, p.price_b, p.price_c,
+              p.shelf_life_months, s.qty_on_hand
        from products p join product_stock s on s.product_id = p.id
        where p.active and ($1 = '' or p.code ilike $2 or p.name ilike $2 or p.oem ilike $2)
        order by p.code limit $3`,
@@ -332,6 +335,7 @@ export async function searchProducts(q: string, limit = 15): Promise<PickedProdu
       id: r.id, code: r.code, oem: r.oem, name: r.name, unit: r.unit,
       priceA: n(r.price_a), priceB: n(r.price_b), priceC: n(r.price_c),
       qtyOnHand: n(r.qty_on_hand),
+      shelfLifeMonths: r.shelf_life_months ?? null,
     }));
   });
 }

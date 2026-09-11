@@ -58,3 +58,25 @@ export const monthKey = (dateIso: string): string => dateIso.slice(0, 7);
 export function inRange(d: string, from?: string, to?: string): boolean {
   return (!from || d >= from) && (!to || d <= to);
 }
+
+/**
+ * บวกเดือนจากวันที่ — ใช้เติมวันหมดอายุจากอายุการเก็บของสินค้า
+ *
+ * **ตกวันที่ไม่มีจริงให้เลื่อนมาเป็นวันสุดท้ายของเดือนนั้น** เช่น 31 มกราคม + 1 เดือน
+ * ได้ 28 กุมภาพันธ์ ไม่ใช่ 3 มีนาคม แบบที่ Date ของ JS ทำเอง
+ *
+ * เรื่องนี้สำคัญกับวันหมดอายุ — ของที่ซื้อสิ้นเดือนไม่ควรได้วันหมดอายุ
+ * ที่ข้ามไปเดือนถัดไปโดยไม่มีใครตั้งใจ
+ *
+ * `months` เป็นศูนย์หรือว่าง = ไม่มีวันหมดอายุ คืน null
+ */
+export function addMonths(dateIso: string, months: number | null | undefined): string | null {
+  if (!months) return null;
+  const [y, m, d] = dateIso.split('-').map(Number);
+  if (!y || !m || !d) return null;
+
+  const target = new Date(Date.UTC(y, m - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, lastDay));
+  return target.toISOString().slice(0, 10);
+}

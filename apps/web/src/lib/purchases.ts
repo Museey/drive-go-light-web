@@ -19,6 +19,12 @@ export interface BuyItemInput {
   unit: string;
   qty: number;
   unitPrice: number;
+  /**
+   * วันหมดอายุของล็อตที่รับเข้าจากบรรทัดนี้ — ว่าง = ไม่มีวันหมดอายุ
+   *
+   * เก็บที่ล็อต ไม่ใช่ที่สินค้า เพราะของรหัสเดียวกันที่ซื้อคนละครั้งหมดอายุคนละวัน
+   */
+  expiresOn?: string | null;
 }
 
 export interface BuyDocInput {
@@ -157,10 +163,10 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
     for (const [i, it] of input.items.entries()) {
       await c.query(
         `insert into doc_items (tenant_id, doc_id, line_no, product_id, code, oem, name, unit,
-                                qty, unit_price, is_service)
-         values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,false)`,
+                                qty, unit_price, is_service, expires_on)
+         values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,false,$10)`,
         [id, i + 1, it.productId, it.code, it.oem, it.name || '(ไม่ระบุชื่อรายการ)',
-         it.unit, it.qty, money(it.unitPrice)],
+         it.unit, it.qty, money(it.unitPrice), it.expiresOn || null],
       );
     }
 
@@ -181,11 +187,11 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
         if (!it.productId || it.qty === 0) continue;
         await c.query(
           `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta, unit_cost,
-                                    cost_amount, reason, doc_id, created_by)
-           values (current_tenant_id(),$1,$2,$3,$4,$5,'purchase',$6,$7)`,
+                                    cost_amount, reason, doc_id, created_by, expires_on)
+           values (current_tenant_id(),$1,$2,$3,$4,$5,'purchase',$6,$7,$8)`,
           [
             it.productId, input.docDate, it.qty, money(it.unitPrice),
-            money(it.qty * it.unitPrice), id, userId,
+            money(it.qty * it.unitPrice), id, userId, it.expiresOn || null,
           ],
         );
         if (it.unitPrice > 0) {
@@ -366,6 +372,8 @@ export async function loadBuyDoc(id: string): Promise<BuyDocInput | null> {
       items: items.rows.map((r) => ({
         productId: r.product_id, code: r.code, oem: r.oem, name: r.name, unit: r.unit,
         qty: n(r.qty), unitPrice: n(r.unit_price),
+        /* คืนวันหมดอายุกลับเข้าฟอร์ม ไม่งั้นเปิดใบมาแก้แล้วกดบันทึก ค่าจะหายเงียบ ๆ */
+        expiresOn: r.expires_on ? String(r.expires_on).slice(0, 10) : null,
       })),
       payments: [],
     };

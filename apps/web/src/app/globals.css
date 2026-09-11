@@ -324,6 +324,10 @@ a.chip.ok:hover { background: #E3F3EA; border-color: #9FD1B6; }
 .chip.flag-min { color: #6B4E00; border-color: #E8CE79; background: #FCF3D8; }
 .chip.flag-max { color: #8A2C24; border-color: #F0CBC7; background: #FBE9E7; }
 .chip.flag-dead { color: #5F4222; border-color: #DCC7AB; background: #F3EADF; }
+/* วันหมดอายุ — ใกล้หมดใช้สีส้มเตือน หมดแล้วใช้สีเดียวกับยอดค้างเกินกำหนด
+   เพราะทั้งคู่คือ "เลยเส้นตายไปแล้ว" ซึ่งผู้ใช้อ่านสีนี้เป็นอยู่แล้ว */
+.chip.flag-expiring { color: #8A4B00; border-color: #F0C999; background: #FDF0E2; }
+.chip.flag-expired  { color: #8A2C24; border-color: #E8A9A3; background: #FBE3E0; }
 
 .btn {
   display: inline-block;

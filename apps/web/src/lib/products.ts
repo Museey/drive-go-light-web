@@ -3,6 +3,7 @@ import type pg from 'pg';
 import { stockFlags, today, type StockFlag } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
+import { REMAINING_LOTS_SQL } from './expiry';
 import { consumeStock, receiveStock } from './stock-cost';
 
 const n = (v: unknown): number => Number(v ?? 0);
@@ -31,6 +32,10 @@ export interface ProductRow {
   qtyMax: number;
   qtyOnHand: number;
   lastMoveOn: string | null;
+  /** อายุการเก็บเป็นเดือน — ว่าง = ไม่มีวันหมดอายุ */
+  shelfLifeMonths: number | null;
+  /** วันหมดอายุที่ใกล้ที่สุดของล็อตที่ยังเหลือของ */
+  nearestExpiry: string | null;
   active: boolean;
   /** ป้ายสถานะ — ถึงจุดสั่งซื้อ เกินระดับสูงสุด ไม่เคลื่อนไหว */
   flags: StockFlag[];
@@ -58,6 +63,10 @@ const FLAG_SQL: Record<StockFlag, string> = {
   min: 'p.qty_min > 0 and s.qty_on_hand <= p.qty_min',
   max: 'p.qty_max > 0 and s.qty_on_hand > p.qty_max',
   dead: `(s.last_move_on is null or s.last_move_on <= current_date - interval '6 months')`,
+  /* เกณฑ์วันเตือนอ่านจากข้อมูลร้าน ไม่ฝังตัวเลขไว้ตรงนี้ */
+  expiring: `x.nearest_expiry is not null and x.nearest_expiry >= current_date
+             and x.nearest_expiry <= current_date + (t.expiry_warn_days * interval '1 day')`,
+  expired: 'x.nearest_expiry is not null and x.nearest_expiry < current_date',
 };
 
 export interface ProductListResult {
@@ -102,10 +111,15 @@ export async function listProducts(opts: {
     const whereSql = where.length ? `where ${where.join(' and ')}` : '';
 
     const totalRes = await c.query(
-      `select count(*)::int as c,
+      `${REMAINING_LOTS_SQL}
+       select count(*)::int as c,
               coalesce(sum(s.qty_on_hand * p.last_cost), 0) as value
        from products p
-       join product_stock s on s.product_id = p.id ${whereSql}`,
+       join product_stock s on s.product_id = p.id
+       join tenants t on t.id = current_tenant_id()
+       left join (select product_id, min(expires_on) as nearest_expiry
+                    from remaining group by product_id) x on x.product_id = p.id
+       ${whereSql}`,
       params,
     );
 
@@ -116,10 +130,16 @@ export async function listProducts(opts: {
     if (!opts.all) params.push(size, (page - 1) * size);
 
     const { rows } = await c.query(
-      `select p.*, g.name as category_name, s.qty_on_hand, s.last_move_on
+      `${REMAINING_LOTS_SQL}
+       select p.*, g.name as category_name, s.qty_on_hand, s.last_move_on,
+              t.expiry_warn_days,
+              x.nearest_expiry::text as nearest_expiry
        from products p
        join product_stock s on s.product_id = p.id
+       join tenants t on t.id = current_tenant_id()
        left join product_categories g on g.id = p.category_id
+       left join (select product_id, min(expires_on) as nearest_expiry
+                    from remaining group by product_id) x on x.product_id = p.id
        ${whereSql}
        order by p.code
        ${limitSql}`,
@@ -138,8 +158,12 @@ function toProductRow(r: any): ProductRow {
   const onHand = n(r.qty_on_hand);
   const min = n(r.qty_min);
   const flags = stockFlags(
-    { qtyOnHand: onHand, qtyMin: min, qtyMax: n(r.qty_max), lastMoveOn: r.last_move_on },
+    {
+      qtyOnHand: onHand, qtyMin: min, qtyMax: n(r.qty_max),
+      lastMoveOn: r.last_move_on, nearestExpiry: r.nearest_expiry ?? null,
+    },
     today(),
+    n(r.expiry_warn_days) || undefined,
   );
   return {
     id: r.id,
@@ -159,6 +183,8 @@ function toProductRow(r: any): ProductRow {
     qtyOnHand: onHand,
     lastMoveOn: r.last_move_on,
     active: r.active,
+    shelfLifeMonths: r.shelf_life_months ?? null,
+    nearestExpiry: r.nearest_expiry ?? null,
     flags,
     needReorder: flags.includes('min'),
   };
@@ -247,8 +273,17 @@ export interface ProductInput {
   qtyMin: number;
   qtyMax: number;
   active: boolean;
+  /**
+   * อายุการเก็บเป็นเดือน — ว่าง = ไม่มีวันหมดอายุ
+   *
+   * เป็นแค่ตัวช่วยเติมวันหมดอายุตอนรับของ **ไม่ได้ใช้ตัดสินอะไรตอนตัดสต๊อก**
+   * ตัวที่ใช้จริงคือวันหมดอายุของแต่ละล็อต
+   */
+  shelfLifeMonths: number | null;
   /** ยอดยกมา ใช้เฉพาะตอนสร้างสินค้าใหม่ */
   openingQty?: number;
+  /** วันหมดอายุของยอดยกมา — ใช้เฉพาะตอนสร้างสินค้าใหม่ */
+  openingExpiresOn?: string | null;
 }
 
 export async function saveProduct(input: ProductInput): Promise<string> {
@@ -257,11 +292,13 @@ export async function saveProduct(input: ProductInput): Promise<string> {
       await c.query(
         `update products set code=$2, oem=$3, name=$4, unit=$5, category_id=$6,
                 last_cost=$7, price_a=$8, price_b=$9, price_c=$10,
-                qty_min=$11, qty_max=$12, active=$13, barcode=$14
+                qty_min=$11, qty_max=$12, active=$13, barcode=$14,
+                shelf_life_months=$15
          where id=$1`,
         [input.id, input.code, input.oem, input.name, input.unit, input.categoryId,
          input.lastCost, input.priceA, input.priceB, input.priceC,
-         input.qtyMin, input.qtyMax, input.active, input.barcode.trim() || null],
+         input.qtyMin, input.qtyMax, input.active, input.barcode.trim() || null,
+         input.shelfLifeMonths],
       );
       return input.id;
     }
@@ -269,21 +306,23 @@ export async function saveProduct(input: ProductInput): Promise<string> {
     const { rows } = await c.query(
       `insert into products (tenant_id, code, oem, name, unit, category_id,
                              last_cost, price_a, price_b, price_c, qty_min, qty_max,
-                             active, barcode)
-       values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                             active, barcode, shelf_life_months)
+       values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        returning id`,
       [input.code, input.oem, input.name, input.unit, input.categoryId,
        input.lastCost, input.priceA, input.priceB, input.priceC,
-       input.qtyMin, input.qtyMax, input.active, input.barcode.trim() || null],
+       input.qtyMin, input.qtyMax, input.active, input.barcode.trim() || null,
+       input.shelfLifeMonths],
     );
     const id = rows[0].id;
 
     /* ยอดยกมาลงเป็นรายการเคลื่อนไหว ไม่ใช่คอลัมน์ — สต๊อกทั้งระบบเป็นบัญชีเดินสะพัด */
     if (input.openingQty && input.openingQty !== 0) {
       await c.query(
-        `insert into stock_moves (tenant_id, product_id, qty_delta, unit_cost, reason, note, created_by)
-         values (current_tenant_id(), $1, $2, $3, 'opening', 'ยอดยกมาตอนสร้างสินค้า', $4)`,
-        [id, input.openingQty, input.lastCost, userId],
+        `insert into stock_moves (tenant_id, product_id, qty_delta, unit_cost, reason, note,
+                                  created_by, expires_on)
+         values (current_tenant_id(), $1, $2, $3, 'opening', 'ยอดยกมาตอนสร้างสินค้า', $4, $5)`,
+        [id, input.openingQty, input.lastCost, userId, input.openingExpiresOn || null],
       );
     }
     return id;

@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { fifoAdd, fifoConsume, fifoQty, fifoReturn, type Lot } from '../src/fifo';
 import { daysUntil, stockFlags } from '../src/stock';
+import { addMonths } from '../src/date';
 
 /** ลำดับคิว แสดงเป็นต้นทุนต่อหน่วย เพื่ออ่านง่ายว่าอะไรอยู่ก่อนอะไร */
 const order = (lots: readonly Lot[]) => lots.map((l) => l.unitCost);
@@ -170,5 +171,42 @@ describe('นับวันคงเหลือ', () => {
   it('ข้ามเดือนและข้ามปีถูกต้อง', () => {
     expect(daysUntil('2027-01-01', '2026-12-31')).toBe(1);
     expect(daysUntil('2026-03-01', '2026-02-28')).toBe(1);   // 2026 ไม่ใช่ปีอธิกสุรทิน
+  });
+});
+
+describe('เติมวันหมดอายุจากอายุการเก็บ', () => {
+  it('ไม่มีอายุการเก็บ — ไม่มีวันหมดอายุ', () => {
+    expect(addMonths('2026-09-11', null)).toBeNull();
+    expect(addMonths('2026-09-11', 0)).toBeNull();
+    expect(addMonths('2026-09-11', undefined)).toBeNull();
+  });
+
+  it('บวกเดือนตรง ๆ', () => {
+    expect(addMonths('2026-09-11', 24)).toBe('2028-09-11');
+    expect(addMonths('2026-01-15', 6)).toBe('2026-07-15');
+  });
+
+  /*
+   * เคสที่ Date ของ JS ทำผิด — 31 มกราคม + 1 เดือน มันให้ 3 มีนาคม
+   * เพราะ 31 กุมภาพันธ์ไม่มีจริงแล้วมันล้นไปข้างหน้า
+   * ของที่ซื้อสิ้นเดือนไม่ควรได้วันหมดอายุข้ามเดือนโดยไม่มีใครตั้งใจ
+   */
+  it('ตกวันที่ไม่มีจริง เลื่อนมาเป็นวันสุดท้ายของเดือน', () => {
+    expect(addMonths('2026-01-31', 1)).toBe('2026-02-28');
+    expect(addMonths('2026-03-31', 1)).toBe('2026-04-30');
+    expect(addMonths('2026-08-31', 6)).toBe('2027-02-28');
+  });
+
+  it('ปีอธิกสุรทินได้ 29 กุมภาพันธ์', () => {
+    expect(addMonths('2028-01-31', 1)).toBe('2028-02-29');
+  });
+
+  it('ข้ามปีถูกต้อง', () => {
+    expect(addMonths('2026-11-30', 3)).toBe('2027-02-28');
+  });
+
+  it('วันที่ไม่ถูกรูปแบบ — คืน null ไม่ใช่วันที่มั่ว', () => {
+    expect(addMonths('', 12)).toBeNull();
+    expect(addMonths('ไม่ใช่วันที่', 12)).toBeNull();
   });
 });

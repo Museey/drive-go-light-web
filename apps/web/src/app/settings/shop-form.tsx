@@ -100,6 +100,16 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
         <span className="hint">เติมให้อัตโนมัติตอนออกใบเสร็จ แก้รายใบได้</span>
       </div>
 
+      <div className={bad('expiryWarnDays')} style={{ maxWidth: 260 }}>
+        <label htmlFor="expiryWarnDays">เตือนใกล้หมดอายุล่วงหน้า (วัน)</label>
+        <input className="in mono" id="expiryWarnDays" name="expiryWarnDays"
+               type="number" min={1} max={3650}
+               defaultValue={v('expiryWarnDays', String(shop.expiryWarnDays))} />
+        <span className="hint">
+          อู่ที่ขายของหมุนเร็วตั้ง 30 ก็พอ · อู่ที่เก็บของนานอาจอยากได้ 90
+        </span>
+      </div>
+
       {/* ---------- บัญชีธนาคาร ---------- */}
       <div className="field" style={{ marginTop: 4 }}>
         <label>บัญชีรับโอนเงิน</label>

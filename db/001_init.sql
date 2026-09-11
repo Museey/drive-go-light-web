@@ -359,6 +359,8 @@ create table doc_items (
   unit            text        not null default '',
   qty             numeric(12,3) not null default 1,
   unit_price      numeric(14,2) not null default 0,
+  -- วันหมดอายุที่คีย์บนบรรทัดใบซื้อ — ต้นทางของ stock_moves.expires_on (ดู 015_expiry.sql)
+  expires_on      date,
   is_service      boolean     not null default false,      -- ค่าแรง = ฐานคำนวณภาษีหัก ณ ที่จ่าย
   line_total      numeric(14,2) generated always as (round(qty * unit_price, 2)) stored,
   unique (doc_id, line_no)

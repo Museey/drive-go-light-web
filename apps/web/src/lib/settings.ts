@@ -26,6 +26,8 @@ export interface ShopSettings {
   bankName: string;
   bankAccountNo: string;
   bankAccountName: string;
+  /** กี่วันก่อนหมดอายุถึงเริ่มเตือน */
+  expiryWarnDays: number;
   logoUrl: string;
 }
 
@@ -34,7 +36,7 @@ export async function getShopSettings(): Promise<ShopSettings> {
     const { rows } = await c.query(
       `select name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
               price_tier, proposer_name, warranty_text, logo_url,
-              bank_name, bank_account_no, bank_account_name
+              bank_name, bank_account_no, bank_account_name, expiry_warn_days
        from tenants where id = current_tenant_id()`,
     );
     const r = rows[0];
@@ -47,6 +49,7 @@ export async function getShopSettings(): Promise<ShopSettings> {
       bankName: r.bank_name ?? '',
       bankAccountNo: r.bank_account_no ?? '',
       bankAccountName: r.bank_account_name ?? '',
+      expiryWarnDays: n(r.expiry_warn_days) || 60,
     };
   });
 }
@@ -63,13 +66,15 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
       `update tenants set name=$1, tax_id=$2, addr_text=$3, tel=$4, tel2=$5,
               vat_rate=$6, wht_rate=$7, price_tier=$8, proposer_name=$9,
               warranty_text=$10, logo_url=$11,
-              bank_name=$12, bank_account_no=$13, bank_account_name=$14
+              bank_name=$12, bank_account_no=$13, bank_account_name=$14,
+              expiry_warn_days=$15
        where id = current_tenant_id()`,
       [
         input.name, input.taxId || null, input.addrText, input.tel, input.tel2,
         input.vatRate, input.whtRate, input.priceTier, input.proposerName,
         input.warrantyText || null, input.logoUrl || null,
         input.bankName, input.bankAccountNo, input.bankAccountName,
+        input.expiryWarnDays,
       ],
     );
   }, { sub: 'shop', allowExpired: true });
