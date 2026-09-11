@@ -3,7 +3,8 @@ import { notFound, redirect } from 'next/navigation';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
-import { canEdit, loadDocForCopy } from '@/lib/sales';
+import { canEdit, loadDocForCopy, lotExpiryOf } from '@/lib/sales';
+import { today } from '@drivegolight/core';
 import { KIND_LABEL } from '@/lib/format';
 import { DocEditor } from '../../doc-editor';
 
@@ -22,6 +23,7 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
   if (!source) notFound();
 
   const initial = { ...source, id };
+  const lotExpiry = await lotExpiryOf(source.items.map((i) => i.productId));
 
   return (
     <Shell doc
@@ -29,7 +31,8 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
       title={`แก้ไข${KIND_LABEL[source.kind]}`}
       actions={<Link className="btn" href={`/income/${id}`}>← กลับหน้าเอกสาร</Link>}
     >
-      <DocEditor initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="edit" />
+      <DocEditor initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="edit"
+                 lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()} />
     </Shell>
   );
 }

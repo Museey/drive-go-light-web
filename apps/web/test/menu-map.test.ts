@@ -68,6 +68,10 @@ const DIVERGE: { menu: string; tab: string; why: string }[] = [
     menu: 'income', tab: 'ivnovat',
     why: '03.2.1 แท็บใหม่ — 6.4 รวมใบส่งมอบที่มีและไม่มี VAT ไว้แท็บเดียว เราแยกให้เลือกได้จากเมนู',
   },
+  {
+    menu: 'stock', tab: 'expiry',
+    why: '05.1.1 แท็บใหม่ — 6.4 ไม่มีวันหมดอายุสินค้าเลย หน้านี้จึงไม่มีคู่ให้เทียบในต้นฉบับ',
+  },
 ];
 
 const diverged = new Set(DIVERGE.map((d) => `${d.menu}:${d.tab}`));

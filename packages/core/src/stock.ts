@@ -20,6 +20,33 @@ export const STOCK_FLAG_LABEL: Record<StockFlag, string> = {
   expired: 'หมดอายุแล้ว',
 };
 
+/**
+ * คำย่อของป้าย สำหรับที่ที่แคบจริง ๆ เช่นบนกระดาษที่พิมพ์
+ *
+ * แยกจากคำเต็มเพราะกระดาษมีที่จำกัด แต่ยังต้องอ่านออกว่าเป็นป้ายอะไร —
+ * ก่อนหน้านี้หน้าพิมพ์เขียนเงื่อนไขเองว่า "ไม่ใช่ Min ไม่ใช่ Max ก็ค้าง"
+ * ซึ่งพอมีป้ายที่สี่เข้ามา ของที่หมดอายุจะถูกพิมพ์ว่าค้างสต๊อกทันทีโดยไม่มีใครรู้
+ */
+export const STOCK_FLAG_SHORT: Record<StockFlag, string> = {
+  min: 'Min',
+  max: 'Max',
+  dead: 'ค้าง',
+  expiring: 'ใกล้หมด',
+  expired: 'หมดอายุ',
+};
+
+/**
+ * ป้ายทั้งหมดที่มี เรียงตามลำดับที่แสดงบนหน้าจอ
+ *
+ * มาจากตารางคำแปลโดยตรง ไม่ได้พิมพ์รายชื่อซ้ำ — ป้ายใหม่ที่เพิ่มเข้ามาวันหลัง
+ * จึงโผล่ในแถบกรองของทุกหน้าเอง ไม่ใช่โผล่เฉพาะหน้าที่มีคนนึกได้ว่าต้องไปแก้
+ */
+export const STOCK_FLAGS = Object.keys(STOCK_FLAG_LABEL) as StockFlag[];
+
+/** อ่านชื่อป้ายจาก query string — ค่าที่ไม่รู้จักคือไม่กรอง */
+export const toStockFlag = (v: string | undefined | null): StockFlag | undefined =>
+  STOCK_FLAGS.find((f) => f === v);
+
 /** ไม่เคลื่อนไหวกี่เดือนถึงนับว่าเป็นของค้างสต๊อก */
 export const DEAD_MONTHS = 6;
 
@@ -104,4 +131,39 @@ export function daysUntil(dateIso: string, todayIso: string): number {
  */
 export function reorderQty(p: { qtyOnHand: Numeric; qtyMax: Numeric }): number {
   return Math.max(1, num(p.qtyMax) - num(p.qtyOnHand));
+}
+
+/** บรรทัดเอกสารเท่าที่ตรงนี้สนใจ — ผูกกับทะเบียนสินค้าหรือเปล่าเท่านั้น */
+export interface LineWithProduct {
+  productId?: string | null;
+}
+
+export interface ExpiredLine<T> {
+  /** ลำดับบรรทัดตามที่อยู่ในเอกสาร นับจาก 0 */
+  index: number;
+  item: T;
+  expiresOn: string;
+}
+
+/**
+ * บรรทัดในเอกสารที่จะไปตัดของซึ่ง**หมดอายุไปแล้ว**
+ *
+ * ดูจากล็อตที่จะถูกตัดก่อนของสินค้าตัวนั้น เพราะระบบตัดแบบหมดอายุก่อนออกก่อน
+ * บรรทัดที่ไม่ได้ผูกกับทะเบียนสินค้า (ค่าแรง บรรทัดพิมพ์เอง) ไม่มีล็อตให้ตัด
+ *
+ * ตอบเฉพาะที่**เลยวันไปแล้ว** ไม่รวมของที่ใกล้หมดอายุ — ของที่ยังไม่หมดอายุ
+ * ขายได้ตามปกติ ป้ายเตือนรายบรรทัดบอกไปแล้วว่าเหลืออีกกี่วัน
+ * แถบเตือนหัวตารางจึงควรเก็บไว้ให้เรื่องที่ต้องตัดสินใจจริง ๆ
+ */
+export function expiredLines<T extends LineWithProduct>(
+  items: T[],
+  nearestExpiry: Record<string, string>,
+  todayIso: string,
+): ExpiredLine<T>[] {
+  const out: ExpiredLine<T>[] = [];
+  items.forEach((item, index) => {
+    const on = item.productId ? nearestExpiry[item.productId] : undefined;
+    if (on && daysUntil(on, todayIso) < 0) out.push({ index, item, expiresOn: on });
+  });
+  return out;
 }

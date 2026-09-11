@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import { addMonths } from '@drivegolight/core';
 import { stockMoveAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 
@@ -32,13 +33,24 @@ function Submit({ direction }: { direction: Dir }) {
  * รับเข้าหรือตัดออกด้วยมือ พร้อมระบุวันที่
  * ใช้ตอนรับของที่ไม่ได้เปิดใบซื้อ หรือเบิกของไปใช้ในอู่เอง
  */
-export function MoveForm({ productId, unit, today }: {
+export function MoveForm({ productId, unit, today, shelfLifeMonths }: {
   productId: string;
   unit: string;
   today: string;
+  /** อายุการเก็บของสินค้าตัวนี้ ใช้เติมวันหมดอายุให้ — ว่าง = ไม่มีวันหมดอายุ */
+  shelfLifeMonths: number | null;
 }) {
   const [state, action] = useActionState<FormResult, FormData>(stockMoveAction, {});
   const [direction, setDirection] = useState<Dir>('in');
+  const [movedOn, setMovedOn] = useState(today);
+  const [expiresOn, setExpiresOn] = useState(addMonths(today, shelfLifeMonths) ?? '');
+  /* แก้วันหมดอายุเองแล้วห้ามทับ — ของจริงบนกล่องสำคัญกว่าอายุการเก็บที่ตั้งไว้ */
+  const [touched, setTouched] = useState(false);
+
+  const changeDate = (d: string) => {
+    setMovedOn(d);
+    if (!touched && d) setExpiresOn(addMonths(d, shelfLifeMonths) ?? '');
+  };
 
   return (
     <form className="form" action={action}>
@@ -74,7 +86,8 @@ export function MoveForm({ productId, unit, today }: {
         </div>
         <div className={state.field === 'movedOn' ? 'field bad' : 'field'}>
           <label htmlFor="movedOn">วันที่</label>
-          <input className="in mono" id="movedOn" name="movedOn" type="date" defaultValue={today} required />
+          <input className="in mono" id="movedOn" name="movedOn" type="date" required
+                 value={movedOn} onChange={(e) => changeDate(e.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="moveNote">หมายเหตุ</label>
@@ -86,7 +99,25 @@ export function MoveForm({ productId, unit, today }: {
         </div>
       </div>
 
-      <div><Submit direction={direction} /></div>
+      {/* วันหมดอายุเป็นคุณสมบัติของของที่รับเข้า ตอนตัดออกจึงไม่มีช่องนี้ —
+          ฐานข้อมูลก็ปฏิเสธแถวตัดออกที่มีวันหมดอายุอยู่แล้ว (stock_move_expiry_on_receipt) */}
+      {direction === 'in' ? (
+        <div className="row-fields f3" style={{ marginTop: 12 }}>
+          <div className="field">
+            <label htmlFor="moveExpiresOn">วันหมดอายุของล็อตนี้</label>
+            <input className="in mono" id="moveExpiresOn" name="expiresOn" type="date"
+                   value={expiresOn}
+                   onChange={(e) => { setTouched(true); setExpiresOn(e.target.value); }} />
+            <span className="hint">
+              {shelfLifeMonths
+                ? `เติมให้จากอายุการเก็บ ${shelfLifeMonths} เดือน แก้ได้ถ้าของจริงไม่ตรง`
+                : 'เว้นว่างได้ถ้าของไม่มีวันหมดอายุ'}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 12 }}><Submit direction={direction} /></div>
     </form>
   );
 }

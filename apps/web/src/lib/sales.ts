@@ -9,6 +9,7 @@ import {
 import { mutate } from './mutate';
 import { consumeStock, returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
+import { REMAINING_LOTS_SQL } from './expiry';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
@@ -318,15 +319,36 @@ export interface PickedProduct {
   qtyOnHand: number;
   /** อายุการเก็บ ใช้เติมวันหมดอายุให้ตอนรับของเข้าใบซื้อ — ว่าง = ไม่มีวันหมดอายุ */
   shelfLifeMonths: number | null;
+  /** วันหมดอายุของล็อตที่จะถูกตัดก่อน — ว่าง = ไม่มีของที่หมดอายุได้ */
+  nearestExpiry: string | null;
+}
+
+/**
+ * วันหมดอายุที่ใกล้ที่สุดของอะไหล่ที่อยู่บนเอกสาร — ใช้เตือนตอนออกเอกสาร
+ *
+ * ตอบเป็นวันของล็อตที่**จะถูกตัดก่อน** ไม่ใช่ของทั้งกอง เพราะบรรทัดนั้นจะกินล็อตนั้นก่อน
+ * บรรทัดที่ไม่ได้ผูกกับทะเบียนสินค้า (ค่าแรง บรรทัดพิมพ์เอง) ไม่มีล็อตให้ตัด จึงไม่ต้องถาม
+ */
+export async function lotExpiryOf(ids: (string | null)[]): Promise<Record<string, string>> {
+  const want = [...new Set(ids.filter((i): i is string => Boolean(i)))];
+  if (want.length === 0) return {};
+  return query(async (c) => {
+    const { nearestExpiryWith } = await import('./expiry');
+    return Object.fromEntries(await nearestExpiryWith(c, want));
+  });
 }
 
 export async function searchProducts(q: string, limit = 15): Promise<PickedProduct[]> {
   const term = q.trim();
   return query(async (c) => {
     const { rows } = await c.query(
-      `select p.id, p.code, p.oem, p.name, p.unit, p.price_a, p.price_b, p.price_c,
-              p.shelf_life_months, s.qty_on_hand
+      `${REMAINING_LOTS_SQL}
+       select p.id, p.code, p.oem, p.name, p.unit, p.price_a, p.price_b, p.price_c,
+              p.shelf_life_months, s.qty_on_hand,
+              x.nearest_expiry::text as nearest_expiry
        from products p join product_stock s on s.product_id = p.id
+       left join (select product_id, min(expires_on) as nearest_expiry
+                    from remaining group by product_id) x on x.product_id = p.id
        where p.active and ($1 = '' or p.code ilike $2 or p.name ilike $2 or p.oem ilike $2)
        order by p.code limit $3`,
       [term, `%${term}%`, limit],
@@ -336,6 +358,7 @@ export async function searchProducts(q: string, limit = 15): Promise<PickedProdu
       priceA: n(r.price_a), priceB: n(r.price_b), priceC: n(r.price_c),
       qtyOnHand: n(r.qty_on_hand),
       shelfLifeMonths: r.shelf_life_months ?? null,
+      nearestExpiry: r.nearest_expiry ?? null,
     }));
   });
 }

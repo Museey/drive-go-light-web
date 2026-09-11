@@ -139,6 +139,33 @@ export default async function HomePage({
           </div>
         </div>
 
+        {/* การ์ดของใกล้หมดอายุขึ้นเฉพาะตอนมีของจริง —
+            อู่ที่ขายแต่อะไหล่ซึ่งไม่มีวันหมดอายุจะไม่มีการ์ดศูนย์ค้างอยู่ตลอดกาล
+            ส่วนอู่ที่กรอกวันหมดอายุไว้ พอมีของใกล้หมดการ์ดจะโผล่ขึ้นมาเอง */}
+        {summary.expiringCount > 0 ? (
+        <div className="hcard">
+          <header>
+            <Icon name="pending" size={22} color={summary.expiredCount > 0 ? '#B3382C' : '#B4720B'} />
+            <h2>ของใกล้หมดอายุ</h2>
+            {seesStock ? (
+              <Link className="go" href="/stock/expiry">ดูรายการ<span className="ar">→</span></Link>
+            ) : null}
+          </header>
+          <div className="body">
+            <div className="big" style={{ color: summary.expiredCount > 0 ? 'var(--due)' : 'var(--warn)' }}>
+              {summary.expiringCount} <small>ล็อต</small>
+            </div>
+            <div className="row">
+              <span>หมดอายุไปแล้ว</span>
+              <b style={summary.expiredCount > 0 ? { color: 'var(--due)' } : undefined}>
+                {summary.expiredCount} ล็อต
+              </b>
+            </div>
+            <div className="row"><span>มูลค่าของที่เหลือในล็อตนั้น</span><b>{baht(summary.expiringValue)}</b></div>
+          </div>
+        </div>
+        ) : null}
+
         <div className="hcard">
           <header>
             <Icon name="pending" size={22} color="#B4720B" />

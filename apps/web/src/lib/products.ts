@@ -3,7 +3,7 @@ import type pg from 'pg';
 import { stockFlags, today, type StockFlag } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
-import { REMAINING_LOTS_SQL } from './expiry';
+import { listExpiringLotsWith, REMAINING_LOTS_SQL, type ExpiringLotRow } from './expiry';
 import { consumeStock, receiveStock } from './stock-cost';
 
 const n = (v: unknown): number => Number(v ?? 0);
@@ -220,6 +220,18 @@ export interface ProductLot {
   qty: number;
   unitCost: number;
   on: string;
+  /** วันหมดอายุของล็อตนี้ — ว่าง = ของที่ไม่มีวันหมดอายุ */
+  expiresOn?: string | null;
+}
+
+/**
+ * ของใกล้หมดอายุและหมดอายุแล้วทั้งร้าน แยกรายล็อต
+ *
+ * เกณฑ์วันส่งเข้ามาจากผู้เรียก (ข้อมูลร้าน) ไม่ได้อ่านเองในนี้
+ * หน้าจอกับหน้าพิมพ์จะได้ใช้เกณฑ์เดียวกันแน่นอน ไม่ใช่ต่างคนต่างอ่าน
+ */
+export async function listExpiringLots(warnDays: number): Promise<ExpiringLotRow[]> {
+  return query((c) => listExpiringLotsWith(c, warnDays));
 }
 
 /** ล็อตคงเหลือของสินค้าหนึ่งตัว เรียงตามลำดับที่จะถูกตัดออก */
@@ -382,6 +394,8 @@ export async function recordStockMove(input: {
   qty: number;
   movedOn: string;
   note: string;
+  /** วันหมดอายุของล็อตที่รับเข้า — ใส่ได้เฉพาะขารับเข้า ฐานปฏิเสธขาตัดออก */
+  expiresOn?: string | null;
 }): Promise<void> {
   return mutate('stock', async (c, userId) => {
     const qty = Math.abs(Math.round(input.qty * 1000) / 1000);
@@ -399,6 +413,7 @@ export async function recordStockMove(input: {
       await receiveStock(c, {
         productId: input.productId, qty, costAmount: qty * cost,
         movedOn: input.movedOn, reason: 'adjust', note, userId,
+        expiresOn: input.expiresOn ?? null,
       });
       return;
     }

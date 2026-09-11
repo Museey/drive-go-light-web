@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { barcodeSVG, STOCK_FLAG_LABEL, type StockFlag } from '@drivegolight/core';
+import { barcodeSVG, STOCK_FLAG_LABEL, toStockFlag } from '@drivegolight/core';
 import { requireExport } from '@/lib/auth';
 import { listCategories, listProducts } from '@/lib/products';
 import { PrintButton } from '../../income/[id]/print/print-button';
@@ -33,7 +33,7 @@ export default async function BarcodeSheetPage({
   /* เป็นการนำข้อมูลออกจากระบบทั้งชุด จึงต้องมีสิทธิ์ส่งออก ไม่ใช่แค่สิทธิ์ดู */
   await requireExport('stock', 'list');
   const sp = await searchParams;
-  const flag = (['min', 'max', 'dead'] as const).find((f) => f === sp.flag) as StockFlag | undefined;
+  const flag = toStockFlag(sp.flag);
 
   const per = (PER_ITEM as readonly number[]).includes(Number(sp.n))
     ? Number(sp.n) : DEFAULT_PER_ITEM;

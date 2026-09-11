@@ -90,6 +90,7 @@ export async function stockMoveAction(_prev: FormResult, fd: FormData): Promise<
   try {
     await recordStockMove({
       productId: id, direction, qty: qty(fd, 'qty'), movedOn, note: str(fd, 'note'),
+      expiresOn: str(fd, 'expiresOn') || null,
     });
   } catch (err) {
     return { error: friendlyDbError(err), values: keepValues(fd) };

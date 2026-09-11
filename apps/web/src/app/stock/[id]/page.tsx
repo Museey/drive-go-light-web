@@ -5,11 +5,13 @@ import { requireTab } from '@/lib/auth';
 import { canCost, canEdit, HIDDEN_COST } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { getProduct, listCategories, listProductLots, listStockMoves } from '@/lib/products';
+import { getShop } from '@/lib/queries';
 import { baht, thDate } from '@/lib/format';
 import { ProductForm } from '../product-form';
 import { AdjustForm } from '../adjust-form';
 import { MoveForm } from '../move-form';
 import { PicPanel } from './pic-panel';
+import { ExpiryChip } from '@/components/expiry-chip';
 import { query } from '@/lib/auth';
 import { getPicMeta } from '@/lib/pics';
 
@@ -39,9 +41,10 @@ export default async function ProductPage({
   const sp = await searchParams;
   const isNew = id === 'new';
 
-  const [product, categories] = await Promise.all([
+  const [product, categories, shop] = await Promise.all([
     isNew ? Promise.resolve(null) : getProduct(id),
     listCategories(),
+    getShop(),
   ]);
   if (!isNew && !product) notFound();
 
@@ -53,6 +56,11 @@ export default async function ProductPage({
     ])
     : [[], [], null];
   const lotValue = lots.reduce((s2, l) => s2 + l.qty * l.unitCost, 0);
+
+  /* ซ่อนคอลัมน์วันหมดอายุถ้าสินค้าตัวนี้ไม่เกี่ยวกับวันหมดอายุเลย —
+     อะไหล่ส่วนใหญ่ไม่มีวันหมดอายุ ตารางไม่ควรมีช่องขีดกลางยาวเป็นแถว */
+  const seeExpiry = lots.some((l) => l.expiresOn) || Boolean(product?.shelfLifeMonths);
+  const now = today();
 
   return (
     <Shell
@@ -115,7 +123,8 @@ export default async function ProductPage({
               </span>
             </header>
             <div className="body">
-              <MoveForm productId={product.id} unit={product.unit} today={today()} />
+              <MoveForm productId={product.id} unit={product.unit} today={now}
+                        shelfLifeMonths={product.shelfLifeMonths} />
             </div>
           </div>
 
@@ -138,6 +147,7 @@ export default async function ProductPage({
               <div className="spacer" />
               <span className="subtle">
                 มูลค่าตามต้นทุน {seeCost ? baht(lotValue) : HIDDEN_COST} บาท · ตัดจากล็อตบนสุดก่อน
+                {seeExpiry ? ' — ของที่หมดอายุก่อนถูกจัดมาอยู่บนสุด' : ''}
               </span>
             </header>
             {lots.length === 0 ? (
@@ -148,6 +158,7 @@ export default async function ProductPage({
                   <thead>
                     <tr>
                       <th>รับเข้าเมื่อ</th>
+                      {seeExpiry ? <th>วันหมดอายุ</th> : null}
                       <th className="num">คงเหลือ</th>
                       {seeCost ? <th className="num">ต้นทุน/หน่วย</th> : null}
                       <th className="num">เป็นเงิน</th>
@@ -157,6 +168,16 @@ export default async function ProductPage({
                     {lots.map((l, i) => (
                       <tr key={i}>
                         <td>{thDate(l.on)}{i === 0 ? <span className="chip" style={{ marginLeft: 6 }}>ตัดก่อน</span> : null}</td>
+                        {seeExpiry ? (
+                          <td>
+                            {l.expiresOn ? (
+                              <>
+                                {thDate(l.expiresOn)}{' '}
+                                <ExpiryChip expiresOn={l.expiresOn} today={now} warnDays={shop.expiryWarnDays} />
+                              </>
+                            ) : <span className="subtle">ไม่มีวันหมดอายุ</span>}
+                          </td>
+                        ) : null}
                         <td className="num">{l.qty.toLocaleString('en-US')} {product!.unit}</td>
                         {seeCost ? <td className="num">{baht(l.unitCost)}</td> : null}
                         {seeCost ? <td className="num">{baht(l.qty * l.unitCost)}</td> : null}

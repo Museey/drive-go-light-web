@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { STOCK_FLAG_LABEL, type StockFlag } from '@drivegolight/core';
+import { STOCK_FLAG_LABEL, STOCK_FLAG_SHORT, STOCK_FLAGS, toStockFlag } from '@drivegolight/core';
 import { query, requireTab } from '@/lib/auth';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { getStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
@@ -25,7 +25,7 @@ export default async function StockPage({
   const session = await requireTab('stock', 'list');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
-  const flag = (['min', 'max', 'dead'] as const).find((f) => f === sp.flag);
+  const flag = toStockFlag(sp.flag);
   const pageSize = pageSizeOf(sp.size);
 
   const [cats, hidden, pending, { rows, total, stockValue }] = await Promise.all([
@@ -111,7 +111,7 @@ export default async function StockPage({
           <div className="spacer" />
 
           <div className="tag-row">
-            {(['min', 'max', 'dead'] as StockFlag[]).map((f) => (
+            {STOCK_FLAGS.map((f) => (
               <Link key={f} className={`chip flag-${f}`}
                     href={{ pathname: '/stock', query: flag === f ? {} : { flag: f } }}
                     style={flag === f ? { outline: '2px solid var(--ink-3)' } : undefined}>
@@ -166,7 +166,7 @@ export default async function StockPage({
                       {p.flags.map((f) => (
                         <span key={f} className={`chip flag-${f}`} title={STOCK_FLAG_LABEL[f]}
                               style={{ marginLeft: 6 }}>
-                          {f === 'min' ? 'Min' : f === 'max' ? 'Max' : 'ค้าง'}
+                          {STOCK_FLAG_SHORT[f]}
                         </span>
                       ))}
                     </td>

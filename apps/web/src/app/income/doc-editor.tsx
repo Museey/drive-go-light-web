@@ -3,12 +3,13 @@
 import { useActionState, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
-import { bahttext, recTotals, type VatMode } from '@drivegolight/core';
+import { bahttext, expiredLines, recTotals, type VatMode } from '@drivegolight/core';
 import { saveDocAction, searchCustomersAction, searchProductsAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 import type { DocItemInput, PickedContact, PickedProduct, SalesDocInput, SalesKind } from '@/lib/sales';
 import { baht, KIND_LABEL } from '@/lib/format';
 import { VehicleFields } from './vehicle-fields';
+import { ExpiryChip } from '@/components/expiry-chip';
 
 const EPS = 0.004;
 const money = (n: number) => (Math.round(n * 100) / 100);
@@ -35,12 +36,16 @@ function Submit({ label }: { label: string }) {
 }
 
 export function DocEditor({
-  initial, vatRate, shopWhtRate, mode,
+  initial, vatRate, shopWhtRate, mode, lotExpiry, expiryWarnDays, today,
 }: {
   initial: SalesDocInput;
   vatRate: number;
   shopWhtRate: number;
   mode: 'new' | 'edit';
+  /** วันหมดอายุของล็อตที่จะถูกตัดก่อน ของอะไหล่ที่อยู่บนใบตั้งแต่เปิดหน้ามา */
+  lotExpiry: Record<string, string>;
+  expiryWarnDays: number;
+  today: string;
 }) {
   const [state, action] = useActionState<FormResult, FormData>(saveDocAction, {});
   const [doc, setDoc] = useState<SalesDocInput>(initial);
@@ -50,6 +55,17 @@ export function DocEditor({
   const [partResults, setPartResults] = useState<PickedProduct[] | null>(null);
   const [picked, setPicked] = useState<PickedContact | null>(null);
   const [pending, startTransition] = useTransition();
+
+  /*
+   * วันหมดอายุของล็อตที่จะถูกตัด — ตั้งต้นจากอะไหล่ที่อยู่บนใบแล้ว
+   * แล้วเติมเพิ่มทุกครั้งที่ค้นหาเจอของใหม่ ของที่หยิบเข้ามาทีหลังจึงเตือนได้เหมือนกัน
+   */
+  const [expiry, setExpiry] = useState<Record<string, string>>(lotExpiry);
+  const learn = (found: PickedProduct[]) => setExpiry((e) => {
+    const next = { ...e };
+    for (const p of found) if (p.nearestExpiry) next[p.id] = p.nearestExpiry;
+    return next;
+  });
 
   const set = <K extends keyof SalesDocInput>(k: K, v: SalesDocInput[K]) =>
     setDoc((d) => ({ ...d, [k]: v }));
@@ -76,7 +92,9 @@ export function DocEditor({
     setCustResults(await searchCustomersAction(custQuery));
   });
   const searchPart = () => startTransition(async () => {
-    setPartResults(await searchProductsAction(partQuery));
+    const found = await searchProductsAction(partQuery);
+    setPartResults(found);
+    learn(found);
   });
 
   const applyCustomer = (c: PickedContact) => {
@@ -113,6 +131,7 @@ export function DocEditor({
     startTransition(async () => {
       const codes = linked.map((i) => i.code).filter(Boolean);
       const found = await searchProductsAction(codes.join(' '));
+      learn(found);
       setDoc((d) => ({
         ...d,
         priceTier: tier,
@@ -141,6 +160,14 @@ export function DocEditor({
       };
     });
   };
+
+  /*
+   * บรรทัดที่จะไปตัดของที่หมดอายุแล้ว — **เตือน ไม่ห้าม**
+   *
+   * อู่ที่กำลังประกอบรถอยู่แล้วระบบไม่ให้บันทึกใบเสร็จ เพราะน้ำมันเกินวันหมดอายุไปสองวัน
+   * คือการทำให้งานหยุดโดยที่ของยังใช้ได้ การขวางกลางงานแย่กว่าการเตือน
+   */
+  const expired = expiredLines(doc.items, expiry, today);
 
   const isQuote = doc.kind === 'QT';
   const isReceipt = doc.kind === 'RC';
@@ -351,6 +378,20 @@ export function DocEditor({
           <span className="subtle">{doc.items.length} บรรทัด</span>
         </header>
 
+        {expired.length > 0 ? (
+          <div className="body" style={{ paddingBottom: 0 }}>
+            <div className="note" style={{ background: '#FCF1F1', borderColor: '#EEC4C4', color: '#7A2020' }}>
+              <b>ของที่จะถูกตัดหมดอายุแล้ว {expired.length} บรรทัด</b> —{' '}
+              {expired.map((x) => `บรรทัด ${x.index + 1} ${x.item.code || x.item.name}`).join(' · ')}
+              <br />
+              {doc.kind === 'RC'
+                ? 'ใบนี้ตัดสต๊อกตอนบันทึก ระบบจะตัดล็อตที่หมดอายุก่อนตามลำดับหมดอายุก่อนออกก่อน'
+                : 'ใบนี้ยังไม่ตัดสต๊อก แต่ของที่จะถูกตัดตอนออกใบเสร็จคือล็อตที่หมดอายุแล้ว'}
+              {' '}บันทึกได้ตามปกติ — ตรวจของจริงบนชั้นวางก่อนส่งมอบ
+            </div>
+          </div>
+        ) : null}
+
         <div className="toolbar">
           <input className="in" value={partQuery} placeholder="ค้นอะไหล่จากรหัส ชื่อ หรือ OEM"
                  style={{ width: 280 }}
@@ -381,7 +422,15 @@ export function DocEditor({
                     <td className="mono">{p.code}</td>
                     <td className="wrap">{p.name}</td>
                     <td className="num">{baht(priceOf(p))}</td>
-                    <td className="num subtle">คงเหลือ {p.qtyOnHand.toLocaleString('en-US')}</td>
+                    <td className="num subtle">
+                      คงเหลือ {p.qtyOnHand.toLocaleString('en-US')}
+                      {p.nearestExpiry ? (
+                        <>
+                          {' '}
+                          <ExpiryChip expiresOn={p.nearestExpiry} today={today} warnDays={expiryWarnDays} />
+                        </>
+                      ) : null}
+                    </td>
                     <td><button className="btn" type="button" onClick={() => addProduct(p)}>เพิ่ม</button></td>
                   </tr>
                 ))}
@@ -424,6 +473,12 @@ export function DocEditor({
                     <td>
                       <input className="in" style={{ padding: '4px 6px' }} value={it.name}
                              onChange={(e) => setItem(i, { name: e.target.value })} />
+                      {it.productId && expiry[it.productId] ? (
+                        <div style={{ marginTop: 3 }}>
+                          <ExpiryChip expiresOn={expiry[it.productId]!} today={today}
+                                      warnDays={expiryWarnDays} />
+                        </div>
+                      ) : null}
                     </td>
                     <td>
                       <input className="in mono" style={{ padding: '4px 6px', textAlign: 'right' }}

@@ -1,4 +1,4 @@
-import { STOCK_FLAG_LABEL, type StockFlag } from '@drivegolight/core';
+import { STOCK_FLAG_LABEL, STOCK_FLAG_SHORT, toStockFlag, type StockFlag } from '@drivegolight/core';
 import { requireExport } from '@/lib/auth';
 import { ListPaper } from '@/components/list-paper';
 import { listCategories, listProducts } from '@/lib/products';
@@ -15,7 +15,7 @@ export default async function StockPrintPage({
 }) {
   const session = await requireExport('stock', 'list');
   const sp = await searchParams;
-  const flag = (['min', 'max', 'dead'] as const).find((f) => f === sp.flag);
+  const flag = toStockFlag(sp.flag);
 
   const [cats, hidden, { rows, total, stockValue }] = await Promise.all([
     listCategories(),
@@ -100,7 +100,7 @@ export default async function StockPrintPage({
                 {p.flags.length ? (
                   <span style={{ fontSize: 9.5, color: '#666' }}>
                     {' '}
-                    {p.flags.map((f: StockFlag) => (f === 'min' ? 'Min' : f === 'max' ? 'Max' : 'ค้าง')).join('/')}
+                    {p.flags.map((f: StockFlag) => STOCK_FLAG_SHORT[f]).join('/')}
                   </span>
                 ) : null}
               </td>

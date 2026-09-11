@@ -1,3 +1,5 @@
+/* วันที่ตั้งต้นต้องเป็นวันที่ตามเวลาไทย ไม่ใช่ของเครื่องที่รัน — ดู isoInShopTz ใน core */
+import { today } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
@@ -6,11 +8,6 @@ import { pickVendorById } from '@/lib/purchases';
 import { BuyEditor } from '../buy-editor';
 
 export const dynamic = 'force-dynamic';
-
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 export default async function NewBuyPage({
   searchParams,

@@ -1,7 +1,8 @@
 import 'server-only';
-import { docMissing } from '@drivegolight/core';
+import { docMissing, EXPIRY_WARN_DAYS } from '@drivegolight/core';
 import { query } from './auth';
 import { quoteFollowUpsWith, receiptsOfWith, type DocRef } from './doc-chain';
+import { expiringSummaryWith } from './expiry';
 
 /** ยอดเงินจาก Postgres มาเป็นสตริง แปลงเองเพื่อไม่ให้เสียความละเอียดระหว่างทาง */
 const money = (v: unknown): number => Number(v ?? 0);
@@ -19,13 +20,15 @@ export interface ShopInfo {
   bankName: string;
   bankAccountNo: string;
   bankAccountName: string;
+  /** เตือนล่วงหน้ากี่วันก่อนของหมดอายุ ตั้งได้ที่หน้าตั้งค่าร้าน */
+  expiryWarnDays: number;
 }
 
 export async function getShop(): Promise<ShopInfo> {
   return query(async (c) => {
     const { rows } = await c.query(
       `select id, name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
-              bank_name, bank_account_no, bank_account_name
+              bank_name, bank_account_no, bank_account_name, expiry_warn_days
        from tenants where id = current_tenant_id()`,
     );
     const r = rows[0];
@@ -36,6 +39,7 @@ export async function getShop(): Promise<ShopInfo> {
       bankName: r.bank_name ?? '',
       bankAccountNo: r.bank_account_no ?? '',
       bankAccountName: r.bank_account_name ?? '',
+      expiryWarnDays: money(r.expiry_warn_days) || EXPIRY_WARN_DAYS,
     };
   });
 }
@@ -76,6 +80,11 @@ export interface HomeSummary {
   /** สินค้าที่ไม่เคลื่อนไหวตั้งแต่ 6 เดือน — เงินจมในชั้นวาง */
   deadCount: number;
   deadValue: number;
+  /** ล็อตที่ใกล้หมดอายุหรือหมดอายุแล้ว ตามเกณฑ์วันของร้าน — นับเท่ากับหน้ารายการ */
+  expiringCount: number;
+  /** ในจำนวนนั้น เลยวันหมดอายุไปแล้วกี่ล็อต */
+  expiredCount: number;
+  expiringValue: number;
   docCounts: { kind: string; count: number }[];
 }
 
@@ -152,6 +161,8 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
        where p.active`,
     );
 
+    const expiring = await expiringSummaryWith(c);
+
     const counts = await c.query(
       `select kind::text as kind, count(*)::int as count
        from documents where status <> 'void' group by kind order by kind`,
@@ -194,6 +205,9 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
       productCount: stockStats.rows[0].total,
       deadCount: stockStats.rows[0].dead,
       deadValue: money(stockStats.rows[0].dead_value),
+      expiringCount: expiring.count,
+      expiredCount: expiring.expired,
+      expiringValue: expiring.value,
       docCounts: counts.rows.map((r) => ({ kind: r.kind, count: r.count })),
     };
   });

@@ -8,7 +8,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import { fifoAdd, fifoConsume, fifoQty, fifoReturn, type Lot } from '../src/fifo';
-import { daysUntil, stockFlags } from '../src/stock';
+import {
+  daysUntil, expiredLines, stockFlags,
+  STOCK_FLAGS, STOCK_FLAG_LABEL, STOCK_FLAG_SHORT, toStockFlag,
+} from '../src/stock';
 import { addMonths } from '../src/date';
 
 /** ลำดับคิว แสดงเป็นต้นทุนต่อหน่วย เพื่ออ่านง่ายว่าอะไรอยู่ก่อนอะไร */
@@ -208,5 +211,70 @@ describe('เติมวันหมดอายุจากอายุกา�
   it('วันที่ไม่ถูกรูปแบบ — คืน null ไม่ใช่วันที่มั่ว', () => {
     expect(addMonths('', 12)).toBeNull();
     expect(addMonths('ไม่ใช่วันที่', 12)).toBeNull();
+  });
+});
+
+describe('ชุดป้ายสถานะสต๊อก', () => {
+  /*
+   * ก่อนหน้านี้ทุกหน้าที่มีแถบกรองพิมพ์รายชื่อป้ายไว้เอง —
+   * พอเพิ่มป้ายใกล้หมดอายุเข้ามา สามในสี่หน้าเงียบไปเฉย ๆ ไม่มีใครรู้
+   * ตอนนี้ทุกหน้าอ่านจาก STOCK_FLAGS ตัวเดียว เทสต์นี้เฝ้าว่ามันครบจริง
+   */
+  it('มีป้ายครบทุกตัวที่มีคำแปล', () => {
+    expect([...STOCK_FLAGS].sort()).toEqual(Object.keys(STOCK_FLAG_LABEL).sort());
+    expect(STOCK_FLAGS).toContain('expiring');
+    expect(STOCK_FLAGS).toContain('expired');
+  });
+
+  it('ทุกป้ายมีคำย่อสำหรับกระดาษ และไม่ซ้ำกัน', () => {
+    const short = STOCK_FLAGS.map((f) => STOCK_FLAG_SHORT[f]);
+    expect(short.every((s) => s.length > 0)).toBe(true);
+    expect(new Set(short).size).toBe(STOCK_FLAGS.length);
+  });
+
+  it('อ่านชื่อป้ายจาก query string — ค่าที่ไม่รู้จักคือไม่กรอง', () => {
+    expect(toStockFlag('expired')).toBe('expired');
+    expect(toStockFlag('min')).toBe('min');
+    expect(toStockFlag('ไม่มีป้ายนี้')).toBeUndefined();
+    expect(toStockFlag(undefined)).toBeUndefined();
+    expect(toStockFlag('')).toBeUndefined();
+  });
+});
+
+describe('บรรทัดเอกสารที่จะตัดของหมดอายุ', () => {
+  const TODAY = '2026-09-11';
+  const items = [
+    { productId: 'p-oil', code: 'OIL', name: 'น้ำมันเครื่อง' },
+    { productId: null, code: 'LAB', name: 'ค่าแรง' },
+    { productId: 'p-bolt', code: 'BOLT', name: 'น็อต' },
+    { productId: 'p-brake', code: 'BRK', name: 'น้ำมันเบรก' },
+  ];
+  const expiry = {
+    'p-oil': '2026-09-10',   /* เมื่อวาน — หมดอายุแล้ว */
+    'p-brake': '2026-10-01', /* ใกล้หมด แต่ยังไม่หมด */
+  };
+
+  it('ตอบเฉพาะบรรทัดที่เลยวันหมดอายุไปแล้ว พร้อมลำดับบรรทัดที่ถูกต้อง', () => {
+    const bad = expiredLines(items, expiry, TODAY);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]!.index).toBe(0);
+    expect(bad[0]!.item.code).toBe('OIL');
+    expect(bad[0]!.expiresOn).toBe('2026-09-10');
+  });
+
+  /* หมดอายุ "วันนี้" ยังไม่ถือว่าหมด ตรงกับ daysUntil ที่นับเป็นวันปฏิทิน */
+  it('ของที่หมดอายุวันนี้ยังไม่ขึ้นเตือนว่าหมดแล้ว', () => {
+    expect(expiredLines(items, { 'p-oil': TODAY }, TODAY)).toEqual([]);
+  });
+
+  it('บรรทัดค่าแรงและของที่ไม่มีวันหมดอายุไม่ถูกนับ', () => {
+    expect(expiredLines(items, {}, TODAY)).toEqual([]);
+    /* น็อตไม่มีวันหมดอายุในตาราง แม้จะผูกกับทะเบียนสินค้า */
+    expect(expiredLines(items, expiry, TODAY).map((x) => x.item.code)).not.toContain('BOLT');
+  });
+
+  it('หลายบรรทัดหมดอายุพร้อมกัน ตอบครบตามลำดับในเอกสาร', () => {
+    const bad = expiredLines(items, { 'p-brake': '2026-01-01', 'p-oil': '2026-09-10' }, TODAY);
+    expect(bad.map((x) => x.index)).toEqual([0, 3]);
   });
 });

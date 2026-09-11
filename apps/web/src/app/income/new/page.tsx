@@ -1,9 +1,12 @@
 import Link from 'next/link';
+/* วันที่ตั้งต้นของใบใหม่ต้องเป็นวันที่ตามเวลาไทย ไม่ใช่ของเครื่องที่รัน —
+   เซิร์ฟเวอร์ตั้งเป็น UTC ใบที่เปิดตอนตีหนึ่งจะได้วันที่ของเมื่อวานบนเอกสารภาษี */
+import { today } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
 import {
-  getDefaultWarranty, loadDocForCopy, openDocsFor, pickContactById, resolveSourceForNew,
+  getDefaultWarranty, loadDocForCopy, lotExpiryOf, openDocsFor, pickContactById, resolveSourceForNew,
   type SalesDocInput, type SalesKind,
 } from '@/lib/sales';
 import { PickSource } from './pick-source';
@@ -14,11 +17,6 @@ export const dynamic = 'force-dynamic';
 
 const KINDS: SalesKind[] = ['QT', 'IVT', 'IV', 'RC'];
 
-/** เอกสารที่ออกต่อได้จากเอกสารต้นทาง — ใบเสนอราคาออกใบส่งมอบหรือใบเสร็จได้ */
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 function blank(kind: SalesKind, warranty: string, whtRate: number): SalesDocInput {
   return {
@@ -130,6 +128,8 @@ export default async function NewDocPage({
     };
   }
 
+  const lotExpiry = await lotExpiryOf(initial.items.map((i) => i.productId));
+
   return (
     <Shell doc
       current="/income"
@@ -161,7 +161,8 @@ export default async function NewDocPage({
         </div>
       ) : null}
 
-      <DocEditor initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="new" />
+      <DocEditor initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="new"
+                 lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()} />
     </Shell>
   );
 }
