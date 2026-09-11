@@ -7,23 +7,36 @@ import { PrintHeader } from '@/components/print-header';
 import { PagePrintButton } from '@/components/print-button';
 import { DateRange } from '@/components/date-range';
 import { getSalesReport, getVatChain } from '@/lib/reports';
-import { baht, monthLabel } from '@/lib/format';
+import { query } from '@/lib/auth';
+import { salesDocsWith } from '@/lib/home-report';
+import { PageSize, pageSizeOf } from '@/components/page-size';
+import { baht, KIND_SHORT, monthLabel, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SalesReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; page?: string; size?: string }>;
 }) {
   const session = await requireTab('finance', 'sales');
   const seeCost = canCost(session);
   const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page ?? '1') || 1);
+  const pageSize = pageSizeOf(sp.size);
 
-  const [report, vat] = await Promise.all([
+  const [report, vat, docs] = await Promise.all([
     getSalesReport(sp.from, sp.to),
     getVatChain(),
+    query((c) => salesDocsWith(c, { from: sp.from, to: sp.to, page, pageSize })),
   ]);
+
+  const lastPage = Math.max(1, Math.ceil(docs.total / pageSize));
+  const keep: Record<string, string> = {
+    ...(sp.from ? { from: sp.from } : {}),
+    ...(sp.to ? { to: sp.to } : {}),
+  };
+  const paged = { ...keep, ...(sp.size ? { size: sp.size } : {}) };
 
   /* ตารางภาษีแสดงเฉพาะงวดที่อยู่ในช่วงที่เลือก แต่เครดิตยกยอดคิดจากทั้งหมดเสมอ
      ไม่งั้นเครดิตที่ยกมาจากก่อนหน้าช่วงจะหายไป */
@@ -103,6 +116,88 @@ export default async function SalesReportPage({
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* ตารางรายใบ — ตอบว่าใบไหนบ้างที่ประกอบเป็นยอดด้านบน ซึ่งสรุปรายงวดตอบไม่ได้ */}
+      <div className="card">
+        <header>
+          <h2>เอกสารขายรายใบ</h2>
+          <div className="spacer" />
+          <span className="subtle">{docs.total.toLocaleString('en-US')} ใบในช่วงที่เลือก</span>
+        </header>
+
+        {docs.rows.length === 0 ? (
+          <div className="empty">ไม่มีเอกสารขายในช่วงที่เลือก</div>
+        ) : (
+          <>
+            <div className="tablewrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>เลขที่</th><th>ชนิด</th><th>วันที่</th><th>ลูกค้า</th>
+                    <th className="num">ก่อนภาษี</th>
+                    <th className="num">VAT</th>
+                    <th className="num">หัก ณ ที่จ่าย</th>
+                    <th className="num">สุทธิรับ</th>
+                    <th className="num">คงค้าง</th>
+                    {seeCost ? <th className="num">ต้นทุนขาย</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {docs.rows.map((r) => (
+                    <tr key={r.id}>
+                      <td className="mono">
+                        <Link href={`/income/${r.id}`} style={{ textDecoration: 'underline' }}>
+                          {r.docNo}
+                        </Link>
+                      </td>
+                      <td>{KIND_SHORT[r.kind] ?? r.kind}</td>
+                      <td>{thDate(r.docDate)}</td>
+                      <td className="wrap">{r.partyName || '-'}</td>
+                      <td className="num">{baht(r.net)}</td>
+                      <td className="num">{r.vat > 0.004 ? baht(r.vat) : '-'}</td>
+                      <td className="num">{r.wht > 0.004 ? baht(r.wht) : '-'}</td>
+                      <td className="num">{baht(r.payable)}</td>
+                      <td className="num" style={r.outstanding > 0.004 ? { color: 'var(--due)' } : undefined}>
+                        {r.outstanding > 0.004 ? baht(r.outstanding) : '-'}
+                      </td>
+                      {seeCost ? (
+                        /* ว่างเปล่า = ยังไม่เคยตัดสต๊อก ซึ่งคนละเรื่องกับต้นทุนศูนย์
+                           (ศูนย์แปลว่าขายได้กำไรเต็มจำนวน) */
+                        <td className="num" style={{ color: 'var(--ink-3)' }}>
+                          {r.cost === null ? '-' : baht(r.cost)}
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="body">
+              <span className="subtle">
+                ต้นทุนขายเป็นค่าที่ตรึงไว้ตอนตัดสต๊อกแบบเข้าก่อนออกก่อน ไม่ได้คิดใหม่ตอนเปิดรายงาน
+                — ช่องว่างคือใบที่ยังไม่เคยตัดสต๊อก เช่นใบส่งมอบที่ยังไม่ได้ออกใบเสร็จ
+              </span>
+            </div>
+
+            <div className="pager">
+              <span>หน้า {page} จาก {lastPage}</span>
+              <PageSize base="/finance/sales" size={pageSize} keep={keep} />
+              <div className="spacer" />
+              {page > 1 ? (
+                <Link className="btn" href={{ pathname: '/finance/sales', query: { ...paged, page: page - 1 } }}>
+                  ก่อนหน้า
+                </Link>
+              ) : null}
+              {page < lastPage ? (
+                <Link className="btn" href={{ pathname: '/finance/sales', query: { ...paged, page: page + 1 } }}>
+                  ถัดไป
+                </Link>
+              ) : null}
+            </div>
+          </>
         )}
       </div>
 

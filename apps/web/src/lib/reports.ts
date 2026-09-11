@@ -1,6 +1,7 @@
 import 'server-only';
 import { EXPENSE_CATS, vatChainFromMonths, type VatMonth } from '@drivegolight/core';
 import { query } from './auth';
+import { whtByRateWith, type WhtByRate } from './home-report';
 import { profitAndLossWith } from './reports-pl';
 
 import type { PLReport } from './reports-pl';
@@ -140,6 +141,8 @@ export interface TaxSummary {
   whtToRemit: number;
   /** ภาษีหัก ณ ที่จ่ายที่ลูกค้าหักไว้ (จากเอกสารขาย) ในงวดล่าสุด */
   whtWithheld: number;
+  /** แยกตามอัตรา — รูปเดียวกับที่ต้องกรอกตอนยื่นแบบ */
+  whtRates: WhtByRate[];
 }
 
 export async function getTaxSummary(): Promise<TaxSummary> {
@@ -148,7 +151,7 @@ export async function getTaxSummary(): Promise<TaxSummary> {
 
   return query(async (c) => {
     if (!latest) {
-      return { latest: null, carryForward: 0, whtToRemit: 0, whtWithheld: 0 };
+      return { latest: null, carryForward: 0, whtToRemit: 0, whtWithheld: 0, whtRates: [] };
     }
 
     const { rows } = await c.query(
@@ -165,6 +168,7 @@ export async function getTaxSummary(): Promise<TaxSummary> {
       carryForward: latest.carryOut,
       whtToRemit: n(rows[0].remit),
       whtWithheld: n(rows[0].withheld),
+      whtRates: await whtByRateWith(c, latest.key),
     };
   });
 }

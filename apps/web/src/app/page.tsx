@@ -7,6 +7,7 @@ import { Icon } from '@/components/icon';
 import { getHomeSummary, getShop } from '@/lib/queries';
 import { getTaxSummary } from '@/lib/reports';
 import { baht, KIND_SHORT, monthLabel } from '@/lib/format';
+import { OwingList, SalesBars } from '@/components/sales-bars';
 
 const PERM_LABEL: Record<string, string> = {
   customer: 'ข้อมูลลูกค้า / ผู้ขาย', income: 'รายรับ', expense: 'รายจ่าย',
@@ -70,6 +71,8 @@ export default async function HomePage({
             <div className="row"><span>จำนวนใบ</span><b>{summary.salesDocCount.toLocaleString('en-US')}</b></div>
             <div className="row"><span>เฉลี่ยต่อใบ</span><b>{baht(summary.salesAvg)}</b></div>
             <div className="row"><span>รับชำระแล้ว</span><b style={{ color: 'var(--ok)' }}>{baht(summary.salesPaid)}</b></div>
+            {/* แท่งหกเดือนไม่ขยับตามช่วงวันที่ที่เลือก — "หกเดือนล่าสุด" ต้องแปลว่าหกเดือนล่าสุดเสมอ */}
+            <SalesBars months={summary.salesBars} />
           </div>
         </div>
 
@@ -100,7 +103,15 @@ export default async function HomePage({
             <div className="big" style={{ color: summary.arOutstanding > 0.004 ? 'var(--warn)' : undefined }}>
               {baht(summary.arOutstanding)} <small>บาท</small>
             </div>
-            <div className="row"><span>ยอดที่ยังเก็บไม่ได้ ณ วันนี้</span><b /></div>
+            <div className="row"><span>ใบที่ยังค้าง</span><b>{summary.ar.count}</b></div>
+            <div className="row">
+              <span>เกินกำหนดชำระ</span>
+              <b style={summary.ar.overdueCount > 0 ? { color: 'var(--due)' } : undefined}>
+                {summary.ar.overdueCount} ใบ · {baht(summary.ar.overdueTotal)}
+              </b>
+            </div>
+            <div className="label" style={{ marginTop: 12 }}>ลูกค้าที่ค้างมากที่สุด</div>
+            <OwingList rows={summary.ar.top} empty="ไม่มีลูกหนี้คงค้าง" />
           </div>
         </div>
 
@@ -116,7 +127,15 @@ export default async function HomePage({
             <div className="big" style={{ color: summary.apOutstanding > 0.004 ? 'var(--due)' : undefined }}>
               {baht(summary.apOutstanding)} <small>บาท</small>
             </div>
-            <div className="row"><span>ยอดที่ยังไม่ได้จ่าย ณ วันนี้</span><b /></div>
+            <div className="row"><span>ใบที่ยังค้าง</span><b>{summary.ap.count}</b></div>
+            <div className="row">
+              <span>เกินกำหนดชำระ</span>
+              <b style={summary.ap.overdueCount > 0 ? { color: 'var(--due)' } : undefined}>
+                {summary.ap.overdueCount} ใบ · {baht(summary.ap.overdueTotal)}
+              </b>
+            </div>
+            <div className="label" style={{ marginTop: 12 }}>ผู้ขายที่ต้องจ่ายมากที่สุด</div>
+            <OwingList rows={summary.ap.top} empty="ไม่มีเจ้าหนี้คงค้าง" />
           </div>
         </div>
 
@@ -255,6 +274,30 @@ export default async function HomePage({
                 <span className="n">ลูกค้าหักจากอู่ไว้ {baht(tax.whtWithheld)}</span>
               </div>
             </div>
+
+            {/* แยกตามอัตรา — รูปเดียวกับที่ต้องกรอกตอนยื่นแบบ ไม่ใช่ยอดรวมก้อนเดียว */}
+            {tax.whtRates.length > 0 ? (
+              <div style={{ marginTop: 14 }}>
+                <div className="label" style={{ marginBottom: 4 }}>
+                  ภาษีที่ลูกค้าหักจากอู่ แยกตามอัตรา
+                </div>
+                {tax.whtRates.map((w) => (
+                  <div key={w.rate} className="row">
+                    <span>
+                      อัตรา {w.rate}%
+                      <span className="subtle" style={{ fontSize: 11.5 }}>
+                        {' '}· {w.count} ใบ · ฐาน {baht(w.base)}
+                      </span>
+                    </span>
+                    <b>{baht(w.amount)}</b>
+                  </div>
+                ))}
+                <div className="subtle" style={{ marginTop: 8, fontSize: 12 }}>
+                  ยอดนี้คือภาษีที่ลูกค้านิติบุคคลหักไว้จากอู่ ใช้เป็นเครดิตภาษีตอนยื่นแบบประจำปี
+                  — อย่าลืมขอหนังสือรับรองการหักภาษี ณ ที่จ่ายจากลูกค้าทุกครั้ง
+                </div>
+              </div>
+            ) : null}
 
             {tax.latest.carryIn > 0.004 ? (
               <div className="subtle" style={{ marginTop: 12 }}>

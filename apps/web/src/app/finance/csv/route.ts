@@ -1,6 +1,6 @@
 import { requireCost, requireExport } from '@/lib/auth';
 import { getFinanceCsvRows } from '@/lib/reports';
-import { BOM, csvField, FINANCE_HEADERS } from '@/lib/csv';
+import { BOM, csvDownloadHeaders, csvField, FINANCE_HEADERS } from '@/lib/csv';
 
 /** ส่งออกรายรับรายจ่ายในช่วงที่เลือกเป็น CSV — ?from=&to= */
 export async function GET(request: Request) {
@@ -24,12 +24,10 @@ export async function GET(request: Request) {
   }
 
   const stamp = [from, to].filter(Boolean).join('_') || 'ทั้งหมด';
+  /* ชื่อสำรองสำหรับตัวที่อ่าน RFC 5987 ไม่เป็น — ต้องเป็นอักษรอังกฤษล้วน */
+  const ascii = [from, to].filter(Boolean).join('_') || 'all';
 
   return new Response(BOM + lines.join('\n'), {
-    headers: {
-      'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': `attachment; filename="drivegolight-finance-${stamp}.csv"`,
-      'cache-control': 'no-store',
-    },
+    headers: csvDownloadHeaders(`drivegolight-finance-${ascii}.csv`, `drivegolight-รายรับรายจ่าย-${stamp}.csv`),
   });
 }

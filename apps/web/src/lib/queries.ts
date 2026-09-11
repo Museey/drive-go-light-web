@@ -4,6 +4,10 @@ import { query } from './auth';
 import { quoteFollowUpsWith, receiptsOfWith, type DocRef } from './doc-chain';
 import { expiringSummaryWith } from './expiry';
 import { BOOK_VALUE_SQL } from './stock-cost';
+import {
+  owingSidesWith, salesByMonthWith, whtByRateWith,
+  type OwingSide, type SalesMonthBar, type WhtByRate,
+} from './home-report';
 
 /** ยอดเงินจาก Postgres มาเป็นสตริง แปลงเองเพื่อไม่ให้เสียความละเอียดระหว่างทาง */
 const money = (v: unknown): number => Number(v ?? 0);
@@ -87,6 +91,11 @@ export interface HomeSummary {
   expiredCount: number;
   expiringValue: number;
   docCounts: { kind: string; count: number }[];
+  /** ยอดขายหกเดือนล่าสุด — ไม่ผูกกับช่วงวันที่ที่เลือก ตามรุ่น 6.4 */
+  salesBars: SalesMonthBar[];
+  /** ลูกหนี้และเจ้าหนี้ พร้อมห้าอันดับแรกและยอดที่เกินกำหนด */
+  ar: OwingSide;
+  ap: OwingSide;
 }
 
 export async function getHomeSummary(from?: string, to?: string): Promise<HomeSummary> {
@@ -111,16 +120,6 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
                   or (select kind from documents p where p.id = d.parent_doc_id) = 'QT')))
          ${range.replace(/doc_date/g, 'd.doc_date')}`,
       params,
-    );
-
-    const outstanding = await c.query(
-      `select d.direction, coalesce(sum(d.payable - coalesce(p.paid, 0)), 0) as due
-       from documents d
-       left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
-              on p.doc_id = d.id
-       where d.status = 'issued' and d.kind <> 'QT'
-         and d.payable - coalesce(p.paid, 0) > 0.004
-       group by d.direction`,
     );
 
     /* เงื่อนไขเดียวกับป้าย min ใน core — คงเหลือเท่ากับจุดสั่งซื้อพอดีก็นับแล้ว
@@ -168,14 +167,16 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
 
     const expiring = await expiringSummaryWith(c);
 
+    /* สามอย่างนี้ไม่ผูกกับช่วงวันที่ที่เลือก — หนี้ที่ค้างอยู่ก็ค้างอยู่ ไม่ว่าจะเลือกดูช่วงไหน
+       และ "หกเดือนล่าสุด" ต้องแปลว่าหกเดือนล่าสุดเสมอ ไม่งั้นชื่อหัวข้อจะโกหก */
+    const salesBars = await salesByMonthWith(c, 6);
+    const owing = await owingSidesWith(c, 5);
+
     const counts = await c.query(
       `select kind::text as kind, count(*)::int as count
        from documents where status <> 'void' group by kind order by kind`,
     );
 
-    const byDirection = Object.fromEntries(
-      outstanding.rows.map((r) => [r.direction, money(r.due)]),
-    );
     const byKind = Object.fromEntries(spend.rows.map((r) => [r.kind, money(r.total)]));
     const spendBuy = byKind['PO'] ?? 0;
     const spendExpense = byKind['EX'] ?? 0;
@@ -202,8 +203,9 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
       spendTotal: Math.round((spendBuy + spendExpense) * 100) / 100,
       spendBuy,
       spendExpense,
-      arOutstanding: byDirection['sell'] ?? 0,
-      apOutstanding: byDirection['buy'] ?? 0,
+      /* ใช้ตัวเลขชุดเดียวกับหน้า 06.2 / 06.3 ไม่ใช่คิดเองอีกชุด */
+      arOutstanding: owing.ar.total,
+      apOutstanding: owing.ap.total,
       reorderCount: Number(reorder.rows[0].c),
       reorderCost: Math.round(reorderTop.reduce((s, r) => s + r.cost, 0) * 100) / 100,
       reorderTop: reorderTop.slice(0, 5),
@@ -214,6 +216,9 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
       expiredCount: expiring.expired,
       expiringValue: expiring.value,
       docCounts: counts.rows.map((r) => ({ kind: r.kind, count: r.count })),
+      salesBars,
+      ar: owing.ar,
+      ap: owing.ap,
     };
   });
 }

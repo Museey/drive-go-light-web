@@ -1,4 +1,5 @@
 import { requireTab } from '@/lib/auth';
+import { canExport as mayExportOf } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { PrintHeader } from '@/components/print-header';
@@ -15,15 +16,30 @@ export default async function ArPage({
 }: {
   searchParams: Promise<{ q?: string; overdue?: string; bulk?: string }>;
 }) {
-  await requireTab('finance', 'ar');
+  const session = await requireTab('finance', 'ar');
   const sp = await searchParams;
   const onlyOverdue = sp.overdue === '1';
+
+  /* ลิงก์ส่งออกพาตัวกรองที่เปิดอยู่ไปด้วย — ไฟล์ที่ได้จึงตรงกับที่เห็นบนจอ */
+  const csvQuery = new URLSearchParams({
+    ...(sp.q ? { q: sp.q } : {}),
+    ...(onlyOverdue ? { overdue: '1' } : {}),
+  }).toString();
 
   const { rows, total, overdueTotal, overdueCount, count } =
     await listReceivables({ search: sp.q, onlyOverdue });
 
   return (
-    <Shell actions={<PagePrintButton />} current="/finance" title="ลูกหนี้" sub="เอกสารขายที่ยังเก็บเงินไม่ครบ">
+    <Shell actions={
+      <div className="tag-row">
+        {mayExportOf(session, 'finance', 'ar') ? (
+          <a className="btn" href={`/finance/ar/csv${csvQuery ? `?${csvQuery}` : ''}`} download>
+            ส่งออก CSV
+          </a>
+        ) : null}
+        <PagePrintButton />
+      </div>
+    } current="/finance" title="ลูกหนี้" sub="เอกสารขายที่ยังเก็บเงินไม่ครบ">
       <SubNav menu="finance" current="ar">
       <PrintHeader title="รายงานลูกหนี้คงค้าง" range={undefined} />
 
