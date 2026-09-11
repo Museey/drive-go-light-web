@@ -10,12 +10,14 @@ import type { Numeric } from './types.js';
  * ตรงนั้นเป็นข้อบกพร่องของเดิม ไม่ยกมา
  */
 
-export type StockFlag = 'min' | 'max' | 'dead';
+export type StockFlag = 'min' | 'max' | 'dead' | 'expiring' | 'expired';
 
 export const STOCK_FLAG_LABEL: Record<StockFlag, string> = {
   min: 'ถึงจุดสั่งซื้อ (Min)',
   max: 'เกินระดับสูงสุด (Max)',
   dead: 'ไม่เคลื่อนไหว ≥ 6 เดือน',
+  expiring: 'ใกล้หมดอายุ',
+  expired: 'หมดอายุแล้ว',
 };
 
 /** ไม่เคลื่อนไหวกี่เดือนถึงนับว่าเป็นของค้างสต๊อก */
@@ -41,6 +43,13 @@ export interface StockFlagInput {
   qtyMin: Numeric;
   qtyMax: Numeric;
   lastMoveOn: string | null | undefined;
+  /**
+   * วันหมดอายุที่ใกล้ที่สุดของล็อตที่**ยังมีของเหลืออยู่** — ว่าง = ไม่มีของที่หมดอายุได้
+   *
+   * ต้องเป็นล็อตที่ยังเหลือจริงเท่านั้น ล็อตที่ตัดหมดไปแล้วไม่ควรทำให้ขึ้นป้ายเตือน
+   * ทั้งที่ของที่หมดอายุนั้นออกจากคลังไปนานแล้ว
+   */
+  nearestExpiry?: string | null;
 }
 
 /**
@@ -49,7 +58,11 @@ export interface StockFlagInput {
  * ถึงจุดสั่งซื้อใช้ <= ตามของเดิม — คงเหลือเท่ากับ Min พอดีถือว่าถึงจุดสั่งซื้อแล้ว
  * ไม่ใช่ต้องต่ำกว่าถึงจะเตือน เพราะกว่าจะสั่งของมาถึงก็ขาดมือไปแล้ว
  */
-export function stockFlags(p: StockFlagInput, todayIso: string): StockFlag[] {
+export function stockFlags(
+  p: StockFlagInput,
+  todayIso: string,
+  expiryWarnDays = EXPIRY_WARN_DAYS,
+): StockFlag[] {
   const qty = num(p.qtyOnHand);
   const min = num(p.qtyMin);
   const max = num(p.qtyMax);
@@ -59,7 +72,30 @@ export function stockFlags(p: StockFlagInput, todayIso: string): StockFlag[] {
   if (max > 0 && qty > max) f.push('max');
   if (monthsSince(p.lastMoveOn, todayIso) >= DEAD_MONTHS) f.push('dead');
 
+  /* หมดอายุแล้วกับใกล้หมดอายุเป็นคนละป้าย ไม่ขึ้นพร้อมกัน —
+     ของที่เลยวันไปแล้วต้องอ่านออกทันทีว่าต่างจากของที่ใกล้จะถึง */
+  if (p.nearestExpiry) {
+    const left = daysUntil(p.nearestExpiry, todayIso);
+    if (left < 0) f.push('expired');
+    else if (left <= expiryWarnDays) f.push('expiring');
+  }
+
   return f;
+}
+
+/** ค่าปริยายของเกณฑ์เตือนใกล้หมดอายุ ตั้งใหม่ได้ที่หน้าตั้งค่าร้าน */
+export const EXPIRY_WARN_DAYS = 60;
+
+/**
+ * เหลืออีกกี่วันถึงวันที่ที่ให้มา — ติดลบแปลว่าเลยมาแล้ว
+ *
+ * นับเป็นวันปฏิทิน ไม่ใช่ชั่วโมง ของที่หมดอายุ "วันนี้" จึงได้ 0 ไม่ใช่ -1
+ * ซึ่งตรงกับที่คนอ่านว่ายังไม่หมด
+ */
+export function daysUntil(dateIso: string, todayIso: string): number {
+  const d = Date.parse(dateIso + 'T00:00:00Z');
+  const n = Date.parse(todayIso + 'T00:00:00Z');
+  return Math.round((d - n) / 86_400_000);
 }
 
 /**

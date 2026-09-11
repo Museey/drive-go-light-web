@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { fifoAdd, fifoConsume, fifoQty, fifoReturn, type Lot } from '../src/fifo';
+import { daysUntil, stockFlags } from '../src/stock';
 
 /** ลำดับคิว แสดงเป็นต้นทุนต่อหน่วย เพื่ออ่านง่ายว่าอะไรอยู่ก่อนอะไร */
 const order = (lots: readonly Lot[]) => lots.map((l) => l.unitCost);
@@ -112,5 +113,62 @@ describe('ตัดข้ามล็อต', () => {
     expect(r.cost).toBe(700);
     expect(fifoQty(r.lots)).toBe(2);
     expect(order(r.lots)).toEqual([100]);
+  });
+});
+
+describe('ป้ายเตือนวันหมดอายุ', () => {
+  const base = { qtyOnHand: 10, qtyMin: 0, qtyMax: 0, lastMoveOn: '2026-09-01' };
+  const flags = (nearestExpiry: string | null, warn = 60) =>
+    stockFlags({ ...base, nearestExpiry }, '2026-09-11', warn);
+
+  it('ไม่มีวันหมดอายุ — ไม่มีป้าย', () => {
+    expect(flags(null)).toEqual([]);
+  });
+
+  it('ยังอีกไกล — ไม่มีป้าย', () => {
+    expect(flags('2027-01-01')).toEqual([]);
+  });
+
+  it('อยู่ในเกณฑ์เตือน — ใกล้หมดอายุ', () => {
+    expect(flags('2026-10-01')).toEqual(['expiring']);
+  });
+
+  it('ขอบเกณฑ์พอดี — ยังนับว่าใกล้หมดอายุ', () => {
+    expect(flags('2026-11-10')).toEqual(['expiring']);   // อีก 60 วันพอดี
+    expect(flags('2026-11-11')).toEqual([]);             // อีก 61 วัน
+  });
+
+  it('หมดอายุวันนี้ — ยังไม่นับว่าหมด เพราะยังใช้ได้ทั้งวัน', () => {
+    expect(flags('2026-09-11')).toEqual(['expiring']);
+  });
+
+  it('เลยวันมาแล้ว — หมดอายุแล้ว ไม่ใช่ใกล้หมดอายุ', () => {
+    expect(flags('2026-09-10')).toEqual(['expired']);
+  });
+
+  it('เกณฑ์ที่ตั้งเองมีผลจริง', () => {
+    expect(flags('2026-10-20', 30)).toEqual([]);          // อีก 39 วัน เกิน 30
+    expect(flags('2026-10-20', 90)).toEqual(['expiring']);
+  });
+
+  it('ขึ้นพร้อมป้ายอื่นได้', () => {
+    expect(stockFlags(
+      { qtyOnHand: 1, qtyMin: 5, qtyMax: 0, lastMoveOn: '2026-09-01',
+        nearestExpiry: '2026-09-01' },
+      '2026-09-11',
+    )).toEqual(['min', 'expired']);
+  });
+});
+
+describe('นับวันคงเหลือ', () => {
+  it('วันนี้ = 0 · พรุ่งนี้ = 1 · เมื่อวาน = -1', () => {
+    expect(daysUntil('2026-09-11', '2026-09-11')).toBe(0);
+    expect(daysUntil('2026-09-12', '2026-09-11')).toBe(1);
+    expect(daysUntil('2026-09-10', '2026-09-11')).toBe(-1);
+  });
+
+  it('ข้ามเดือนและข้ามปีถูกต้อง', () => {
+    expect(daysUntil('2027-01-01', '2026-12-31')).toBe(1);
+    expect(daysUntil('2026-03-01', '2026-02-28')).toBe(1);   // 2026 ไม่ใช่ปีอธิกสุรทิน
   });
 });
