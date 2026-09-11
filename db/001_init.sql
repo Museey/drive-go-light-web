@@ -59,6 +59,10 @@ create table tenants (
   bank_name         text        not null default '',
   bank_account_no   text        not null default '',
   bank_account_name text        not null default '',
+  -- กี่วันก่อนหมดอายุถึงเริ่มเตือน (ดู 015_expiry.sql)
+  expiry_warn_days  integer     not null default 60
+                    constraint tenants_expiry_warn_sane
+                    check (expiry_warn_days between 1 and 3650),
   proposer_name   text,
   warranty_text   text,
   ui_prefs        jsonb        not null default '{}'::jsonb,  -- DB.ui (เช่น stockHide)
@@ -212,6 +216,12 @@ create table products (
   price_c         numeric(14,2) not null default 0 check (price_c >= 0),
   qty_min         numeric(12,3) not null default 0,
   qty_max         numeric(12,3) not null default 0,
+  -- อายุการเก็บเป็นเดือน ใช้เติมวันหมดอายุให้ตอนรับของ (ดู 015_expiry.sql)
+  -- ว่าง = ไม่มีวันหมดอายุ · ไม่ได้ใช้ตัดสินอะไรตอนตัดสต๊อก
+  shelf_life_months integer
+                    constraint products_shelf_life_sane
+                    check (shelf_life_months is null
+                           or (shelf_life_months > 0 and shelf_life_months <= 600)),
   active          boolean     not null default true,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
@@ -393,6 +403,8 @@ create table stock_moves (
   product_id      uuid        not null references products(id) on delete restrict,
   moved_on        date        not null default current_date,
   qty_delta       numeric(12,3) not null check (qty_delta <> 0),  -- บวก = รับเข้า, ลบ = ตัดออก
+  -- วันหมดอายุของล็อตนี้ — ใส่ได้เฉพาะแถวรับเข้า ตัวที่ FEFO ใช้เรียง (ดู 015_expiry.sql)
+  expires_on      date,
   unit_cost       numeric(14,2),
   -- ต้นทุนรวมของการเคลื่อนไหวครั้งนี้ ตรึงไว้ตอนบันทึก ไม่คำนวณใหม่ตอนอ่าน
   -- ฝั่งรับเข้า = จำนวน × ราคาที่ซื้อ · ฝั่งตัดออก = ต้นทุนที่คิดได้แบบเข้าก่อนออกก่อน
@@ -411,8 +423,13 @@ create table stock_moves (
   -- ตัดสต๊อกจากเอกสารต้องอ้างเอกสารเสมอ ที่ทำด้วยมือถึงจะไม่ต้องอ้าง
   constraint stock_move_doc_ref check (
     reason in ('opening','adjust','use','count','set')
-    or doc_id is not null or claim_id is not null)
+    or doc_id is not null or claim_id is not null),
+  -- วันหมดอายุเป็นคุณสมบัติของของที่รับเข้า ใส่ที่แถวตัดออกแล้วการเรียงล็อตจะเพี้ยนเงียบ ๆ
+  constraint stock_move_expiry_on_receipt check (expires_on is null or qty_delta > 0)
 );
+
+create index stock_moves_expiry_idx on stock_moves (tenant_id, expires_on)
+  where expires_on is not null;
 
 create index on stock_moves (tenant_id, product_id, moved_on desc);
 create index on stock_moves (tenant_id, doc_id);

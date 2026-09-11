@@ -31,6 +31,7 @@ interface MoveRow {
   cost_amount: string | null;
   moved_on: string;
   reason: string;
+  expires_on: string | null;
 }
 
 /**
@@ -45,7 +46,16 @@ interface MoveRow {
  */
 export async function lotsOfProduct(c: Client, productId: string): Promise<Lot[]> {
   const { rows } = await c.query<MoveRow>(
-    `select qty_delta, unit_cost, cost_amount, moved_on::text as moved_on, reason::text as reason
+    /*
+     * ยังเรียงตามเวลาเหมือนเดิม **ห้ามเรียงด้วยวันหมดอายุตรงนี้** —
+     * การเล่นบัญชีซ้ำต้องไล่ตามเวลาจริง ไม่งั้นการตัดของวันที่ 5
+     * จะไปเห็นของที่รับเข้าวันที่ 10 ซึ่งยังไม่มีอยู่ตอนนั้น
+     *
+     * ลำดับแบบหมดอายุก่อนออกก่อนเกิดที่ fifoAdd() ซึ่งแทรกล็อตใหม่เข้าคิว
+     * ตามวันหมดอายุ แทนที่จะต่อท้ายเสมอ
+     */
+    `select qty_delta, unit_cost, cost_amount, moved_on::text as moved_on,
+            reason::text as reason, expires_on::text as expires_on
      from stock_moves
      where product_id = $1
      order by moved_on, created_at`,
@@ -63,8 +73,8 @@ export async function lotsOfProduct(c: Client, productId: string): Promise<Lot[]
       /* ของคืนกลับเข้าหน้าแถวด้วยต้นทุนที่เคยตัดไป ของรับเข้าปกติต่อท้าย */
       const cost = m.cost_amount !== null ? n(m.cost_amount) : qty * n(m.unit_cost);
       lots = m.reason === 'return'
-        ? fifoReturn(lots, qty, cost, m.moved_on, fallback)
-        : fifoAdd(lots, qty, qty === 0 ? 0 : round2(cost / qty), m.moved_on);
+        ? fifoReturn(lots, qty, cost, m.moved_on, fallback, m.expires_on)
+        : fifoAdd(lots, qty, qty === 0 ? 0 : round2(cost / qty), m.moved_on, m.expires_on);
     } else {
       lots = fifoConsume(lots, -qty, fallback).lots;
     }
@@ -139,6 +149,13 @@ export interface ReceiveInput {
   claimId?: string | null;
   note?: string;
   userId?: string | null;
+  /**
+   * วันหมดอายุของล็อตนี้ — ว่าง = ไม่มีวันหมดอายุ
+   *
+   * ฐานข้อมูลบังคับว่าใส่ได้เฉพาะแถวรับเข้า (`stock_move_expiry_on_receipt`)
+   * ซึ่งตรงกับที่ฟังก์ชันนี้ทำอยู่แล้ว
+   */
+  expiresOn?: string | null;
 }
 
 /** รับของเข้าคลัง — ใช้ทั้งตอนซื้อ ตอนคืนจากการยกเลิก และตอนปรับยอดขึ้น */
@@ -150,13 +167,15 @@ export async function receiveStock(c: Client, input: ReceiveInput): Promise<void
 
   await c.query(
     `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta,
-                              unit_cost, cost_amount, reason, doc_id, claim_id, note, created_by)
-     values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                              unit_cost, cost_amount, reason, doc_id, claim_id, note,
+                              created_by, expires_on)
+     values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
     [
       input.productId, input.movedOn, qty,
       round2(cost / qty), cost,
       input.reason, input.docId ?? null, input.claimId ?? null,
       input.note ?? '', input.userId ?? null,
+      input.expiresOn || null,
     ],
   );
 }
