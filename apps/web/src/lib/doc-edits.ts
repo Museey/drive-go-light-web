@@ -11,13 +11,14 @@ export interface DocEdit {
   at: string;
   /** ชื่อผู้บันทึก — ว่างแปลว่าเกิดจากตัวนำเข้าหรือสคริปต์ ไม่ใช่คนกดในเว็บ */
   by: string;
-  action: 'create' | 'update' | 'void';
+  action: 'create' | 'update' | 'void' | 'unvoid';
 }
 
 const ACTION_LABEL: Record<DocEdit['action'], string> = {
   create: 'สร้างเอกสาร',
   update: 'แก้ไข',
   void: 'ยกเลิกเอกสาร',
+  unvoid: 'กู้คืนเอกสาร',
 };
 
 export const editActionLabel = (a: DocEdit['action']): string => ACTION_LABEL[a] ?? a;

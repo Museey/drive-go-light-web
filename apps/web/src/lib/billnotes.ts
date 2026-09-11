@@ -150,10 +150,28 @@ const toRow = (r: any): BillnoteRow => ({
   voidedReason: r.voided_reason,
 });
 
+export interface BillnoteListResult {
+  rows: BillnoteRow[];
+  /** จำนวนใบทั้งหมดที่ตรงเงื่อนไข ไม่ใช่เฉพาะหน้านี้ */
+  total: number;
+  /** ใบที่ยังไม่ยกเลิก ในทุกหน้ารวมกัน */
+  live: number;
+}
+
+/**
+ * รายการใบวางบิล
+ *
+ * **แบ่งหน้าเสมอ** — เดิมไม่มี limit เลย เปิดหน้านี้ทีเดียวดึงใบวางบิลทุกใบที่เคยออก
+ * อู่ที่วางบิลทุกเดือนได้ปีละสิบสองใบ ยังไม่เจ็บวันนี้แต่มันโตทางเดียวและไม่มีเพดาน
+ * ตัวนับรวมกับตัวนับใบที่ยังไม่ยกเลิกคิดจาก **ทุกแถวที่ตรงเงื่อนไข** ไม่ใช่เฉพาะหน้านี้
+ */
 export async function listBillnotes(
   c: Client,
-  opts: { search?: string; from?: string; to?: string } = {},
-): Promise<BillnoteRow[]> {
+  opts: {
+    search?: string; from?: string; to?: string;
+    page?: number; pageSize?: number;
+  } = {},
+): Promise<BillnoteListResult> {
   const params: unknown[] = [];
   const where: string[] = [];
 
@@ -164,13 +182,65 @@ export async function listBillnotes(
   if (opts.from) { params.push(opts.from); where.push(`b.bill_date >= $${params.length}`); }
   if (opts.to) { params.push(opts.to); where.push(`b.bill_date <= $${params.length}`); }
 
-  const { rows } = await c.query(
-    `select ${ROW} from billnotes b
-     ${where.length ? 'where ' + where.join(' and ') : ''}
-     order by b.bill_date desc, b.no desc`,
+  const whereSql = where.length ? 'where ' + where.join(' and ') : '';
+
+  const totals = await c.query(
+    `select count(*)::int as total,
+            count(*) filter (where b.status <> 'void')::int as live
+       from billnotes b ${whereSql}`,
     params,
   );
-  return rows.map(toRow);
+
+  const size = Math.max(1, opts.pageSize ?? 20);
+  const page = Math.max(1, opts.page ?? 1);
+  params.push(size, (page - 1) * size);
+
+  const { rows } = await c.query(
+    `select ${ROW} from billnotes b
+     ${whereSql}
+     order by b.bill_date desc, b.no desc
+     limit $${params.length - 1} offset $${params.length}`,
+    params,
+  );
+
+  return {
+    rows: rows.map(toRow),
+    total: totals.rows[0].total,
+    live: totals.rows[0].live,
+  };
+}
+
+export interface UnbilledSummary {
+  /** ใบที่ยังเก็บเงินไม่ครบและยังไม่ได้อยู่บนใบวางบิลใบไหน */
+  count: number;
+  /** ยอดค้างรวมของใบเหล่านั้น */
+  owed: number;
+}
+
+/**
+ * งานวางบิลที่ยังค้างอยู่ — ตัวเลขบนหัวหน้าใบวางบิล
+ *
+ * **นับเฉพาะใบที่ยังไม่ได้วางบิล** ต่างจากรุ่น 6.4 ที่นับใบค้างชำระทั้งหมด
+ * เพราะตัวเลขบนหน้านี้ควรตอบว่า "ยังต้องทำอะไรต่อ" ไม่ใช่ตอบว่าลูกหนี้ทั้งหมดเท่าไร
+ * ซึ่งมีที่ของมันอยู่แล้วที่หน้า 06.2 (หน้าจอเขียนกำกับไว้ให้ไปดูที่นั่น)
+ */
+export async function unbilledSummary(c: Client): Promise<UnbilledSummary> {
+  const { rows } = await c.query(
+    `select count(*)::int as n,
+            coalesce(sum(d.payable - coalesce(p.paid, 0)), 0) as owed
+     from documents d
+     left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+            on p.doc_id = d.id
+     where ${BILLABLE}
+       /* เงื่อนไข "อยู่บนใบวางบิลที่ยังไม่ยกเลิก" ใช้รูปเดียวกับ billnoteOfDoc()
+          — การยกเลิกใบวางบิลตั้ง bd.voided ให้ทุกแถวข้างในอยู่แล้ว
+          ถ้าเขียนสองแบบ วันหนึ่งมันจะตอบไม่ตรงกันโดยไม่มีใครรู้ */
+       and not exists (
+         select 1 from billnote_docs bd
+         where bd.doc_id = d.id and not bd.voided
+       )`,
+  );
+  return { count: rows[0].n, owed: round2(n(rows[0].owed)) };
 }
 
 export async function getBillnote(

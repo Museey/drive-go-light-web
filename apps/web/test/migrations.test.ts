@@ -99,9 +99,19 @@ async function fingerprint(c: pg.Client) {
       where n.nspname in ('public', 'auth', 'ops') and c.relkind = 'v'
       order by 1`),
 
+    /*
+     * ฟังก์ชัน — เทียบ **เนื้อในด้วย** ไม่ใช่แค่ชื่อกับพารามิเตอร์
+     *
+     * ไฟล์ 001 เก็บฟังก์ชันรุ่นล่าสุดไว้ ส่วนฐานที่อัปเกรดมาได้จากไฟล์ไมเกรชัน
+     * ถ้าแก้ฟังก์ชันใน 001 แล้วลืมเขียนไฟล์ไมเกรชันให้ด้วย ชื่อกับพารามิเตอร์
+     * ยังเหมือนกันเป๊ะ — จับไม่ได้เลย ทั้งที่สองฐานทำงานคนละแบบ
+     */
     functions: await q(`
       select n.nspname || '.' || p.proname as name,
-             pg_get_function_identity_arguments(p.oid) as args
+             pg_get_function_identity_arguments(p.oid) as args,
+             /* pg_get_functiondef() ใช้กับ aggregate ไม่ได้ — ส่วนขยาย citext
+                ติดตั้ง min/max ของตัวเองไว้ในสคีมา public ถ้าไม่กันไว้จะพังทั้งไฟล์ */
+             case when p.prokind in ('f', 'p') then pg_get_functiondef(p.oid) end as def
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname in ('public', 'auth', 'ops')
       order by 1, 2`),

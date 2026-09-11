@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import {
-  billnoteOfDoc, getBillnote, listBillnotes, openInvoices, saveBillnote, voidBillnote,
+  billnoteOfDoc, getBillnote, listBillnotes, openInvoices, saveBillnote,
+  unbilledSummary, voidBillnote,
 } from '../src/lib/billnotes';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
@@ -24,6 +25,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '../../..');
 const DB_URL = process.env.DATABASE_URL;
 const n = (v: unknown) => Number(v);
+const round2 = (v: number) => Math.round(v * 100) / 100;
 
 describe.skipIf(!DB_URL)('ใบวางบิล', () => {
   let admin: pg.Client;
@@ -205,7 +207,7 @@ describe.skipIf(!DB_URL)('ใบวางบิล', () => {
 
     expect(first.no).toMatch(/^BN-202603-\d{3}$/);
     expect(second.no).not.toBe(first.no);
-    expect((await listBillnotes(app)).map((x) => x.no).sort())
+    expect((await listBillnotes(app)).rows.map((x) => x.no).sort())
       .toEqual([first.no, second.no].sort());
   });
 
@@ -269,5 +271,82 @@ describe.skipIf(!DB_URL)('ใบวางบิล', () => {
       [tenantId],
     );
     expect(rows[0].c).toBe(0);
+  });
+
+  /*
+   * ตัวเลขบนหัวหน้าใบวางบิล — ตอบว่า "ยังต้องวางบิลอีกเท่าไร"
+   * ไม่ใช่ยอดลูกหนี้ทั้งหมด ซึ่งมีที่ของมันอยู่แล้วที่หน้า 06.2
+   */
+  describe('งานวางบิลที่ยังค้าง', () => {
+    it('ยังไม่มีใบค้างเลย — ศูนย์ทั้งคู่', async () => {
+      expect(await unbilledSummary(app)).toEqual({ count: 0, owed: 0 });
+    });
+
+    it('นับใบที่ยังเก็บเงินไม่ครบ พร้อมยอดค้าง', async () => {
+      await invoice('IVT-001', '2026-03-05', 1000);
+      await invoice('IVT-002', '2026-03-06', 2000);
+
+      const sum = await unbilledSummary(app);
+      expect(sum.count).toBe(2);
+      expect(sum.owed).toBe(round2(3000 * 1.07));
+    });
+
+    it('ใบที่วางบิลไปแล้วหลุดออกจากยอด — ไม่งั้นเลขไม่มีวันลด', async () => {
+      const a = await invoice('IVT-001', '2026-03-05', 1000);
+      await invoice('IVT-002', '2026-03-06', 2000);
+      await save([a]);
+
+      const sum = await unbilledSummary(app);
+      expect(sum.count).toBe(1);
+      expect(sum.owed).toBe(round2(2000 * 1.07));
+    });
+
+    it('ยกเลิกใบวางบิลแล้ว ใบข้างในกลับมาเข้าคิวรอวางบิลอีกครั้ง', async () => {
+      const a = await invoice('IVT-001', '2026-03-05', 1000);
+      const { id } = await save([a]);
+      expect((await unbilledSummary(app)).count).toBe(0);
+
+      await voidBillnote(app, id, 'ลูกค้าขอแยกบิล');
+      expect((await unbilledSummary(app)).count).toBe(1);
+    });
+
+    it('เก็บเงินครบแล้วไม่ค้างอีก', async () => {
+      const a = await invoice('IVT-001', '2026-03-05', 1000);
+      await pay(a, 1070);
+      expect(await unbilledSummary(app)).toEqual({ count: 0, owed: 0 });
+    });
+  });
+
+  describe('แบ่งหน้ารายการใบวางบิล', () => {
+    it('คืนเฉพาะหน้าที่ขอ แต่ตัวนับเป็นของทุกแถวที่ตรงเงื่อนไข', async () => {
+      for (let i = 1; i <= 5; i++) {
+        const d = await invoice(`IVT-00${i}`, `2026-03-0${i}`, 1000 * i);
+        await save([d]);
+      }
+
+      const first = await listBillnotes(app, { pageSize: 2, page: 1 });
+      expect(first.rows).toHaveLength(2);
+      expect(first.total).toBe(5);
+      expect(first.live).toBe(5);
+
+      const third = await listBillnotes(app, { pageSize: 2, page: 3 });
+      expect(third.rows).toHaveLength(1);
+      expect(third.total).toBe(5);
+
+      /* หน้าเลยจากที่มี — ว่าง ไม่ใช่วนกลับไปหน้าแรก */
+      expect((await listBillnotes(app, { pageSize: 2, page: 9 })).rows).toEqual([]);
+    });
+
+    it('ตัวนับใบที่ยังไม่ยกเลิก แยกจากตัวนับทั้งหมด', async () => {
+      const a = await invoice('IVT-001', '2026-03-05', 1000);
+      const b = await invoice('IVT-002', '2026-03-06', 2000);
+      const one = await save([a]);
+      await save([b]);
+      await voidBillnote(app, one.id, 'ยกเลิก');
+
+      const list = await listBillnotes(app, { pageSize: 20 });
+      expect(list.total).toBe(2);
+      expect(list.live).toBe(1);
+    });
   });
 });

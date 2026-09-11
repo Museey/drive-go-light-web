@@ -2,7 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { saveBuyDoc, searchVendors, voidBuyDoc, type BuyDocInput, type PickedVendor } from '@/lib/purchases';
+import {
+  saveBuyDoc, searchVendors, unvoidBuyDoc, voidBuyDoc,
+  type BuyDocInput, type PickedVendor,
+} from '@/lib/purchases';
 import { friendlyDbError, type FormResult } from '@/lib/mutate';
 
 function describe(err: unknown, fallback: string): string {
@@ -53,6 +56,24 @@ export async function voidBuyDocAction(id: string, reason: string): Promise<void
     await voidBuyDoc(id, reason);
   } catch (err) {
     redirect(`/expense/${id}?error=${encodeURIComponent(describe(err, 'ยกเลิกไม่สำเร็จ'))}`);
+  }
+  revalidatePath('/expense');
+  revalidatePath('/stock');
+  revalidatePath('/finance/ap');
+  redirect(`/expense/${id}`);
+}
+
+/**
+ * นำใบที่ยกเลิกกลับมาใช้ — มีเฉพาะฝั่งรายจ่าย
+ *
+ * ไม่ถามเหตุผลเหมือนตอนยกเลิก เพราะการกู้คืนคือการยกเลิกการกระทำที่ผิด
+ * ไม่ใช่การตัดสินใจใหม่ที่ต้องอธิบาย — ประวัติเอกสารบันทึกไว้อยู่แล้วว่าใครกู้คืนเมื่อไร
+ */
+export async function unvoidBuyDocAction(id: string): Promise<void> {
+  try {
+    await unvoidBuyDoc(id);
+  } catch (err) {
+    redirect(`/expense/${id}?error=${encodeURIComponent(describe(err, 'กู้คืนไม่สำเร็จ'))}`);
   }
   revalidatePath('/expense');
   revalidatePath('/stock');

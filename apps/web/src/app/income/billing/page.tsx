@@ -1,10 +1,12 @@
 import Link from 'next/link';
+import { canEdit as mayEditOf, canExport as mayExportOf } from '@/lib/perms';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { query } from '@/lib/auth';
-import { listBillnotes } from '@/lib/billnotes';
+import { listBillnotes, unbilledSummary } from '@/lib/billnotes';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
+import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -12,24 +14,61 @@ export const dynamic = 'force-dynamic';
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; from?: string; to?: string; month?: string; year?: string }>;
+  searchParams: Promise<{
+    q?: string; from?: string; to?: string; month?: string; year?: string;
+    page?: string; size?: string;
+  }>;
 }) {
-  await requireTab('income', 'billing');
+  const session = await requireTab('income', 'billing');
+  const mayEdit = mayEditOf(session, 'income', 'billing');
+  const mayPrint = mayExportOf(session, 'income', 'billing');
   const sp = await searchParams;
   const { from, to } = rangeFromParams(sp);
+  const page = Math.max(1, Number(sp.page ?? '1') || 1);
+  const pageSize = pageSizeOf(sp.size);
 
-  const rows = await query((c) => listBillnotes(c, { search: sp.q, from, to }));
-  const live = rows.filter((r) => r.status !== 'void');
-  const owed = live.reduce((s, r) => s + r.total, 0);
+  const { list, unbilled } = await query(async (c) => ({
+    list: await listBillnotes(c, { search: sp.q, from, to, page, pageSize }),
+    unbilled: await unbilledSummary(c),
+  }));
+  const { rows, total, live } = list;
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+
+  const keep: Record<string, string> = {
+    ...(sp.q ? { q: sp.q } : {}),
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+  };
+  const paged = { ...keep, ...(sp.size ? { size: sp.size } : {}) };
 
   return (
     <Shell
       current="/income"
       title="ใบวางบิล"
-      sub={`${live.length} ใบที่ยังไม่ยกเลิก · รอเก็บรวม ${baht(owed)} บาท`}
+      sub={`${live} ใบที่ยังไม่ยกเลิก จากทั้งหมด ${total} ใบ`}
       actions={<Link className="btn primary" href="/income/billing/new">+ ออกใบวางบิล</Link>}
     >
       <SubNav menu="income" current="billing">
+        {/* ตัวเลขที่ตอบว่า "ยังต้องทำอะไรต่อ" ไม่ใช่ยอดลูกหนี้ทั้งหมด
+            ซึ่งมีที่ของมันอยู่แล้วที่ 06.2 — ตามที่รุ่น 6.4 เขียนกำกับไว้ */}
+        <div className="grid g3" style={{ marginBottom: 14 }}>
+          <div className="stat">
+            <div className="label">ใบวางบิลที่ยังใช้งาน</div>
+            <div className="value">{live.toLocaleString('en-US')} <span className="n">ใบ</span></div>
+          </div>
+          <div className="stat">
+            <div className="label">ใบที่ยังเก็บเงินไม่ครบ และยังไม่ได้วางบิล</div>
+            <div className={`value${unbilled.count > 0 ? ' due' : ''}`}>
+              {unbilled.count.toLocaleString('en-US')} <span className="n">ใบ</span>
+            </div>
+          </div>
+          <div className="stat">
+            <div className="label">ยอดค้างที่ยังไม่ได้วางบิล</div>
+            <div className="value">{baht(unbilled.owed)}</div>
+            <span className="n">ยอดลูกหนี้ทั้งหมดรวมกันดูที่เมนู 06.2</span>
+          </div>
+        </div>
+
         <div className="note" style={{ marginBottom: 14 }}>
           ใบวางบิลเป็น<b>เอกสารแจ้งเก็บเงิน</b> รวมใบที่ยังค้างของลูกค้ารายเดียวไว้ใบเดียว
           — <b>ไม่ตั้งลูกหนี้ซ้ำและไม่นับเป็นรายได้</b> ยอดขายกับลูกหนี้ไม่เปลี่ยนเพราะใบนี้
@@ -88,7 +127,26 @@ export default async function BillingPage({
                           : <span className="chip">วางบิลแล้ว</span>}
                       </td>
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <Link className="btn sm" href={`/income/billing/${r.id}/print`}>พิมพ์</Link>
+                        <span className="row-acts">
+                          <Link className="btn sm" href={`/income/billing/${r.id}`}>เปิด</Link>
+                          {mayPrint ? (
+                            <Link className="btn sm" href={`/income/billing/${r.id}/print`}>พิมพ์</Link>
+                          ) : null}
+
+                          {/* ใบที่ยกเลิกแล้วเหลือทางเดียวคือคัดลอกเป็นใบใหม่ ตามรุ่น 6.4 */}
+                          {r.status === 'void' && mayEdit ? (
+                            <Link className="btn sm" href={`/income/billing/new?from=${r.id}`}>
+                              คัดลอกใบใหม่
+                            </Link>
+                          ) : null}
+
+                          {/* ยกเลิกไม่ทำทันทีจากแถว — พาไปแผงยืนยันที่ต้องกรอกเหตุผล */}
+                          {r.status !== 'void' && mayEdit ? (
+                            <Link className="btn sm danger" href={`/income/billing/${r.id}?void=1`}>
+                              ยกเลิก
+                            </Link>
+                          ) : null}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -96,6 +154,22 @@ export default async function BillingPage({
               </table>
             </div>
           )}
+
+          <div className="pager">
+            <span>หน้า {page} จาก {lastPage}</span>
+            <PageSize base="/income/billing" size={pageSize} keep={keep} />
+            <div className="spacer" />
+            {page > 1 ? (
+              <Link className="btn" href={{ pathname: '/income/billing', query: { ...paged, page: page - 1 } }}>
+                ก่อนหน้า
+              </Link>
+            ) : null}
+            {page < lastPage ? (
+              <Link className="btn" href={{ pathname: '/income/billing', query: { ...paged, page: page + 1 } }}>
+                ถัดไป
+              </Link>
+            ) : null}
+          </div>
         </div>
       </SubNav>
     </Shell>

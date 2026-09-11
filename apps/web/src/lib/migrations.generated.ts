@@ -20,4 +20,6 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '015_expiry.sql',
   '016_count_cost.sql',
   '017_view_security.sql',
+  '018_unvoid.sql',
+  '019_owner_perms.sql',
 ];

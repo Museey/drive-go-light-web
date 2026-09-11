@@ -9,8 +9,13 @@ import { voidBillnoteAction } from './actions';
  * ไม่ลบทิ้ง เพราะเอกสารที่ส่งให้ลูกค้าไปแล้วต้องตามได้ว่าเคยมี
  * ใบแจ้งหนี้ข้างในจะกลับไปวางบิลใบใหม่ได้ทันทีหลังยกเลิก
  */
-export function VoidBillnote({ id, no }: { id: string; no: string }) {
-  const [open, setOpen] = useState(false);
+export function VoidBillnote({ id, no, startOpen }: {
+  id: string;
+  no: string;
+  /** กดปุ่มยกเลิกมาจากหน้ารายการ — เปิดแผงให้เลย ไม่ต้องกดซ้ำอีกที */
+  startOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(Boolean(startOpen));
   const [reason, setReason] = useState('');
   const [err, setErr] = useState('');
   const [busy, start] = useTransition();

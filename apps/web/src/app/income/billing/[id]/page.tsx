@@ -14,24 +14,41 @@ export default async function BillnotePage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string }>;
+  searchParams: Promise<{ saved?: string; void?: string; from?: string }>;
 }) {
   await requireTab('income', 'billing');
   const { id } = await params;
   const sp = await searchParams;
   const isNew = id === 'new';
 
+  /* คัดลอกใบวางบิลที่ยกเลิกเป็นใบใหม่ — ทางออกเดียวของใบที่ยกเลิกไปแล้ว ตามรุ่น 6.4 */
+  const fromId = isNew ? (sp.from ?? '') : '';
+
   const data = await query(async (c) => {
     const note = isNew ? null : await getBillnote(c, id);
     if (!isNew && !note) return null;
 
+    const source = fromId ? await getBillnote(c, fromId) : null;
     const keep = note?.docs.map((d) => d.id) ?? [];
     const open = await openInvoices(c, { includeDocIds: keep });
-    return { note, open };
+    return { note, open, source };
   });
 
   if (!isNew && !data) notFound();
-  const { note, open } = data!;
+  const { note, open, source } = data!;
+
+  /*
+   * ติ๊กใบเดิมกลับมาให้ **เฉพาะใบที่ยังค้างอยู่และยังไม่ไปอยู่บนใบวางบิลอื่น**
+   *
+   * ใบที่เก็บเงินครบไประหว่างนั้นต้องไม่ติ๊กกลับมา ไม่งั้นใบใหม่จะแจ้งเก็บซ้ำ
+   * กับเงินที่รับไปแล้ว ซึ่งเป็นเอกสารที่ส่งถึงมือลูกค้าจริง
+   */
+  const copyDocs = source
+    ? source.docs
+        .map((d) => open.find((o) => o.id === d.id))
+        .filter((v): v is NonNullable<typeof v> => Boolean(v) && !v!.inBillnoteNo)
+    : [];
+  const copyDropped = source ? source.docs.length - copyDocs.length : 0;
 
   /* ลูกค้าที่มีใบค้าง — วางบิลได้เฉพาะรายเหล่านี้ */
   const byKey = new Map<string, Party>();
@@ -76,6 +93,20 @@ export default async function BillnotePage({
     >
       {sp.saved ? <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย</div> : null}
 
+      {source ? (
+        <div className="note" style={{ marginBottom: 16 }}>
+          คัดลอกจากใบวางบิล <b>{source.note.no}</b> ที่ยกเลิกไปแล้ว —
+          ใบใหม่จะได้เลขที่ใหม่และไม่ผูกกับใบเดิม
+          {copyDropped > 0 ? (
+            <>
+              <br />
+              <b>ไม่ได้ติ๊กกลับมา {copyDropped} ใบ</b> เพราะเก็บเงินครบไปแล้ว
+              หรือไปอยู่บนใบวางบิลใบอื่นระหว่างนั้น — ตรวจรายการก่อนบันทึก
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       {voided ? (
         <div className="err" style={{ marginBottom: 16 }}>
           ใบวางบิลนี้ถูกยกเลิกแล้ว{note!.note.voidedReason ? ` — ${note!.note.voidedReason}` : ''}
@@ -96,14 +127,18 @@ export default async function BillnotePage({
               id={isNew ? undefined : id}
               no={note?.note.no}
               billDate={note?.note.billDate ?? today()}
+              /* วันนัดรับเงินไม่คัดลอกมา — วันนัดของใบที่ยกเลิกไปแล้วเป็นวันที่ผ่านไปแล้ว
+                 การพิมพ์วันเก่าลงใบใหม่แย่กว่าการปล่อยว่างให้กรอก */
               dueDate={note?.note.dueDate ?? ''}
-              byWhom={note?.note.byWhom ?? ''}
-              note={note?.note.note ?? ''}
+              byWhom={note?.note.byWhom ?? source?.note.byWhom ?? ''}
+              note={note?.note.note ?? source?.note.note ?? ''}
               parties={parties}
               invoices={open}
-              selected={note?.docs.map((d) => d.id) ?? []}
+              selected={note?.docs.map((d) => d.id) ?? copyDocs.map((d) => d.id)}
               initialPartyKey={
-                note ? (note.note.partyId ?? `name:${note.note.partyName}`) : ''
+                note ? (note.note.partyId ?? `name:${note.note.partyName}`)
+                : source ? (source.note.partyId ?? `name:${source.note.partyName}`)
+                : ''
               }
             />
           </div>
@@ -128,7 +163,9 @@ export default async function BillnotePage({
         </div>
       )}
 
-      {!isNew && !voided ? <VoidBillnote id={id} no={note!.note.no} /> : null}
+      {!isNew && !voided ? (
+        <VoidBillnote id={id} no={note!.note.no} startOpen={sp.void === '1'} />
+      ) : null}
     </Shell>
   );
 }

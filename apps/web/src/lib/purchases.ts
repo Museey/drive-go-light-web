@@ -2,7 +2,7 @@ import 'server-only';
 import { exTotals, poTotals, today, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
-import { consumeStock } from './stock-cost';
+import { voidBuyDocWith, unvoidBuyDocWith } from './buy-void';
 
 const n = (v: unknown): number => Number(v ?? 0);
 const money = (v: number) => (Math.round(v * 100) / 100).toFixed(2);
@@ -206,30 +206,16 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
 }
 
 export async function voidBuyDoc(id: string, reason: string): Promise<void> {
-  return mutate('expense', async (c, userId) => {
-    const moves = await c.query(
-      `select product_id, qty_delta from stock_moves where doc_id = $1 and reason = 'purchase'`,
-      [id],
-    );
-    for (const m of moves.rows) {
-      /* ของที่รับเข้ามาจากใบนี้ต้องออกไป และต้องคิดต้นทุนตามล็อตเหมือนการตัดอื่น ๆ
-         ไม่ใช่คืนที่ราคาซื้อ เพราะของอาจถูกขายไปแล้วบางส่วน ล็อตที่ตัดออกจึงเป็นคนละก้อน */
-      await consumeStock(c, {
-        productId: m.product_id,
-        qty: n(m.qty_delta),
-        movedOn: today(),
-        reason: 'return',
-        docId: id,
-        note: 'คืนสต๊อกจากการยกเลิกใบซื้อ',
-        userId,
-      });
-    }
+  return mutate('expense', (c, userId) => voidBuyDocWith(c, id, reason, userId), { sub: 'purchase' });
+}
 
-    await c.query(
-      `update documents set status='void', voided_at=now(), voided_reason=$2 where id=$1`,
-      [id, reason || 'ยกเลิกโดยผู้ใช้'],
-    );
-  }, { sub: 'purchase' });
+/**
+ * นำใบซื้อหรือค่าใช้จ่ายที่ยกเลิกไปแล้วกลับมาใช้ — กติกาอยู่ที่ buy-void.ts
+ *
+ * **มีเฉพาะฝั่งรายจ่าย** เอกสารรายรับที่ยกเลิกแล้วต้องคัดลอกเป็นใบใหม่เท่านั้น
+ */
+export async function unvoidBuyDoc(id: string): Promise<void> {
+  return mutate('expense', (c, userId) => unvoidBuyDocWith(c, id, userId), { sub: 'purchase' });
 }
 
 /* =====================================================================

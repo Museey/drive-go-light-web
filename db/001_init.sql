@@ -881,7 +881,7 @@ create table doc_edits (
   at          timestamptz not null default now(),
   user_id     uuid        references users(id) on delete set null,
   user_name   text        not null default '',
-  action      text        not null check (action in ('create', 'update', 'void'))
+  action      text        not null check (action in ('create', 'update', 'void', 'unvoid'))
 );
 
 comment on table doc_edits is
@@ -909,6 +909,9 @@ begin
     end if;
     if new.status = 'void' and old.status is distinct from 'void' then
       act := 'void';
+    -- กู้คืนใบที่ยกเลิกไปแล้ว — เงินและของกลับมามีผลอีกครั้ง จึงไม่ใช่ 'update' ธรรมดา
+    elsif old.status = 'void' and new.status is distinct from 'void' then
+      act := 'unvoid';
     else
       act := 'update';
     end if;

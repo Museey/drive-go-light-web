@@ -2,12 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext, EXPENSE_CATS } from '@drivegolight/core';
 import { can, requireTab } from '@/lib/auth';
+import { canEdit as mayEditOf } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { getDocDetail } from '@/lib/queries';
 import { getBuyDocMeta } from '@/lib/purchases';
 import { listPayments } from '@/lib/receivables';
 import { PaymentsPanel } from '../../finance/payments-panel';
-import { BuyDocActions } from '../doc-actions';
+import { BuyDocActions, UnvoidBuyDoc } from '../doc-actions';
 import { baht, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
 import { DocHistory } from '@/components/doc-history';
 
@@ -19,7 +20,7 @@ export default async function BuyDocPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; void?: string }>;
 }) {
   const session = await requireTab('expense', 'purchase');
   const { id } = await params;
@@ -31,6 +32,7 @@ export default async function BuyDocPage({
   if (!doc || !meta) notFound();
 
   const isPurchase = meta.kind === 'PO';
+  const mayEdit = mayEditOf(session, 'expense', 'purchase');
   const cat = meta.expenseCat ? CAT[meta.expenseCat] : null;
 
   return (
@@ -46,12 +48,17 @@ export default async function BuyDocPage({
       {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}
 
       {meta.status === 'void' ? (
-        <div className="err" style={{ marginBottom: 16 }}>
-          เอกสารนี้ถูกยกเลิกแล้ว{meta.voidedReason ? ` — ${meta.voidedReason}` : ''}
+        <div style={{ marginBottom: 16 }}>
+          <div className="err">
+            เอกสารนี้ถูกยกเลิกแล้ว{meta.voidedReason ? ` — ${meta.voidedReason}` : ''}
+          </div>
+          {mayEdit ? (
+            <UnvoidBuyDoc id={id} docNo={meta.docNo} hasStock={isPurchase} />
+          ) : null}
         </div>
       ) : (
         <div style={{ marginBottom: 16 }}>
-          <BuyDocActions id={id} />
+          <BuyDocActions id={id} startVoiding={sp.void === '1'} />
         </div>
       )}
 

@@ -96,6 +96,18 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
 
   const nearest = async () => (await nearestExpiryWith(app)).get(prod) ?? null;
 
+  /**
+   * วันที่นับจาก **current_date ของฐานข้อมูล** ไม่ใช่นาฬิกาของ Node
+   *
+   * ฐานตั้งเขตเวลาไทย ส่วน toISOString() ของ JS ให้วันที่ตาม UTC —
+   * ช่วงเที่ยงคืนถึงเจ็ดโมงเช้าบ้านเราสองอย่างนี้เป็นคนละวัน เทสต์ที่คำนวณวันเอง
+   * จึงแดงเฉพาะช่วงนั้นของวัน แล้วเขียวเองตอนสาย ซึ่งหาสาเหตุยากมาก
+   */
+  const inDays = async (n: number): Promise<string> => {
+    const { rows } = await app.query(`select (current_date + $1::int)::text as d`, [n]);
+    return rows[0].d as string;
+  };
+
   /*
    * ตรวจ "ไม่มีชื่ออยู่ใน Map" ไม่ใช่แค่ "ค่าเป็น null" — เพราะตัวเรียกใช้ .has()
    * ถ้าปล่อยให้สินค้าที่ไม่มีวันหมดอายุมีชื่ออยู่พร้อมค่า null .has() จะโกหก
@@ -209,8 +221,6 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
    * แล้วกดเข้าไปเจอ 5 รายการ โดยไม่มีอะไรอธิบายว่าทำไม
    */
   describe('ตัวเลขของใกล้หมดอายุบนหน้าแรก', () => {
-    const inDays = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
-
     it('ไม่มีของใกล้หมดอายุ — ศูนย์ทุกช่อง', async () => {
       await receive(prod, 10, '2026-01-01', null);
       expect(await expiringSummaryWith(app)).toEqual({ count: 0, expired: 0, value: 0 });
@@ -222,8 +232,8 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
      * โดยไม่มีอะไรอธิบาย — ของที่ไม่มีวันหมดอายุในตัวเดียวกันถูกนับเข้าไปด้วย
      */
     it('นับรายล็อต และคิดมูลค่าเฉพาะของที่อยู่ในล็อตที่ใกล้หมด', async () => {
-      await receive(prod, 4, '2026-01-01', inDays(10));
-      await receive(prod, 6, '2026-02-01', inDays(20));
+      await receive(prod, 4, '2026-01-01', await inDays(10));
+      await receive(prod, 6, '2026-02-01', await inDays(20));
       await receive(prod, 10, '2026-03-01', null);   /* ไม่มีวันหมดอายุ ต้องไม่ถูกนับ */
 
       const sum = await expiringSummaryWith(app);
@@ -233,15 +243,15 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
     });
 
     it('ล็อตที่ถูกตัดไปบางส่วน — มูลค่าคิดจากเศษที่เหลือ', async () => {
-      await receive(prod, 10, '2026-01-01', inDays(10));
+      await receive(prod, 10, '2026-01-01', await inDays(10));
       await consume(prod, 4, '2026-03-01');
       expect((await expiringSummaryWith(app)).value).toBe(600);
     });
 
     it('แยกได้ว่าล็อตไหนเลยวันหมดอายุไปแล้ว', async () => {
       const late = await addProduct('OIL-03');
-      await receive(prod, 5, '2026-01-01', inDays(10));
-      await receive(late, 5, '2020-01-01', inDays(-5));
+      await receive(prod, 5, '2026-01-01', await inDays(10));
+      await receive(late, 5, '2020-01-01', await inDays(-5));
 
       const sum = await expiringSummaryWith(app);
       expect(sum.count).toBe(2);
@@ -249,7 +259,7 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
     });
 
     it('เกณฑ์วันของร้านมีผลจริง — ไม่ได้ฝังเลข 60 ไว้ในคิวรี', async () => {
-      await receive(prod, 5, '2026-01-01', inDays(45));
+      await receive(prod, 5, '2026-01-01', await inDays(45));
       expect((await expiringSummaryWith(app)).count).toBe(1);
 
       /* คืนค่าเดิมใน finally — ถ้าข้อนี้ล้มกลางคัน เกณฑ์ที่ค้างไว้จะไปทำให้
@@ -265,13 +275,13 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
     });
 
     it('สินค้าที่ปิดใช้งานแล้ว ไม่ถูกนับ — ตรงกับรายการที่กดเข้าไปดู', async () => {
-      await receive(prod, 5, '2026-01-01', inDays(10));
+      await receive(prod, 5, '2026-01-01', await inDays(10));
       await app.query(`update products set active = false where id = $1`, [prod]);
       expect(await expiringSummaryWith(app)).toEqual({ count: 0, expired: 0, value: 0 });
     });
 
     it('ของอู่อื่นไม่ถูกนับรวม', async () => {
-      await receive(prod, 5, '2026-01-01', inDays(10));
+      await receive(prod, 5, '2026-01-01', await inDays(10));
       await app.query(`select set_config('app.tenant_id', $1, false)`, [otherTenant]);
       const sum = await expiringSummaryWith(app);
       await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);
@@ -286,24 +296,22 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
    */
   describe('รายการของใกล้หมดอายุแยกรายล็อต', () => {
     /** วันที่นับจากวันนี้ — รายการนี้เทียบกับ current_date ของฐาน */
-    const inDays = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
-
     it('หลายล็อต — แยกบรรทัด เรียงจากที่หมดก่อน พร้อมจำนวนของแต่ละล็อต', async () => {
-      await receive(prod, 10, '2026-01-01', inDays(30));
-      await receive(prod, 4, '2026-02-01', inDays(10));
+      await receive(prod, 10, '2026-01-01', await inDays(30));
+      await receive(prod, 4, '2026-02-01', await inDays(10));
 
       const rows = await listExpiringLotsWith(app, 60);
       expect(rows.map((r) => [r.expiresOn, r.qty])).toEqual([
-        [inDays(10), 4],
-        [inDays(30), 10],
+        [await inDays(10), 4],
+        [await inDays(30), 10],
       ]);
       expect(rows[0]!.code).toBe('OIL-01');
       expect(rows[0]!.value).toBe(400);
     });
 
     it('ล็อตที่ถูกตัดไปบางส่วน — ตอบเศษที่เหลือ ไม่ใช่จำนวนที่รับเข้ามา', async () => {
-      await receive(prod, 10, '2026-01-01', inDays(10));
-      await receive(prod, 10, '2026-01-01', inDays(30));
+      await receive(prod, 10, '2026-01-01', await inDays(10));
+      await receive(prod, 10, '2026-01-01', await inDays(30));
       await consume(prod, 4, '2026-03-01');
 
       const rows = await listExpiringLotsWith(app, 60);
@@ -311,17 +319,17 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
     });
 
     it('ล็อตที่ถูกตัดหมดแล้ว หายไปจากรายการ', async () => {
-      await receive(prod, 10, '2026-01-01', inDays(10));
-      await receive(prod, 10, '2026-01-01', inDays(30));
+      await receive(prod, 10, '2026-01-01', await inDays(10));
+      await receive(prod, 10, '2026-01-01', await inDays(30));
       await consume(prod, 10, '2026-03-01');
 
       const rows = await listExpiringLotsWith(app, 60);
-      expect(rows.map((r) => [r.expiresOn, r.qty])).toEqual([[inDays(30), 10]]);
+      expect(rows.map((r) => [r.expiresOn, r.qty])).toEqual([[await inDays(30), 10]]);
     });
 
     it('รับเข้าคนละรอบแต่หมดอายุวันเดียวกัน — รวมเป็นบรรทัดเดียว', async () => {
-      await receive(prod, 3, '2026-01-01', inDays(20));
-      await receive(prod, 7, '2026-02-01', inDays(20));
+      await receive(prod, 3, '2026-01-01', await inDays(20));
+      await receive(prod, 7, '2026-02-01', await inDays(20));
 
       const rows = await listExpiringLotsWith(app, 60);
       expect(rows).toHaveLength(1);
@@ -334,26 +342,26 @@ describe.skipIf(!DB_URL)('ของใกล้หมดอายุ', () => {
     });
 
     it('เลยวันหมดอายุแล้วยังอยู่ในรายการ พร้อมจำนวนวันติดลบ', async () => {
-      await receive(prod, 5, '2020-01-01', inDays(-3));
+      await receive(prod, 5, '2020-01-01', await inDays(-3));
       const rows = await listExpiringLotsWith(app, 60);
       expect(rows).toHaveLength(1);
       expect(rows[0]!.daysLeft).toBe(-3);
     });
 
     it('เกินเกณฑ์วันเตือน — ไม่ขึ้น', async () => {
-      await receive(prod, 5, '2026-01-01', inDays(45));
+      await receive(prod, 5, '2026-01-01', await inDays(45));
       expect(await listExpiringLotsWith(app, 30)).toEqual([]);
       expect(await listExpiringLotsWith(app, 90)).toHaveLength(1);
     });
 
     it('สินค้าที่ปิดใช้งานแล้ว ไม่มาเตือนให้รก', async () => {
-      await receive(prod, 5, '2026-01-01', inDays(10));
+      await receive(prod, 5, '2026-01-01', await inDays(10));
       await app.query(`update products set active = false where id = $1`, [prod]);
       expect(await listExpiringLotsWith(app, 60)).toEqual([]);
     });
 
     it('ของอู่อื่นไม่โผล่มา', async () => {
-      await receive(prod, 5, '2026-01-01', inDays(10));
+      await receive(prod, 5, '2026-01-01', await inDays(10));
       await app.query(`select set_config('app.tenant_id', $1, false)`, [otherTenant]);
       const rows = await listExpiringLotsWith(app, 60);
       await app.query(`select set_config('app.tenant_id', $1, false)`, [tenantId]);

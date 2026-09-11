@@ -2,10 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { voidBuyDocAction } from './actions';
+import { unvoidBuyDocAction, voidBuyDocAction } from './actions';
 
-export function BuyDocActions({ id }: { id: string }) {
-  const [voiding, setVoiding] = useState(false);
+export function BuyDocActions({ id, startVoiding }: {
+  id: string;
+  /** กดปุ่มยกเลิกมาจากหน้ารายการ — เปิดแผงให้เลย ไม่ต้องกดซ้ำอีกที */
+  startVoiding?: boolean;
+}) {
+  const [voiding, setVoiding] = useState(Boolean(startVoiding));
   const [reason, setReason] = useState('');
 
   if (voiding) {
@@ -39,6 +43,58 @@ export function BuyDocActions({ id }: { id: string }) {
       <Link className="btn" href={`/expense/${id}/edit`}>แก้ไข</Link>
       <Link className="btn" href={`/expense/${id}/print`}>พิมพ์เอกสาร</Link>
       <button className="btn danger" type="button" onClick={() => setVoiding(true)}>ยกเลิกเอกสาร</button>
+    </div>
+  );
+}
+
+/**
+ * นำใบที่ยกเลิกกลับมาใช้ — มีเฉพาะฝั่งรายจ่าย ตามกติกาของรุ่น 6.4
+ *
+ * เอกสารรายรับที่ยกเลิกแล้วกู้คืนไม่ได้ เพราะยอดขาย ภาษีขาย และใบกำกับภาษี
+ * ที่ส่งออกไปแล้วพัวพันอยู่ — ใบพวกนั้นใช้ "คัดลอกใบใหม่" แทน
+ *
+ * ถามยืนยันก่อนเสมอ และบอกให้ครบว่าอะไรจะกลับมาบ้าง เพราะการกดผิด
+ * ทำให้ของงอกกลับเข้าคลังและหนี้กลับมาโดยที่ตัวเลขไม่มีอะไรบอกว่าเพิ่งเปลี่ยน
+ */
+export function UnvoidBuyDoc({ id, docNo, hasStock }: {
+  id: string;
+  docNo: string;
+  /** ใบนี้เคยรับของเข้าคลัง — ข้อความยืนยันจะได้ตรงกับสิ่งที่จะเกิดขึ้นจริง */
+  hasStock: boolean;
+}) {
+  const [asking, setAsking] = useState(false);
+
+  if (!asking) {
+    return (
+      <div className="tag-row" style={{ marginTop: 12 }}>
+        <button className="btn" type="button" onClick={() => setAsking(true)}>
+          กู้คืนเอกสาร
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <header><h2>กู้คืนเอกสาร</h2></header>
+      <div className="body">
+        <p style={{ marginTop: 0, marginBottom: 12 }}>
+          นำเอกสาร <b>{docNo}</b> กลับมาใช้ — ยอดของใบนี้จะกลับไปนับในเจ้าหนี้
+          ภาษีซื้อ และงบกำไรขาดทุนตามเดิม
+          {hasStock ? (
+            <>
+              {' '}และ<b>ของที่รับเข้าจากใบนี้จะกลับเข้าคลัง</b>ด้วยต้นทุนก้อนเดิม
+              ที่ถูกตัดออกไปตอนยกเลิก
+            </>
+          ) : null}
+        </p>
+        <div className="tag-row">
+          <form action={unvoidBuyDocAction.bind(null, id)}>
+            <button className="btn primary" type="submit">ยืนยันกู้คืน</button>
+          </form>
+          <button className="btn" type="button" onClick={() => setAsking(false)}>ไม่กู้คืนแล้ว</button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { EXPENSE_CATS } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
+import { canEdit as mayEditOf, canExport as mayExportOf } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listBuyDocs } from '@/lib/purchases';
@@ -27,7 +28,9 @@ export default async function ExpensePage({
     from?: string; to?: string; month?: string; year?: string;
   }>;
 }) {
-  await requireTab('expense', 'purchase');
+  const session = await requireTab('expense', 'purchase');
+  const mayEdit = mayEditOf(session, 'expense', 'purchase');
+  const mayPrint = mayExportOf(session, 'expense', 'purchase');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const { from, to } = rangeFromParams(sp);
@@ -129,6 +132,7 @@ export default async function ExpensePage({
                   <th>อ้างอิง</th>
                   <th className="num">ยอดจ่าย</th><th className="num">จ่ายแล้ว</th><th className="num">คงค้าง</th>
                   <th>สถานะ</th><th>ครบกำหนด</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -157,6 +161,28 @@ export default async function ExpensePage({
                           : <span className={`chip ${st.tone}`}>{st.text}</span>}
                       </td>
                       <td>{thDate(r.dueDate)}</td>
+
+                      {/* หน้ารายการต้องทำงานจบได้เอง — เดิมแถวไม่มีปุ่มเลยสักปุ่ม
+                          ต้องเปิดเข้าไปในใบก่อนถึงจะทำอะไรได้ ต่างจากหน้ารายรับและจากรุ่น 6.4 */}
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <span className="row-acts">
+                          <Link className="btn sm" href={`/expense/${r.id}`}>เปิด</Link>
+                          {mayPrint ? (
+                            <Link className="btn sm" href={`/expense/${r.id}/print`}>พิมพ์</Link>
+                          ) : null}
+
+                          {/* รายจ่ายกู้คืนได้ ต่างจากรายรับที่ต้องคัดลอกใบใหม่ —
+                              ใบซื้อไม่มีเอกสารที่ออกไปถึงมือคนนอก การกดยกเลิกผิดใบ
+                              จึงเป็นแค่การคีย์ผิด ไม่ใช่เรื่องที่ต้องมีร่องรอยใบใหม่ */}
+                          {r.status === 'void' && mayEdit ? (
+                            <Link className="btn sm" href={`/expense/${r.id}`}>กู้คืน</Link>
+                          ) : null}
+
+                          {r.status !== 'void' && mayEdit ? (
+                            <Link className="btn sm danger" href={`/expense/${r.id}?void=1`}>ยกเลิก</Link>
+                          ) : null}
+                        </span>
+                      </td>
                     </tr>
                   );
                 })}
