@@ -73,7 +73,9 @@ export function linkShape(value) {
  * @param opts.copy   ตัวคัดลอก ใส่เองได้เพื่อให้เทสต์ไม่ต้องแตะคลิปบอร์ดจริง
  */
 export function emitSecret(value, {
-  title, shape = urlShape, show = false, log = console.log, copy = copyToClipboard,
+  /* ต้องมีค่าตั้งต้น ไม่งั้น TypeScript อ่านชนิดของ opts ไม่เจอ title เลย
+     และถ้าผู้เรียกลืมส่งมาจริง ๆ หัวข้อจะกลายเป็น "═══ undefined ═══" */
+  title = 'ค่าลับ', shape = urlShape, show = false, log = console.log, copy = copyToClipboard,
 } = {}) {
   log(`\n═══ ${title} ═══\n`);
   log('  ' + shape(value));
