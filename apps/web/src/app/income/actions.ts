@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
-  saveSalesDoc, searchCustomers, searchProducts, voidSalesDoc,
-  type PickedContact, type PickedProduct, type SalesDocInput,
+  saveSalesDoc, scanForDoc, searchCustomers, searchProducts, voidSalesDoc,
+  type DocScan, type PickedContact, type PickedProduct, type SalesDocInput,
 } from '@/lib/sales';
 import { friendlyDbError, type FormResult } from '@/lib/mutate';
 
@@ -75,6 +75,16 @@ function describe(err: unknown, fallback: string): string {
 
 export async function searchProductsAction(q: string): Promise<PickedProduct[]> {
   return searchProducts(q);
+}
+
+/**
+ * ยิงบาร์โค้ดเข้าหน้าออกเอกสาร
+ *
+ * ใช้ร่วมกันทั้งใบขายและใบซื้อ — ทั้งสองหน้าหยิบอะไหล่จากทะเบียนเดียวกัน
+ * และต้องได้ของตัวเดียวกันเมื่อยิงบาร์โค้ดเดียวกัน
+ */
+export async function scanPartAction(term: string): Promise<DocScan> {
+  return scanForDoc(term);
 }
 
 export async function searchCustomersAction(q: string): Promise<PickedContact[]> {

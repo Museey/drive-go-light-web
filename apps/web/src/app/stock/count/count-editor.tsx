@@ -38,11 +38,26 @@ export function CountEditor({ count }: { count: StockCount }) {
   /* ช่องกรอกจำนวนเก็บเป็นข้อความ เพราะ "" กับ "0" ต่างกัน */
   const [draftQty, setDraftQty] = useState<Record<string, string>>({});
 
-  useEffect(() => { scanRef.current?.focus(); }, [count.items.length]);
+  /* โฟกัสค้างที่ช่องยิงเสมอ — คนถือปืนยืนอยู่หน้าชั้นวาง ไม่ได้เอามือมาคลิกจอ
+     ช่องนี้จึงไม่เคยถูก disabled ระหว่างรอผล เพราะช่องที่ disabled เสียโฟกัสทันที
+     แล้วตัวอักษรของนัดถัดไปหล่นหายไปทั้งชุด */
+  useEffect(() => { scanRef.current?.focus(); }, [count.items.length, busy]);
 
   const ro = count.applied;
 
-  const scan = (term: string) => start(async () => {
+  /*
+   * **ล้างช่องก่อนยิงคำขอ ไม่ใช่หลังผลกลับมา**
+   *
+   * ปืนยิงพิมพ์ต่อท้ายสิ่งที่ค้างอยู่ในช่อง ถ้ารอล้างตอนเซิร์ฟเวอร์ตอบ นัดถัดไป
+   * ที่มาถึงก่อนจะกลายเป็นรหัสสองตัวติดกัน (ABCABC) ไม่ตรงกับสินค้าไหน
+   * นัดนั้นหายไปทั้งที่ปืนดังติ๊บปกติ — ของขาดจากใบตรวจนับโดยไม่มีใครรู้
+   */
+  const scan = (term: string) => {
+    setScanTerm('');
+    doScan(term);
+  };
+
+  const doScan = (term: string) => start(async () => {
     setErr(''); setMsg('');
     const r = await scanAction(count.id, term);
     if (r.error) { setErr(r.error); return; }
@@ -56,7 +71,6 @@ export function CountEditor({ count }: { count: StockCount }) {
         ? `เพิ่ม ${res.item.code} ${res.item.name} · นับ 1 ${res.item.unit}`
         : `${res.item.code} ${res.item.name} · นับ ${fmtQty(res.item.countedQty ?? 0)} ${res.item.unit}`);
     }
-    setScanTerm('');
     router.refresh();
     scanRef.current?.focus();
   });
@@ -84,7 +98,7 @@ export function CountEditor({ count }: { count: StockCount }) {
               <div className="field" style={{ gridColumn: 'span 2' }}>
                 <label htmlFor="scan">ยิงบาร์โค้ดเข้าใบตรวจนับ</label>
                 <input className="in mono" id="scan" ref={scanRef} autoComplete="off"
-                       value={scanTerm} disabled={busy}
+                       value={scanTerm}
                        onChange={(e) => setScanTerm(e.target.value)}
                        onKeyDown={(e) => {
                          if (e.key !== 'Enter') return;

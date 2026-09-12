@@ -10,6 +10,7 @@ import { mutate } from './mutate';
 import { consumeStock, returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
 import { REMAINING_LOTS_SQL } from './expiry';
+import { findByScanWith, parseScan } from './scan';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
@@ -338,28 +339,86 @@ export async function lotExpiryOf(ids: (string | null)[]): Promise<Record<string
   });
 }
 
+/** ชุดคอลัมน์ของอะไหล่ที่หน้าออกเอกสารต้องใช้ — ที่เดียว ใช้ทั้งการค้นและการยิง */
+const PICK_SELECT = `
+  ${REMAINING_LOTS_SQL}
+  select p.id, p.code, p.oem, p.name, p.unit, p.price_a, p.price_b, p.price_c,
+         p.shelf_life_months, s.qty_on_hand,
+         x.nearest_expiry::text as nearest_expiry
+    from products p join product_stock s on s.product_id = p.id
+    left join (select product_id, min(expires_on) as nearest_expiry
+                 from remaining group by product_id) x on x.product_id = p.id`;
+
+const toPickedProduct = (r: any): PickedProduct => ({
+  id: r.id, code: r.code, oem: r.oem, name: r.name, unit: r.unit,
+  priceA: n(r.price_a), priceB: n(r.price_b), priceC: n(r.price_c),
+  qtyOnHand: n(r.qty_on_hand),
+  shelfLifeMonths: r.shelf_life_months ?? null,
+  nearestExpiry: r.nearest_expiry ?? null,
+});
+
+/**
+ * ค้นอะไหล่สำหรับหน้าออกเอกสาร — **ค้นบาร์โค้ดด้วย**
+ *
+ * ปืนยิงบาร์โค้ดทำงานเหมือนคีย์บอร์ดที่พิมพ์เร็วแล้วกด Enter ช่องนี้จึงรับการยิงได้
+ * โดยไม่ต้องมีอะไรพิเศษ ขอแค่ค้นบาร์โค้ดเจอ (เดิมค้นแค่รหัส ชื่อ และ OEM)
+ */
 export async function searchProducts(q: string, limit = 15): Promise<PickedProduct[]> {
   const term = q.trim();
   return query(async (c) => {
     const { rows } = await c.query(
-      `${REMAINING_LOTS_SQL}
-       select p.id, p.code, p.oem, p.name, p.unit, p.price_a, p.price_b, p.price_c,
-              p.shelf_life_months, s.qty_on_hand,
-              x.nearest_expiry::text as nearest_expiry
-       from products p join product_stock s on s.product_id = p.id
-       left join (select product_id, min(expires_on) as nearest_expiry
-                    from remaining group by product_id) x on x.product_id = p.id
-       where p.active and ($1 = '' or p.code ilike $2 or p.name ilike $2 or p.oem ilike $2)
-       order by p.code limit $3`,
+      `${PICK_SELECT}
+       where p.active and ($1 = '' or p.barcode ilike $2 or p.code ilike $2
+                        or p.name ilike $2 or p.oem ilike $2)
+       /* ตัวที่ตรงเป๊ะมาก่อนเสมอ — ยิงบาร์โค้ดแล้วต้องได้ตัวนั้นเป็นตัวแรก
+          ไม่ใช่ตัวที่บังเอิญมีเลขนั้นอยู่กลางชื่อ */
+       order by case when upper(p.barcode) = upper($1) then 0
+                     when upper(p.code) = upper($1) then 1
+                     when upper(p.oem) = upper($1) then 2 else 3 end,
+                p.code
+       limit $3`,
       [term, `%${term}%`, limit],
     );
-    return rows.map((r) => ({
-      id: r.id, code: r.code, oem: r.oem, name: r.name, unit: r.unit,
-      priceA: n(r.price_a), priceB: n(r.price_b), priceC: n(r.price_c),
-      qtyOnHand: n(r.qty_on_hand),
-      shelfLifeMonths: r.shelf_life_months ?? null,
-      nearestExpiry: r.nearest_expiry ?? null,
-    }));
+    return rows.map(toPickedProduct);
+  });
+}
+
+/** อะไหล่ตามรหัสภายใน — ใช้ต่อจากการยิงที่รู้ตัวแล้วว่าเป็นตัวไหน */
+async function pickedById(
+  c: pg.PoolClient | pg.Client, id: string,
+): Promise<PickedProduct | null> {
+  const { rows } = await c.query(`${PICK_SELECT} where p.id = $1`, [id]);
+  return rows[0] ? toPickedProduct(rows[0]) : null;
+}
+
+export type DocScan =
+  | { kind: 'one'; qty: number; product: PickedProduct }
+  | { kind: 'inactive'; code: string; name: string }
+  | { kind: 'many'; term: string; count: number }
+  | { kind: 'none'; term: string };
+
+/**
+ * ยิงบาร์โค้ดเข้าหน้าออกเอกสาร
+ *
+ * คืนตัวสินค้าพร้อมราคาให้ฝั่งหน้าจอเอาไปใส่เป็นบรรทัดเอง — ไม่ได้เขียนลงเอกสารที่นี่
+ * เพราะเอกสารยังเป็นร่างอยู่ในหน้าจอ ยังไม่มีตัวตนในฐานข้อมูลจนกว่าจะกดบันทึก
+ *
+ * กติกาการค้นใช้ชุดเดียวกับใบตรวจนับ (scan.ts) และจำนวนนำหน้าแบบ `40*ABC123`
+ */
+export async function scanForDoc(raw: string): Promise<DocScan> {
+  const { qty, term } = parseScan(raw);
+  if (!term) return { kind: 'none', term };
+
+  return query(async (c) => {
+    const hit = await findByScanWith(c, term);
+    if (hit.kind === 'none') return { kind: 'none', term };
+    if (hit.kind === 'many') return { kind: 'many', term, count: hit.count };
+    if (hit.kind === 'inactive') {
+      return { kind: 'inactive', code: hit.code, name: hit.name };
+    }
+
+    const product = await pickedById(c, hit.productId);
+    return product ? { kind: 'one', qty, product } : { kind: 'none', term };
   });
 }
 

@@ -7,7 +7,8 @@ import {
   addMonths, bahttext, EXPENSE_CATS, exTotals, poTotals, type VatMode,
 } from '@drivegolight/core';
 import { saveBuyDocAction, searchVendorsAction } from './actions';
-import { searchProductsAction } from '../income/actions';
+import { scanPartAction, searchProductsAction } from '../income/actions';
+import { ScanBox } from '@/components/scan-box';
 import type { FormResult } from '@/lib/mutate';
 import type { BuyDocInput, BuyItemInput, ExpenseCat, PickedVendor } from '@/lib/purchases';
 import type { PickedProduct } from '@/lib/sales';
@@ -43,6 +44,8 @@ export function BuyEditor({
   const [vendors, setVendors] = useState<PickedVendor[] | null>(null);
   const [partQuery, setPartQuery] = useState('');
   const [parts, setParts] = useState<PickedProduct[] | null>(null);
+  /** บาร์โค้ดที่ยิงแล้วไม่เจอ — ค้างไว้เพื่อเสนอทางไปสร้างสินค้าใหม่ */
+  const [notFound, setNotFound] = useState('');
   const [pending, startTransition] = useTransition();
 
   const isPurchase = doc.kind === 'PO';
@@ -86,22 +89,44 @@ export function BuyEditor({
     setParts(await searchProductsAction(partQuery));
   });
 
-  const addProduct = (p: PickedProduct) => {
+  const addProduct = (p: PickedProduct, qty = 1) => {
     setDoc((d) => {
       const at = d.items.findIndex((i) => i.productId === p.id);
       if (at >= 0) {
-        return { ...d, items: d.items.map((i, j) => (j === at ? { ...i, qty: i.qty + 1 } : i)) };
+        return { ...d, items: d.items.map((i, j) => (j === at ? { ...i, qty: i.qty + qty } : i)) };
       }
       return {
         ...d,
         items: [...d.items, {
           productId: p.id, code: p.code, oem: p.oem, name: p.name, unit: p.unit,
-          qty: 1, unitPrice: 0,
+          qty, unitPrice: 0,
           /* เติมวันหมดอายุให้จากอายุการเก็บของสินค้า แก้รายบรรทัดได้ถ้าของจริงไม่ตรง */
           expiresOn: addMonths(d.docDate, p.shelfLifeMonths),
         }],
       };
     });
+  };
+
+  /* ยิงบาร์โค้ดตอนรับของเข้า — ใช้ตัวเดียวกับหน้าใบขาย ทะเบียนสินค้าเดียวกัน
+     ต่างกันแค่ใบซื้อไม่ดึงราคาขายมา เพราะราคาที่กรอกคือราคาที่จ่ายให้ผู้ขาย */
+  const onScan = async (raw: string) => {
+    const r = await scanPartAction(raw);
+
+    if (r.kind === 'one') {
+      addProduct(r.product, r.qty);
+      return { ok: true, message: `${r.product.code} ${r.product.name} · ${r.qty} ${r.product.unit}` };
+    }
+    if (r.kind === 'inactive') {
+      return { ok: false, message: `${r.code} ${r.name} ปิดใช้งานอยู่ — เปิดใช้งานที่ทะเบียนสินค้าก่อน` };
+    }
+    if (r.kind === 'many') {
+      setPartQuery(r.term);
+      setParts(await searchProductsAction(r.term));
+      return { ok: false, message: `ตรงกับสินค้า ${r.count} รายการ — เลือกจากรายการด้านล่าง` };
+    }
+
+    setNotFound(r.term);
+    return { ok: false, message: `ไม่พบ "${r.term}"` };
   };
 
   const catInfo = EXPENSE_CATS.find((x) => x.key === doc.expenseCat);
@@ -271,10 +296,31 @@ export function BuyEditor({
           <span className="subtle">{doc.items.length} บรรทัด</span>
         </header>
 
+        {/* ยิงบาร์โค้ดได้เฉพาะใบซื้อ — ใบค่าใช้จ่ายไม่มีอะไหล่ให้ยิง */}
+        {isPurchase ? <ScanBox onScan={onScan} /> : null}
+
+        {notFound ? (
+          <div className="body" style={{ paddingBottom: 0 }}>
+            <div className="note" style={{ background: '#FCF1F1', borderColor: '#EEC4C4' }}>
+              ยิงแล้วไม่พบบาร์โค้ด <b className="mono">{notFound}</b> ในทะเบียนสินค้า
+              <div className="tag-row" style={{ marginTop: 8 }}>
+                <a className="btn" target="_blank" rel="noreferrer"
+                   href={`/stock/new?barcode=${encodeURIComponent(notFound)}`}>
+                  เพิ่มเป็นสินค้าใหม่ (เปิดแท็บใหม่)
+                </a>
+                <button className="btn" type="button" onClick={() => setNotFound('')}>ปิด</button>
+              </div>
+              <span className="hint">
+                เปิดแท็บใหม่เพื่อไม่ให้ใบที่กำลังทำอยู่หาย — สร้างเสร็จแล้วกลับมายิงซ้ำได้เลย
+              </span>
+            </div>
+          </div>
+        ) : null}
+
         <div className="toolbar">
           {isPurchase ? (
             <>
-              <input className="in" value={partQuery} placeholder="ค้นอะไหล่จากทะเบียนสินค้า"
+              <input className="in" value={partQuery} placeholder="ค้นอะไหล่ จากรหัส ชื่อ บาร์โค้ด หรือ OEM"
                      style={{ width: 260 }}
                      onChange={(e) => setPartQuery(e.target.value)}
                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchPart(); } }} />

@@ -1,5 +1,6 @@
 import type pg from 'pg';
 import { BOOK_UNIT_COST_SQL, BOOK_VALUE_SQL, consumeStock, receiveStock } from './stock-cost';
+import { findByScanWith } from './scan';
 
 /**
  * ใบตรวจนับสต๊อก — เดินนับของจริงในชั้นวางแล้วปรับยอดในระบบให้ตรง
@@ -326,38 +327,11 @@ export async function scanIntoCount(
   const v = term.trim();
   if (!v) return { kind: 'none', term: v };
 
-  const exact = await c.query(
-    `select id from products
-     where active and (upper(barcode) = upper($1)
-                    or upper(code) = upper($1)
-                    or upper(oem) = upper($1))
-     order by case when upper(barcode) = upper($1) then 0
-                   when upper(code) = upper($1) then 1 else 2 end
-     limit 1`,
-    [v],
-  );
-
-  let productId: string | undefined = exact.rows[0]?.id;
-
-  if (!productId) {
-    const fuzzy = await c.query(
-      `select id from products
-       where active and (barcode ilike $1 or code ilike $1
-                      or name ilike $1 or oem ilike $1)
-       limit 2`,
-      [`%${v}%`],
-    );
-    if (fuzzy.rows.length === 1) productId = fuzzy.rows[0].id;
-    else if (fuzzy.rows.length > 1) {
-      const all = await c.query(
-        `select count(*)::int as c from products
-         where active and (barcode ilike $1 or code ilike $1
-                        or name ilike $1 or oem ilike $1)`,
-        [`%${v}%`],
-      );
-      return { kind: 'many', term: v, count: n(all.rows[0].c) };
-    }
-  }
+  /* กติกาการค้นอยู่ที่ scan.ts — ใบตรวจนับกับหน้าออกเอกสารต้องใช้ชุดเดียวกัน
+     ไม่งั้นยิงบาร์โค้ดเดียวกันสองหน้าแล้วได้คนละตัว */
+  const hit = await findByScanWith(c, v);
+  if (hit.kind === 'many') return { kind: 'many', term: v, count: hit.count };
+  const productId = hit.kind === 'one' ? hit.productId : undefined;
 
   if (!productId) return { kind: 'none', term: v };
 

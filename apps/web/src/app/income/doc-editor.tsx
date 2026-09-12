@@ -4,12 +4,13 @@ import { useActionState, useEffect, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import { bahttext, expiredLines, recTotals, type VatMode } from '@drivegolight/core';
-import { saveDocAction, searchCustomersAction, searchProductsAction } from './actions';
+import { saveDocAction, scanPartAction, searchCustomersAction, searchProductsAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 import type { DocItemInput, PickedContact, PickedProduct, SalesDocInput, SalesKind } from '@/lib/sales';
 import { baht, KIND_LABEL } from '@/lib/format';
 import { VehicleFields } from './vehicle-fields';
 import { ExpiryChip } from '@/components/expiry-chip';
+import { ScanBox } from '@/components/scan-box';
 
 const EPS = 0.004;
 const money = (n: number) => (Math.round(n * 100) / 100);
@@ -71,6 +72,8 @@ export function DocEditor({
    * แล้วเติมเพิ่มทุกครั้งที่ค้นหาเจอของใหม่ ของที่หยิบเข้ามาทีหลังจึงเตือนได้เหมือนกัน
    */
   const [expiry, setExpiry] = useState<Record<string, string>>(lotExpiry);
+  /** บาร์โค้ดที่ยิงแล้วไม่เจอ — ค้างไว้เพื่อเสนอทางไปสร้างสินค้าใหม่ */
+  const [notFound, setNotFound] = useState('');
   const learn = (found: PickedProduct[]) => setExpiry((e) => {
     const next = { ...e };
     for (const p of found) if (p.nearestExpiry) next[p.id] = p.nearestExpiry;
@@ -166,20 +169,54 @@ export function DocEditor({
     });
   };
 
-  const addProduct = (p: PickedProduct) => {
+  /**
+   * ใส่อะไหล่ลงบรรทัด — ตัวเดิมที่มีอยู่แล้วให้เพิ่มจำนวน ไม่ใช่เพิ่มบรรทัดใหม่
+   *
+   * ยิงซ้ำสิบครั้งจึงได้สิบชิ้นในบรรทัดเดียว ไม่ใช่สิบบรรทัดที่ต้องมารวมเองทีหลัง
+   * (กติกาเดียวกับใบตรวจนับและรุ่น 6.4)
+   */
+  const addProduct = (p: PickedProduct, qty = 1) => {
     setDoc((d) => {
       const at = d.items.findIndex((i) => i.productId === p.id);
       if (at >= 0) {
-        return { ...d, items: d.items.map((i, j) => (j === at ? { ...i, qty: i.qty + 1 } : i)) };
+        return { ...d, items: d.items.map((i, j) => (j === at ? { ...i, qty: i.qty + qty } : i)) };
       }
       return {
         ...d,
         items: [...d.items, {
           productId: p.id, code: p.code, oem: p.oem, name: p.name, unit: p.unit,
-          qty: 1, unitPrice: priceOf(p), isService: false,
+          qty, unitPrice: priceOf(p), isService: false,
         }],
       };
     });
+  };
+
+  /**
+   * ยิงบาร์โค้ดแล้วเข้าเป็นบรรทัดทันที
+   *
+   * **ยิงไม่เจอต้องมีทางไปต่อ** — อู่ยิงของที่เพิ่งรับเข้ามาแล้วไม่เจอเป็นเรื่องปกติ
+   * ถ้าบอกแค่ "ไม่พบ" คนต้องทิ้งใบที่ทำค้างอยู่ไปสร้างสินค้าใหม่แล้วกลับมาเริ่มใหม่
+   * จึงเปิดหน้าสร้างสินค้าในแท็บใหม่พร้อมกรอกบาร์โค้ดที่ยิงไว้ให้แล้ว
+   */
+  const onScan = async (raw: string) => {
+    const r = await scanPartAction(raw);
+
+    if (r.kind === 'one') {
+      addProduct(r.product, r.qty);
+      learn([r.product]);
+      return { ok: true, message: `${r.product.code} ${r.product.name} · ${r.qty} ${r.product.unit}` };
+    }
+    if (r.kind === 'inactive') {
+      return { ok: false, message: `${r.code} ${r.name} ปิดใช้งานอยู่ — เปิดใช้งานที่ทะเบียนสินค้าก่อน` };
+    }
+    if (r.kind === 'many') {
+      setPartQuery(r.term);
+      setPartResults(await searchProductsAction(r.term));
+      return { ok: false, message: `ตรงกับสินค้า ${r.count} รายการ — เลือกจากรายการด้านล่าง` };
+    }
+
+    setNotFound(r.term);
+    return { ok: false, message: `ไม่พบ "${r.term}"` };
   };
 
   /*
@@ -413,8 +450,28 @@ export function DocEditor({
           </div>
         ) : null}
 
+        <ScanBox onScan={onScan} />
+
+        {notFound ? (
+          <div className="body" style={{ paddingBottom: 0 }}>
+            <div className="note" style={{ background: '#FCF1F1', borderColor: '#EEC4C4' }}>
+              ยิงแล้วไม่พบบาร์โค้ด <b className="mono">{notFound}</b> ในทะเบียนสินค้า
+              <div className="tag-row" style={{ marginTop: 8 }}>
+                <a className="btn" target="_blank" rel="noreferrer"
+                   href={`/stock/new?barcode=${encodeURIComponent(notFound)}`}>
+                  เพิ่มเป็นสินค้าใหม่ (เปิดแท็บใหม่)
+                </a>
+                <button className="btn" type="button" onClick={() => setNotFound('')}>ปิด</button>
+              </div>
+              <span className="hint">
+                เปิดแท็บใหม่เพื่อไม่ให้ใบที่กำลังทำอยู่หาย — สร้างเสร็จแล้วกลับมายิงซ้ำได้เลย
+              </span>
+            </div>
+          </div>
+        ) : null}
+
         <div className="toolbar">
-          <input className="in" value={partQuery} placeholder="ค้นอะไหล่จากรหัส ชื่อ หรือ OEM"
+          <input className="in" value={partQuery} placeholder="ค้นอะไหล่จากรหัส ชื่อ บาร์โค้ด หรือ OEM"
                  style={{ width: 280 }}
                  onChange={(e) => setPartQuery(e.target.value)}
                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchPart(); } }} />

@@ -32,7 +32,7 @@ export default async function ProductPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string }>;
+  searchParams: Promise<{ saved?: string; barcode?: string }>;
 }) {
   const session = await requireTab('stock', 'list');
   const seeCost = canCost(session);
@@ -82,7 +82,8 @@ export default async function ProductPage({
         <div className="card">
           <header><h2>{isNew ? 'ข้อมูลสินค้า' : 'แก้ไขข้อมูลสินค้า'}</h2></header>
           <div className="body">
-            <ProductForm product={product} categories={categories} />
+            <ProductForm product={product} categories={categories}
+                         presetBarcode={isNew ? sp.barcode : undefined} />
           </div>
         </div>
       ) : (

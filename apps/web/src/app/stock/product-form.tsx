@@ -8,7 +8,9 @@ import { saveProductAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 import type { Category, ProductRow } from '@/lib/products';
 
-function Submit({ label }: { label: string }) {
+function Submit({ label }: {
+  /** บาร์โค้ดตั้งต้นสำหรับสินค้าใหม่ที่มาจากการยิงแล้วไม่เจอ */
+  presetBarcode?: string; label: string }) {
   const { pending } = useFormStatus();
   return (
     <button className="btn primary" type="submit" disabled={pending}>
@@ -18,10 +20,12 @@ function Submit({ label }: { label: string }) {
 }
 
 export function ProductForm({
-  product, categories,
+  product, categories, presetBarcode,
 }: {
   product: ProductRow | null;
   categories: Category[];
+  /** บาร์โค้ดตั้งต้นสำหรับสินค้าใหม่ที่มาจากการยิงแล้วไม่เจอ */
+  presetBarcode?: string;
 }) {
   const [state, action] = useActionState<FormResult, FormData>(saveProductAction, {});
   const isNew = !product;
@@ -31,7 +35,9 @@ export function ProductForm({
   const v = (name: string, fallback: string | number | undefined) =>
     state.values?.[name] ?? (fallback === undefined ? '' : String(fallback));
 
-  const [barcode, setBarcode] = useState(v('barcode', product?.barcode));
+  /* บาร์โค้ดที่ยิงมาจากหน้าออกเอกสารแล้วไม่เจอ — เติมให้เลยจะได้ไม่ต้องพิมพ์ซ้ำ
+     และไม่ต้องเสี่ยงพิมพ์ผิดจนยิงกลับไปแล้วยังไม่เจออีก */
+  const [barcode, setBarcode] = useState(v('barcode', product?.barcode ?? presetBarcode));
 
   return (
     <form className="form" action={action}>
