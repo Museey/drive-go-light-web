@@ -23,7 +23,45 @@
   --warn: #B4720B;
   --due: #B3382C;
   --danger: #B3382C;
+
+  /* =====================================================================
+     ชั้นของสิ่งที่ลอยทับกัน — **ห้ามเขียน z-index เป็นตัวเลขดิบที่อื่น**
+     มีเทสต์บังคับไว้ เพราะตัวเลขที่กระจายอยู่ทั่วไฟล์คือที่มาของเมนูบังปุ่ม
+     แล้วไล่หาไม่เจอว่าใครทับใคร
+     ===================================================================== */
+  --z-content: 0;     /* เนื้อหาปกติ */
+  --z-sticky: 10;     /* หัวตาราง แถบเครื่องมือที่ติดขอบ */
+  --z-nav: 20;        /* แถบเมนูหลัก แถบล่างบนมือถือ */
+  --z-header: 30;     /* หัวหน้าที่ติดขอบบน */
+  --z-overlay: 40;    /* ฉากหลังทึบของลิ้นชัก */
+  --z-drawer: 50;     /* ลิ้นชัก แผงเมนูหล่น */
+  --z-toast: 60;      /* ข้อความแจ้งผล */
+
+  /* ความสูงของแถบต่าง ๆ — หน้าอื่นเอาไปคิดระยะ sticky ต่อ ไม่ต้องเดา */
+  --h-topbar: 58px;
+  --h-tabbar: 58px;
+
+  /* จุดตัดขนาดจอ — CSS ใช้ตัวแปรใน @media ไม่ได้ จึงต้องพิมพ์ตัวเลขซ้ำตรงนั้น
+     ประกาศไว้ที่นี่เพื่อให้คนอ่านโค้ดรู้ว่าเลขสองตัวนั้นคืออะไร และมีเทสต์
+     บังคับว่าทั้งไฟล์ห้ามมี @media ที่ใช้ค่าอื่น */
+  --bp-tablet: 768px;
+  --bp-desktop: 1280px;
 }
+
+/*
+ * จุดตัดขนาดจอ — **มีสองค่าเท่านั้น**
+ *
+ *   มือถือ    < 768px
+ *   แท็บเล็ต   768px – 1279px
+ *   เดสก์ท็อป  ≥ 1280px
+ *
+ * เลือกจากอุปกรณ์จริง ไม่ใช่เลขที่คิดเอง — iPad กว้าง 768 พอดี
+ * โน้ตบุ๊ก 13 นิ้วกว้าง 1280 ของเดิมมีสี่ค่า (560/820/980/1000) ซึ่งสองค่ากลาง
+ * ต่างกัน 20px โดยไม่มีเหตุผล และมีกฎที่ตายแล้วปนอยู่
+ *
+ * CSS ใช้ค่าคงที่ใน @media ไม่ได้ (ตัวแปรใช้ตรงนั้นไม่ได้) จึงเขียนเป็นตัวเลข
+ * แต่มีเทสต์บังคับว่าทั้งไฟล์ต้องมีแค่ 768 กับ 1280 เท่านั้น
+ */
 
 * { box-sizing: border-box; }
 
@@ -41,29 +79,26 @@ a { color: inherit; text-decoration: none; }
 
 .app { display: block; min-height: 100vh; }
 
-/* ---------- แถบเมนูบน ----------
-   รุ่น 6.4 ย้ายเมนูหลักจากแถบซ้ายขึ้นมาเป็นแถบบนแนวนอน
-   บนมือถือเลื่อนซ้ายขวาได้ และปุ่มหน้าแรกถูกตรึงไว้ซ้ายสุดตลอด
-   จะได้กดกลับหน้าแรกเพื่อไปเมนูอื่นได้ทันที ไม่ต้องเลื่อนแถบย้อนกลับมาเอง */
+/* =====================================================================
+   การนำทาง — สามรูปแบบตามขนาดจอ
+   ---------------------------------------------------------------------
+   มือถือ   แถบล่าง 5 ช่องในระยะนิ้วโป้ง + ลิ้นชักสำหรับเมนูที่เหลือ
+   แท็บเล็ต  แถบบน + ปุ่มเรียกลิ้นชัก (เมนูสิบตัวไม่พอดีแถวเดียวที่ 768px)
+   เดสก์ท็อป แถบซ้ายเต็ม เห็นเมนูครบพร้อมกันโดยไม่ต้องเลื่อน
+
+   **เหตุผลที่เดสก์ท็อปกลับไปเป็นแถบซ้าย** — วัดแล้วแถบแนวนอนต้องการจอกว้าง
+   1,784px ถึงจะแสดงเมนูสิบตัวครบ โน้ตบุ๊กที่คนใช้จริง (1280–1512) จึงซ่อนเมนู
+   ไว้ท้ายแถบเสมอโดยไม่มีอะไรบอกว่ามีต่อ ในแนวตั้งพอสบายทุกจอ
+   เลขกำกับ 01–08 ยังอยู่ครบทุกปุ่มและเรียงลำดับเดิม
+   ===================================================================== */
+
+/* ---------- แถบเมนูหลัก ---------- */
 .rail {
   background: linear-gradient(180deg, var(--steel-dk) 0%, #0B4A32 100%);
   color: #D7EEE2;
-  padding: 9px 16px;
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 5px;
-  overflow-x: auto;
-  /* ถอด -webkit-overflow-scrolling: touch ออก — เลิกใช้แล้วตั้งแต่ iOS 13
-     และเป็นตัวที่ทำให้ WebKit ตัดภาพลูกที่เป็น position: fixed
-     ซึ่งทำให้แผงหล่นบน Safari เหลือแค่แถบขาว (แผงย้ายไป body แล้วด้วย) */
-  scrollbar-width: none;
+  display: none;                 /* มือถือใช้แถบล่างแทน */
   box-shadow: 0 2px 12px rgba(0,0,0,.22);
 }
-.rail::-webkit-scrollbar { display: none; }
 
 .rail .brand {
   display: flex; gap: 9px; align-items: center;
@@ -81,23 +116,163 @@ a { color: inherit; text-decoration: none; }
   background: none; border: 0; color: #D7EEE2;
   padding: 9px 13px; border-radius: 7px; cursor: pointer;
   font-size: 14px; font-family: inherit;
+  min-height: 44px;              /* เป้ากดขั้นต่ำ ใช้ทุกขนาดจอ ไม่ใช่เฉพาะมือถือ */
 }
 .navbtn:hover { background: rgba(255,255,255,.14); color: #fff; }
 .navbtn[aria-current='true'] { background: #fff; color: var(--steel-dk); font-weight: 600; }
 .navbtn .k { font-size: 10px; color: #7E93A1; flex: none; font-variant-numeric: tabular-nums; }
 .navbtn[aria-current='true'] .k { color: var(--steel); }
-.navbtn .car { font-size: 8px; opacity: .65; transition: transform .18s ease; }
+.navbtn .car { font-size: 8px; opacity: .65; transition: transform .18s ease; margin-left: auto; }
 .navbtn[aria-expanded='true'] .car { transform: rotate(180deg); opacity: 1; }
 
 .rail .spacer { flex: 1; min-width: 8px; }
 .rail .foot { display: flex; align-items: center; gap: 8px; flex: none; }
-.rail .foot .who { font-size: 11.5px; color: #8FA3B0; white-space: nowrap; }
+.rail .foot .who { font-size: 11.5px; color: #8FA3B0; }
+
+/*
+ * ออกจากระบบต้องหน้าตาไม่เหมือนเมนู
+ *
+ * เดิมใช้คลาส .navbtn เหมือนกันเป๊ะและอยู่ในแถวเดียวกับเมนู — กดพลาดแล้วหลุดทันที
+ * โดยไม่มีการถาม (เจอตอนสคริปต์วัดเมนูไล่กดปุ่มแล้วมันกดโดนเอง)
+ */
+.signout {
+  display: flex; align-items: center; gap: 7px;
+  background: none; border: 1px solid rgba(255,255,255,.28); color: #D7EEE2;
+  padding: 8px 12px; border-radius: 7px; cursor: pointer;
+  font-size: 13px; font-family: inherit; min-height: 44px; white-space: nowrap;
+}
+.signout:hover { background: rgba(255,60,40,.22); border-color: rgba(255,120,100,.6); color: #fff; }
+
+/* ---------- แถบล่างบนมือถือ ---------- */
+/*
+ * ห้าช่องในระยะที่นิ้วโป้งเอื้อมถึงตอนถือมือเดียว — อู่ยืนอยู่หน้ารถ ไม่ได้นั่งโต๊ะ
+ * มุมบนซ้ายของจอหกนิ้วคือจุดที่เอื้อมไม่ถึงถ้าไม่ขยับมือ เมนูจึงอยู่ล่าง ไม่ใช่บน
+ */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  z-index: var(--z-nav);
+  display: flex; align-items: stretch;
+  background: linear-gradient(180deg, var(--steel-dk) 0%, #0B4A32 100%);
+  box-shadow: 0 -2px 14px rgba(0,0,0,.24);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.tabbar .tab {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 7px 4px;
+  min-height: var(--h-tabbar);
+  background: none; border: 0; color: #BFE3D6;
+  font-family: inherit; font-size: 11px; cursor: pointer;
+}
+.tabbar .tab b { font-weight: 500; font-size: 11px; line-height: 1.1; }
+.tabbar .tab[aria-current='true'] { color: #fff; }
+.tabbar .tab[aria-current='true'] b { font-weight: 700; }
+.tabbar .tab[aria-current='true']::before {
+  content: ''; position: absolute; top: 0; width: 34px; height: 3px;
+  border-radius: 0 0 3px 3px; background: var(--accent);
+}
+.tabbar .tab { position: relative; }
+
+/* ---------- ลิ้นชักเมนู (มือถือและแท็บเล็ต) ---------- */
+.scrim {
+  position: fixed; inset: 0; z-index: var(--z-overlay);
+  background: rgba(8,28,20,.42);
+  border: 0; padding: 0; cursor: pointer;
+}
+/* ฉากหลังของแผงเมนูย่อยบนเดสก์ท็อป — ต้องกดปิดได้เหมือนกัน แต่ไม่ต้องหรี่จอ
+   เพราะแผงเล็กและเนื้อหาข้างหลังยังต้องอ่านได้ */
+.scrim.clear { background: transparent; }
+.drawer {
+  position: fixed; z-index: var(--z-drawer);
+  top: 0; bottom: 0; left: 0; width: min(88vw, 340px);
+  background: var(--card);
+  display: flex; flex-direction: column;
+  box-shadow: 6px 0 26px -8px rgba(11,26,38,.5);
+  overflow-y: auto; overscroll-behavior: contain;
+}
+.drawer header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  background: var(--steel-dk); color: #fff;
+}
+.drawer header b { font-size: 15px; }
+.drawer header em { font-style: normal; color: var(--accent); }
+.drawer .close {
+  margin-left: auto; background: rgba(255,255,255,.14); border: 0; color: #fff;
+  border-radius: 8px; min-width: 44px; min-height: 44px; cursor: pointer; font-size: 18px;
+}
+.drawer .body { padding: 10px 12px 20px; }
+.drawer .grp + .grp { margin-top: 4px; }
+.drawer .lead {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 11px 12px; min-height: 48px;
+  border: 0; background: none; border-radius: 9px;
+  font-family: inherit; font-size: 15px; color: var(--ink); cursor: pointer; text-align: left;
+}
+.drawer .lead:hover { background: var(--steel-soft); }
+.drawer .lead[aria-current='true'] { background: var(--grn-hi); font-weight: 600; }
+.drawer .lead .k {
+  font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none;
+}
+.drawer .lead .car { margin-left: auto; font-size: 10px; color: var(--ink-3); }
+.drawer .subs { padding: 2px 0 6px 14px; display: flex; flex-direction: column; gap: 2px; }
+.drawer .subs a {
+  display: flex; align-items: center; gap: 9px; padding: 10px 12px; min-height: 44px;
+  border-radius: 8px; font-size: 14px; color: var(--ink-2);
+}
+.drawer .subs a:hover { background: var(--steel-soft); color: var(--ink); }
+.drawer .subs a[aria-current='true'] { background: var(--grn-hi); color: var(--ink); font-weight: 600; }
+.drawer .subs .k { font-size: 10.5px; color: var(--ink-3); margin-left: auto; }
+.drawer .foot {
+  margin-top: 14px; padding: 14px 12px 0; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.drawer .foot .who { font-size: 12.5px; color: var(--ink-3); }
+.drawer .foot .signout {
+  border-color: var(--line); color: var(--due); justify-content: center;
+}
+.drawer .foot .signout:hover { background: #FCF1F1; border-color: #EEC4C4; color: var(--due); }
+
+/* ---------- แท็บเล็ต 768px ขึ้นไป ---------- */
+@media (min-width: 768px) {
+  .tabbar { display: none; }
+
+  .rail {
+    display: flex; flex-direction: row; align-items: center; gap: 6px;
+    padding: 8px 14px; min-height: var(--h-topbar);
+    position: sticky; top: 0; z-index: var(--z-nav);
+  }
+  /* แท็บเล็ตไม่แสดงปุ่มเมนูในแถบ — สิบตัวไม่พอดีที่ 768px ใช้ลิ้นชักแทน */
+  .rail .railnav { display: none; }
+  .rail .foot .who { display: none; }
+}
+
+/* ---------- เดสก์ท็อป 1280px ขึ้นไป ---------- */
+@media (min-width: 1280px) {
+  .app { display: grid; grid-template-columns: 226px minmax(0, 1fr); align-items: start; }
+
+  .rail {
+    flex-direction: column; align-items: stretch; gap: 3px;
+    padding: 14px 12px;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .rail .brand { padding: 0 8px 14px; display: block; }
+  .rail .railnav { display: flex; flex-direction: column; gap: 3px; }
+  .rail .drawer-open { display: none; }
+  .rail .foot {
+    flex-direction: column; align-items: stretch; gap: 8px;
+    padding-top: 12px; border-top: 1px solid rgba(255,255,255,.14);
+  }
+  .rail .foot .who { display: block; }
+  .rail .foot .signout { justify-content: center; }
+  .navbtn { width: 100%; }
+}
 
 /* ---------- แผงเมนูหล่น ---------- */
 /* fixed ไม่ใช่ absolute — แถบเมนูมี overflow-x สำหรับเลื่อนบนมือถือ
    แผงที่วางแบบ absolute ข้างในจึงถูกตัดขอบหายไป */
 .mmenu {
-  position: fixed; min-width: 270px; z-index: 200;
+  position: fixed; min-width: 270px; z-index: var(--z-drawer);
   background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 7px;
   box-shadow: 0 14px 34px -10px rgba(11,26,38,.42);
 }
@@ -121,8 +296,16 @@ a { color: inherit; text-decoration: none; }
 .mcard[aria-disabled='true']:hover { border-color: var(--line); background: #fff; }
 
 /* ---------- เมนูย่อยแนวตั้ง ---------- */
-.subwrap { display: grid; grid-template-columns: 206px 1fr; gap: 18px; align-items: start; }
-.subnav { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 5px; }
+/* ฐานคือมือถือ — เมนูย่อยเป็นตารางสองช่องเหนือเนื้อหา
+   เดสก์ท็อปค่อยเปลี่ยนกลับเป็นคอลัมน์ซ้ายที่ท้ายไฟล์ */
+.subwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.subnav {
+  position: static;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+}
+.subnav .ttl { display: none; }
+.subnav .sd { display: none; }
+.subnav a, .subnav .item { width: 100%; height: 100%; }
 .subnav .ttl {
   font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
   color: var(--ink-3); font-weight: 600; padding: 0 4px 6px;
@@ -154,30 +337,31 @@ a { color: inherit; text-decoration: none; }
 }
 .subnav .todo { opacity: .45; pointer-events: none; }
 .subnav .acts {
-  display: flex; flex-direction: column; gap: 7px; margin-top: 13px;
-  border-top: 1px solid var(--line); padding-top: 13px;
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px; margin: 0; border: 0; padding: 0;
 }
 
-/* จอแคบ — เมนูย่อยย้ายขึ้นบนเนื้อหาแล้วเรียงเป็นตาราง
-   ยกกติกามาจากรุ่น 6.4 ตรง ๆ ที่ 980px เท่ากัน */
-@media (max-width: 980px) {
-  .subwrap { grid-template-columns: 1fr; gap: 12px; }
-  .subnav {
-    position: static;
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
-  }
-  .subnav .ttl { display: none; }
-  .subnav a, .subnav .item { width: 100%; height: 100%; }
-  .subnav .sd { display: none; }
-  .subnav .acts {
-    grid-column: 1 / -1;
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px; margin: 0; border: 0; padding: 0;
-  }
+/* แท็บเล็ต — เมนูย่อยเป็นตารางสามช่องเหนือเนื้อหา */
+@media (min-width: 768px) {
+  .subnav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .subnav .acts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-@media (max-width: 560px) {
-  .subnav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .subnav .acts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* เดสก์ท็อป — เมนูย่อยกลับไปเป็นคอลัมน์ซ้ายในหน้า
+   ติดขอบใต้หัวหน้าที่ติดขอบอยู่ จึงต้องเผื่อความสูงของหัวหน้าไว้ */
+@media (min-width: 1280px) {
+  .subwrap { grid-template-columns: 206px minmax(0, 1fr); gap: 18px; }
+  .subnav {
+    position: sticky; top: calc(var(--h-topbar) + 12px);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .subnav .ttl { display: block; }
+  .subnav .sd { display: block; }
+  .subnav .acts {
+    display: flex; flex-direction: column; gap: 7px; margin-top: 13px;
+    border-top: 1px solid var(--line); padding-top: 13px;
+  }
 }
 
 /* หัวหน้าเอกสาร — เอาสีจากหน้าต่างเอกสารของรุ่น 6.4 มาใช้
@@ -197,8 +381,8 @@ a { color: inherit; text-decoration: none; }
 .topbar.doc .btn.danger { background: rgba(255,255,255,.12); color: #FFD9D4; }
 
 /* ---------- การ์ดหน้าแรก ---------- */
-.hgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-@media (max-width: 980px) { .hgrid { grid-template-columns: 1fr; } }
+.hgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 768px) { .hgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .hcard {
   background: var(--card); border: 1px solid var(--line); border-radius: 10px;
@@ -233,17 +417,36 @@ a { color: inherit; text-decoration: none; }
 /* ---------- ปุ่มย้อนกลับลอย ----------
    6.4 เก็บประวัติหน้าเองเพราะทุกหน้าคือ URL เดียวกัน
    ของเราหน้ามี URL จริง จึงเรียกประวัติของเบราว์เซอร์ได้ตรง ๆ */
-.backfab {
-  position: fixed; left: 18px; bottom: 18px; z-index: 60;
-  display: inline-flex; align-items: center; gap: 8px;
-  background: var(--steel-dk); color: #fff; border: 0; border-radius: 99px;
-  padding: 10px 16px; cursor: pointer; font-family: inherit; font-size: 13px;
-  box-shadow: 0 8px 22px -8px rgba(11,74,50,.7);
+/*
+ * **ไม่ลอยทับเนื้อหาอีกแล้ว** — ของเดิมลอยมุมซ้ายล่างตลอดเวลา วัดแล้วพบว่า
+ * บนมือถือมันทับแถบตัวกรองวันที่ และบนแท็บเล็ตทับช่องเลขที่เอกสารในตาราง
+ * ซึ่งเป็นลิงก์เปิดเอกสาร มันไม่ได้ทับที่ว่าง มันทับปุ่มกับลิงก์
+ *
+ * มือถือและแท็บเล็ตไม่ต้องมีเลย — มีปุ่มย้อนกลับของเครื่องและปุ่ม "← กลับ"
+ * ที่หัวหน้าอยู่แล้ว ส่วนเดสก์ท็อปย้ายไปอยู่ในแถบเมนูซ้าย ซึ่งมีที่ว่างพอ
+ */
+.backfab { display: none; }
+
+@media (min-width: 1280px) {
+  .backfab {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    position: static; width: 100%;
+    background: rgba(255,255,255,.1); color: #D7EEE2;
+    border: 1px solid rgba(255,255,255,.22); border-radius: 8px;
+    padding: 9px 12px; min-height: 44px;
+    cursor: pointer; font-family: inherit; font-size: 13px;
+  }
+  .backfab:hover { background: rgba(255,255,255,.2); color: #fff; }
 }
-.backfab:hover { background: var(--steel); }
 
 /* ---------- เนื้อหา ---------- */
 .main { min-width: 0; display: flex; flex-direction: column; }
+/*
+ * หัวหน้าติดขอบบนเสมอ — **ปุ่มหลักของหน้าอยู่ในนี้**
+ *
+ * ของเดิมเป็น static เลื่อนลง 600px แล้วทั้งชื่อหน้าและปุ่มหลักหายไปหมด
+ * บนมือถือที่จอสั้นและรายการยาว ต้องเลื่อนกลับขึ้นไปสุดทุกครั้งที่จะกดปุ่ม
+ */
 .topbar {
   background: var(--card);
   border-bottom: 1px solid var(--line);
@@ -251,7 +454,14 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   gap: 12px;
+  position: sticky; top: 0; z-index: var(--z-header);
+  min-height: var(--h-topbar);
 }
+
+/* แท็บเล็ตมีแถบเมนูติดขอบบนอยู่แล้ว หัวหน้าจึงต้องลงมาอยู่ใต้มัน ไม่ใช่ทับกัน
+   เดสก์ท็อปแถบเมนูอยู่ซ้าย ไม่กินที่ด้านบน หัวหน้าจึงกลับไปติดขอบได้ */
+@media (min-width: 768px) { .topbar { top: var(--h-topbar); } }
+@media (min-width: 1280px) { .topbar { top: 0; } }
 .topbar h1 { margin: 0; font-size: 17px; }
 .topbar .sub { color: var(--ink-3); font-size: 12.5px; }
 .spacer { flex: 1; }
@@ -440,7 +650,7 @@ table.doc td.blank { height: 19px; }
 .printbar {
   display: flex; gap: 10px; align-items: center;
   padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line);
-  position: sticky; top: 0; z-index: 5;
+  position: sticky; top: 0; z-index: var(--z-sticky);
 }
 .printview { background: #DFE6EA; padding: 20px; min-height: 100vh; }
 /* พิมพ์หลายชุดในครั้งเดียว — บนจอเว้นระยะให้เห็นว่าเป็นคนละแผ่น */
@@ -516,7 +726,10 @@ textarea.in { font-family: inherit; resize: vertical; min-height: 60px; }
 .printhead .meta { font-size: 11px; color: #333; margin-top: 3px; }
 
 @media print {
-  .rail, .topbar, .toolbar, .pager, .no-print, .formbar, .printbar { display: none !important; }
+  .rail, .tabbar, .drawer, .scrim, .mmenu,
+  .topbar, .toolbar, .pager, .no-print, .formbar, .printbar { display: none !important; }
+  /* เนื้อหาเว้นที่ให้แถบล่างไว้บนจอ — บนกระดาษไม่มีแถบ จึงไม่ต้องเว้น */
+  .wrap { padding-bottom: 0 !important; }
   .app { display: block; }
   .main { display: block; }
   .wrap { padding: 0; }
@@ -542,58 +755,70 @@ textarea.in { font-family: inherit; resize: vertical; min-height: 60px; }
 }
 
 /* =====================================================================
-   จอเล็ก — แท็บเล็ตหน้าเคาน์เตอร์และมือถือ
+   ความกว้างของตารางและฟอร์ม — ฐานคือมือถือ แล้วค่อยขยายขึ้นไป
+   ---------------------------------------------------------------------
+   เขียนแบบ min-width ทั้งหมด (ฐาน = จอแคบสุด) ต่างจากเดิมที่เป็น max-width
+   ซ้อนกันสามชั้น — แบบเดิมต้องอ่านย้อนจากล่างขึ้นบนถึงจะรู้ว่าจอไหนได้อะไร
    ===================================================================== */
-@media (max-width: 1000px) {
-  .row-fields.f4 { grid-template-columns: repeat(2, 1fr); }
-  .grid.g4 { grid-template-columns: repeat(2, 1fr); }
+
+/* ---------- ฐาน: มือถือ ---------- */
+body { font-size: 15px; }
+.wrap { padding: 11px; padding-bottom: calc(var(--h-tabbar) + 22px); }
+.topbar { padding: 12px 14px; }
+.topbar h1 { font-size: 16px; }
+
+.grid.g2, .grid.g4 { grid-template-columns: minmax(0, 1fr); }
+.row-fields.f2, .row-fields.f3, .row-fields.f4 { grid-template-columns: minmax(0, 1fr); }
+.totals { width: 100%; margin-left: 0; }
+.paper { width: auto; min-height: auto; padding: 10mm; }
+
+/* แถบเครื่องมือเรียงลงมาทีละแถว
+   ช่องค้นหาตั้งความกว้างไว้แบบ inline สำหรับจอใหญ่ ต้องใช้ !important ทับ
+   ไม่งั้นช่องล้นออกนอกจอ */
+.toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+.toolbar form { width: 100%; flex-wrap: wrap; }
+.toolbar .in { flex: 1; min-width: 0; width: auto !important; }
+.toolbar .tag-row, .toolbar > .spacer { width: 100%; }
+.toolbar > .spacer { display: none; }
+.card > header { flex-wrap: wrap; }
+
+/*
+ * เป้ากดขั้นต่ำ 44px — วัดแล้วเดิมมี 96 จุดบนมือถือที่เล็กกว่านี้
+ * รวมปุ่มในแถวตาราง (.btn.sm) 60 ปุ่มที่กฎเดิมไม่ครอบคลุมเพราะถูก .sm ทับ
+ */
+.btn, .btn.sm, .chip, .in, select, input[type='date'], input[type='search'] {
+  min-height: 44px;
 }
+.btn, .btn.sm { display: inline-flex; align-items: center; }
+input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px; }
 
-@media (max-width: 820px) {
-  .app { flex-direction: column; }
-
-  /* แถบเมนูกลายเป็นแถวเลื่อนแนวนอนด้านบน ไม่กินพื้นที่จอ */
-  .rail {
-    width: auto; flex: none;
-    flex-direction: row; align-items: center; gap: 4px;
-    overflow-x: auto; padding: 10px 12px;
-    position: sticky; top: 0; z-index: 20;
-  }
-  .rail .brand { padding: 0 10px 0 0; flex: none; }
-  .rail .brand .shop { display: none; }
-  .rail .brand b { font-size: 14px; }
-  .navbtn { padding: 7px 10px; font-size: 13px; white-space: nowrap; flex: none; }
-  .navbtn .k { display: none; }
-  .rail .foot { margin: 0 0 0 auto; padding: 0 0 0 10px; display: flex; align-items: center; gap: 10px; }
-  .rail .foot > div { display: none; }
-
-  .topbar { padding: 12px 14px; }
+/* ---------- แท็บเล็ต 768px ขึ้นไป ---------- */
+@media (min-width: 768px) {
+  body { font-size: 14px; }
+  .wrap { padding: 14px; padding-bottom: 22px; }
   .topbar h1 { font-size: 16px; }
-  .wrap { padding: 14px; }
 
-  .grid.g2, .grid.g4 { grid-template-columns: 1fr 1fr; }
-  .row-fields.f2, .row-fields.f3, .row-fields.f4 { grid-template-columns: 1fr 1fr; }
+  .grid.g2, .grid.g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row-fields.f2, .row-fields.f3, .row-fields.f4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-  .totals { width: 100%; margin-left: 0; }
-  .paper { width: auto; min-height: auto; padding: 10mm; }
+  .toolbar { flex-direction: row; align-items: center; gap: 10px; }
+  .toolbar form { width: auto; }
+  .toolbar .tag-row { width: auto; }
+  .toolbar > .spacer { display: block; width: auto; }
 }
 
-@media (max-width: 560px) {
-  body { font-size: 15px; }
-  .wrap { padding: 11px; }
-  .grid.g2, .grid.g4 { grid-template-columns: 1fr; }
-  .row-fields.f2, .row-fields.f3, .row-fields.f4 { grid-template-columns: 1fr; }
-  /* แถบเครื่องมือเรียงลงมาทีละแถวบนจอแคบ
-     ช่องค้นหาตั้งความกว้างไว้แบบ inline สำหรับจอใหญ่ ต้องใช้ !important ทับ
-     ไม่งั้นช่องล้นออกนอกจอบนมือถือ */
-  .toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
-  .toolbar form { width: 100%; flex-wrap: wrap; }
-  .toolbar .in { flex: 1; min-width: 0; width: auto !important; }
-  .toolbar .tag-row, .toolbar > .spacer { width: 100%; }
-  .toolbar > .spacer { display: none; }
-  .card > header { flex-wrap: wrap; }
+/* ---------- เดสก์ท็อป 1280px ขึ้นไป ---------- */
+@media (min-width: 1280px) {
+  .wrap { padding: 18px 22px 26px; }
+  .topbar { padding: 14px 22px; }
+  .topbar h1 { font-size: 18px; }
 
-  /* ปุ่มบนมือถือต้องกดโดนด้วยนิ้ว */
-  .btn { min-height: 40px; display: inline-flex; align-items: center; }
-  .in { min-height: 40px; }
+  .grid.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .row-fields.f3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .row-fields.f4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .totals { width: 340px; margin-left: auto; }
+  .paper { width: 210mm; min-height: 297mm; padding: 14mm; }
+
+  /* เมาส์กดแม่นกว่านิ้ว ปุ่มจึงกลับมาเตี้ยลงได้เพื่อให้ตารางแน่นขึ้น */
+  .btn.sm, .chip { min-height: 32px; }
 }

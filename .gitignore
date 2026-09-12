@@ -7,3 +7,7 @@ fixtures/demo-backup.json
 
 # ไฟล์สำรองฐานข้อมูล ห้ามขึ้น git เด็ดขาด
 backups/
+
+# ผลการรันเทสต์เบราว์เซอร์ — เป็นของชั่วคราวของแต่ละเครื่อง
+apps/web/test-results/
+apps/web/playwright-report/

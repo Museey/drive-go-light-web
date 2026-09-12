@@ -38,9 +38,15 @@ describe('แผงหล่นของแถบเมนู', () => {
     expect(block).toContain('position: fixed');
   });
 
-  it('แถบเมนูยังมี overflow-x สำหรับเลื่อนบนมือถือ — เหตุผลที่ต้องใช้ portal', () => {
-    const rail = css.slice(css.indexOf('.rail {'), css.indexOf('.rail {') + 400);
-    expect(rail).toContain('overflow-x: auto');
+  /*
+   * แถบเมนูยังเป็นบรรพบุรุษที่มี overflow อยู่ดี — เดสก์ท็อปเป็นแถบซ้ายที่
+   * เลื่อนแนวตั้งได้ (`overflow-y: auto`) ซึ่งสร้างขอบเขตตัดภาพแบบเดียวกับ
+   * `overflow-x` ของเดิมเป๊ะ เหตุผลที่ต้องใช้ portal จึงไม่ได้หายไปไหน
+   */
+  it('แถบเมนูยังมี overflow — เหตุผลที่ต้องใช้ portal ไม่ได้หายไปกับการเปลี่ยนรูปแบบ', () => {
+    expect(css).toMatch(/\.rail\s*\{[^}]*\}|overflow-y:\s*auto/);
+    const desktop = css.slice(css.indexOf('@media (min-width: 1280px)'));
+    expect(desktop).toContain('overflow-y: auto');
   });
 
   /*
@@ -52,12 +58,23 @@ describe('แผงหล่นของแถบเมนู', () => {
   });
 
   /*
-   * แผงอยู่นอกแถบแล้ว ตัวจับคลิกนอกพื้นที่ต้องนับแผงว่าเป็น "ข้างใน" ด้วย
-   * ไม่งั้นกดการ์ดในแผงจะปิดแผงตั้งแต่ mousedown แล้วลิงก์ไม่ทันทำงาน
+   * ปิดแผงด้วย **ฉากหลังที่กดได้** แทนการดักคลิกทั้งหน้า
+   *
+   * ตัวดักคลิกทั้งหน้าต้องคอยไล่ว่าอะไรนับเป็น "ข้างใน" ซึ่งพลาดง่ายทุกครั้ง
+   * ที่โครงสร้างเปลี่ยน (เคยพลาดมาแล้วตอนย้ายแผงออกไป body แล้วกดการ์ดไม่ติด)
+   * ฉากหลังเป็นชิ้นเดียวที่กินพื้นที่ทั้งจอและอยู่ใต้แผง — กดโดนเมื่อไรคือกดนอกแผงเสมอ
    */
-  it('ตัวจับคลิกนอกพื้นที่รู้จักแผงที่ย้ายออกไปแล้ว', () => {
-    expect(bar).toContain('panelRef');
-    const onDown = bar.slice(bar.indexOf('const onDown'), bar.indexOf('const onDown') + 400);
-    expect(onDown).toContain('panelRef.current?.contains');
+  it('มีฉากหลังที่กดแล้วปิด และกด Esc ปิดได้', () => {
+    expect(bar).toContain('scrim');
+    expect(bar).toContain("aria-label=\"ปิดเมนู\"");
+    expect(bar).toContain("e.key === 'Escape'");
+  });
+
+  it('ฉากหลังอยู่ใต้แผงเสมอ ไม่ใช่ทับแผง', () => {
+    expect(css).toContain('.scrim');
+    const scrim = css.slice(css.indexOf('.scrim {'), css.indexOf('.scrim {') + 200);
+    expect(scrim).toContain('var(--z-overlay)');
+    const mmenu = css.slice(css.indexOf('.mmenu {'), css.indexOf('.mmenu {') + 200);
+    expect(mmenu).toContain('var(--z-drawer)');
   });
 });

@@ -1,6 +1,5 @@
 import { requireSession } from '@/lib/auth';
 import { MenuBar } from './menu-bar';
-import { BackFab } from './back-fab';
 
 export async function Shell({
   current, title, sub, actions, doc, children,
@@ -28,7 +27,6 @@ export async function Shell({
         </div>
         <div className="wrap">{children}</div>
       </div>
-      <BackFab />
     </div>
   );
 }
