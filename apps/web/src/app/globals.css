@@ -528,6 +528,18 @@ table.tbl td.wrap { white-space: normal; min-width: 200px; }
   color: var(--ink-2);
   background: #fff;
 }
+/* ป้ายสถานะที่อยู่ในแถว flex ไม่ยืดสูงตามปุ่มข้าง ๆ — ยืดแล้วตัวหนังสือค้างขอบบน */
+.chip:not(a):not(button):not(label) { align-self: center; }
+/*
+ * ป้ายที่กดได้ — ข้อความต้องอยู่กลางกรอบ เพราะกรอบสูงกว่าตัวหนังสือ (เป้ากด 44px)
+ *
+ * inline-block ไม่จัดของข้างในให้อยู่กลางแนวตั้ง ตัวหนังสือจึงติดขอบบน
+ * justify-content ให้ข้อความอยู่กลางด้วยเมื่อป้ายถูกยืดเต็มแถว (แถบตัวกรองบนมือถือ)
+ * gap แทนช่องว่างระหว่างไอคอนกับข้อความ ซึ่ง flex ตัดทิ้ง ("👆 รอจัดทำ")
+ */
+a.chip, button.chip, label.chip {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+}
 .chip.ok { color: var(--ok); border-color: #BFE0CE; background: #F1F9F4; }
 .chip.warn { color: var(--warn); border-color: #EEDBB4; background: #FCF7EC; }
 .chip.due { color: var(--due); border-color: #EEC4C4; background: #FCF1F1; }
@@ -633,7 +645,10 @@ dl.kv dd { margin: 0; }
   margin: 0 0 4px; font-size: 10.5px; letter-spacing: .1em;
   border-bottom: 1px solid #999; padding-bottom: 2px;
 }
-.paper .kv { display: flex; gap: 6px; font-size: 11.5px; padding: 0 0 1px; }
+/* ค่าวางชิดล่างบนเส้นประของตัวเอง — บนจอแคบค่ายาว ๆ อย่างที่อยู่ขึ้นหลายบรรทัด
+   ถ้าปล่อยยืด (ค่าตั้งต้นของ flex) ค่าอื่นในแถวจะลอยค้างบน ห่างจากเส้นประใต้ตัว
+   บน A4 ไม่มีอะไรตัดบรรทัด ความสูงเท่ากันหมด ผลพิมพ์จึงเหมือนเดิม */
+.paper .kv { display: flex; align-items: flex-end; gap: 6px; font-size: 11.5px; padding: 0 0 1px; }
 .paper .kv b { font-weight: 600; color: #333; white-space: nowrap; }
 .paper .kv span { border-bottom: 1px dotted #999; flex: 1; min-width: 0; }
 
@@ -795,11 +810,19 @@ body { font-size: 15px; }
 /*
  * เป้ากดขั้นต่ำ 44px — วัดแล้วเดิมมี 96 จุดบนมือถือที่เล็กกว่านี้
  * รวมปุ่มในแถวตาราง (.btn.sm) 60 ปุ่มที่กฎเดิมไม่ครอบคลุมเพราะถูก .sm ทับ
+ *
+ * **ป้ายสถานะที่กดไม่ได้ไม่ใช่เป้ากด** — เคยใส่ .chip ทั้งหมดไว้ในกฎนี้
+ * ป้ายในตารางทุกแถวเลยสูง 44px ทั้งที่ไม่มีใครต้องกด แถวตารางบวม
+ * และตัวหนังสือค้างขอบบนเพราะ .chip เป็น inline-block (เจอ 1,266 จุด ทุกหน้า ทุกขนาดจอ)
  */
-.btn, .btn.sm, .chip, .in, select, input[type='date'], input[type='search'] {
+.btn, .btn.sm, a.chip, button.chip, label.chip, .in, select,
+input[type='date'], input[type='search'] {
   min-height: 44px;
 }
 .btn, .btn.sm { display: inline-flex; align-items: center; }
+/* ค่าที่แสดงอย่างเดียวแต่หน้าตาเหมือนช่องกรอก (เช่น คงเหลือปัจจุบัน)
+   ช่องกรอกจริงจัดตัวหนังสือกลางเอง แต่ div ไม่ทำ */
+.in:not(input):not(select):not(textarea) { display: flex; align-items: center; }
 input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px; }
 
 /* ---------- แท็บเล็ต 768px ขึ้นไป ---------- */
@@ -830,5 +853,5 @@ input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px;
   .paper { width: 210mm; min-height: 297mm; padding: 14mm; }
 
   /* เมาส์กดแม่นกว่านิ้ว ปุ่มจึงกลับมาเตี้ยลงได้เพื่อให้ตารางแน่นขึ้น */
-  .btn.sm, .chip { min-height: 32px; }
+  .btn.sm, a.chip, button.chip, label.chip { min-height: 32px; }
 }

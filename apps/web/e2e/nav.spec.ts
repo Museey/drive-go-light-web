@@ -182,7 +182,10 @@ test.describe('เป้ากดบนจอสัมผัส', () => {
 
     const เล็ก = await page.evaluate(() => {
       const out: string[] = [];
-      const sel = 'a.btn, button, .navbtn, .tab, .chip, input:not([type=hidden]), select';
+      /* เฉพาะป้ายที่กดได้ — ป้ายสถานะธรรมดาไม่ใช่เป้ากด เคยนับรวมไว้ที่นี่
+         แล้วกลายเป็นเหตุผลให้ป้ายในตารางทุกแถวสูง 44px ตัวหนังสือค้างขอบบน */
+      const sel = 'a.btn, button, .navbtn, .tab, a.chip, button.chip, label.chip, '
+        + 'input:not([type=hidden]), select';
       for (const el of Array.from(document.querySelectorAll<HTMLElement>(sel))) {
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) continue;

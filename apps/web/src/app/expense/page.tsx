@@ -84,7 +84,7 @@ export default async function ExpensePage({
             <Link key={t.key || 'all'} className="chip"
                   href={{ pathname: '/expense', query: { ...keep, cat: undefined, ...(t.key ? { kind: t.key } : { kind: undefined }) } }}
                   style={chipStyle((sp.kind ?? '') === t.key)}>
-              {t.no ? <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>{t.no}</span> : null}
+              {t.no ? <span className="mono" style={{ opacity: 0.55 }}>{t.no}</span> : null}
               {t.label}
             </Link>
           ))}
