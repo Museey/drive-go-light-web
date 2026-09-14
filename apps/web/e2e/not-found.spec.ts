@@ -27,6 +27,9 @@ const ID_ROUTES = [
 
 test('หน้ารายใบที่รหัสไม่ใช่ uuid ตอบ 404 ทุกหน้า', async ({ page }, info) => {
   test.skip(info.project.name !== 'เดสก์ท็อป', 'สถานะ HTTP ไม่ขึ้นกับขนาดจอ ตรวจรอบเดียวพอ');
+  /* เปิด 15 หน้าในข้อเดียว — บนเซิร์ฟเวอร์ dev ที่เพิ่งเริ่ม แต่ละหน้าคอมไพล์ครั้งแรกหลายวินาที
+     เวลาตั้งต้น 30 วินาทีจึงหมดก่อนครบ (เจอในการรันทั้งชุดหลัง merge · รันซ้ำเครื่องอุ่นแล้วใช้ 7 วินาที) */
+  test.setTimeout(120_000);
   const wrong: string[] = [];
   for (const path of ID_ROUTES) {
     const res = await page.goto(path);
