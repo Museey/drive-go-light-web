@@ -7,7 +7,7 @@ export function SavedBanner({ docNo, printHref, openHref, label = 'พิมพ�
   docNo: string; printHref: string; openHref?: string; label?: string;
 }) {
   return (
-    <div className="ok-msg saved" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+    <div className="ok-msg saved row-flex gap-8">
       <span>บันทึกเรียบร้อย — เลขที่ <b className="mono">{docNo}</b></span>
       <Link className="btn ok" href={printHref} target="_blank" rel="noreferrer">🖨 {label}</Link>
       {openHref ? <Link className="btn" href={openHref}>เปิดเอกสาร</Link> : null}
