@@ -24,7 +24,7 @@ const children: { menu: (typeof MENU)[number]; sub: SubItem }[] =
 describe('แท็บลูกในผังเมนู', () => {
   it('มีแท็บลูกอยู่จริง — ไม่งั้นเทสต์ข้างล่างไม่ได้ทดสอบอะไรเลย', () => {
     expect(children.length).toBeGreaterThan(0);
-    expect(children.map((c) => c.sub.no)).toContain('03.2.1');
+    expect(children.map((c) => c.sub.no)).toContain('03.3');   /* ใบส่งมอบไม่มี VAT — เลขเรียงใหม่ไม่ซ้อน (ผู้ใช้กำหนด) */
   });
 
   it('parent ของแท็บลูกชี้ไปที่แท็บพี่น้องที่มีอยู่จริง และแท็บแม่ไม่ใช่ลูกซ้อนลูก', () => {
@@ -37,10 +37,13 @@ describe('แท็บลูกในผังเมนู', () => {
     }
   });
 
-  it('เลขกำกับของลูกขึ้นต้นด้วยเลขของแม่', () => {
+  /* เลขกำกับเรียงต่อเนื่องทั้งเมนู (ผู้ใช้กำหนดไม่ให้ข้าม/ซ้อนเลข) — แท็บลูกจึงต้องอยู่ถัดจากแม่ทันที */
+  it('แท็บลูกอยู่ถัดจากแท็บแม่ทันที (เลขต่อเนื่อง)', () => {
     for (const { menu, sub } of children) {
-      const parent = (menu.subs ?? []).find((s) => s.key === sub.parent)!;
-      expect(sub.no.startsWith(parent.no + '.'), `${sub.no} ควรขึ้นต้นด้วย ${parent.no}.`).toBe(true);
+      const subs = menu.subs ?? [];
+      const pi = subs.findIndex((s) => s.key === sub.parent);
+      const ci = subs.findIndex((s) => s.key === sub.key);
+      expect(ci, `${sub.no} ควรอยู่ถัดจากแม่ ${subs[pi]?.no}`).toBe(pi + 1);
     }
   });
 
