@@ -8,6 +8,8 @@ import {
   type OpenDoc,
 } from './doc-chain';
 import { mutate } from './mutate';
+import { kitComponents } from './kits';
+import { addrLineOf } from './contacts';
 import { consumeStock, returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
 import { voidSalesDocWith } from './sales-void';
@@ -30,6 +32,8 @@ export interface DocItemInput {
   isService: boolean;
   /** ส่วนลดรายบรรทัด 0–100 (%) — ไม่ส่ง = 0 (ฟิกซ์เจอร์/ผู้เรียกเดิมไม่ต้องแก้) */
   discPct?: number;
+  /** บรรทัดชุดอะไหล่ซ่อมบำรุง (029) — ใบเสร็จตัดสต๊อกชิ้นส่วนของชุดที่ผูกทะเบียน */
+  kitId?: string | null;
 }
 
 export interface PaymentInput {
@@ -216,10 +220,10 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
     for (const [i, it] of input.items.entries()) {
       await c.query(
         `insert into doc_items (tenant_id, doc_id, line_no, product_id, code, oem, name, unit,
-                                qty, unit_price, is_service, disc_pct)
-         values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                                qty, unit_price, is_service, disc_pct, kit_id)
+         values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [id, i + 1, it.productId, it.code, it.oem, it.name || '(ไม่ระบุชื่อรายการ)',
-         it.unit, it.qty, money(it.unitPrice), it.isService, clampPct(it.discPct)],
+         it.unit, it.qty, money(it.unitPrice), it.isService, clampPct(it.discPct), it.kitId ?? null],
       );
     }
 
@@ -241,6 +245,13 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
        เพราะตัวเลขสต๊อกจะไม่ตรงกับที่เขาคุ้นเคย */
     if (input.kind === 'RC') {
       for (const it of input.items) {
+        /* บรรทัดชุดอะไหล่: ตัดสต๊อกชิ้นส่วนที่ผูกทะเบียน (จำนวนในชุด × จำนวนชุด) */
+        if (it.kitId && it.qty > 0) {
+          for (const comp of await kitComponents(c, it.kitId)) {
+            await consumeStock(c, { productId: comp.productId, qty: comp.qty * it.qty, movedOn: input.docDate, reason: 'sale', docId: id, userId, note: 'ชุดอะไหล่ซ่อมบำรุง' });
+          }
+          continue;
+        }
         if (!it.productId || it.qty === 0) continue;
         /* ต้นทุนคิดแบบเข้าก่อนออกก่อนแล้วตรึงลงแถวนั้นเลย
            งบกำไรขาดทุนอ่านค่านี้ ไม่ได้คำนวณใหม่ตอนเปิดรายงาน */
@@ -323,6 +334,8 @@ export async function voidSalesDoc(id: string, reason: string): Promise<void> {
    ===================================================================== */
 
 export interface PickedProduct {
+  /** ชุดอะไหล่ซ่อมบำรุง: id ของชุด (แถวค้นหาที่เป็นชุด) — สินค้าปกติไม่มี */
+  kitId?: string;
   id: string;
   code: string;
   oem: string;
@@ -505,7 +518,7 @@ async function toPicked(
       tel: r.tel,
       email: r.email ?? '',
       addr: r.addr ?? {},
-      addrText: r.addr_text ?? '',
+      addrText: addrLineOf({ addr: r.addr ?? {}, addrText: r.addr_text ?? '' }),
       creditDays: Number(r.credit_days),
       vehicles: (veh as Record<string, string>[])
         .filter((v) => v.contact_id === r.id)
@@ -644,7 +657,7 @@ export async function loadDocForCopy(
       items: items.rows.map((r) => ({
         productId: r.product_id,
         code: r.code, oem: r.oem, name: r.name, unit: r.unit,
-        qty: n(r.qty), unitPrice: n(r.unit_price), isService: r.is_service,
+        qty: n(r.qty), unitPrice: n(r.unit_price), isService: r.is_service, kitId: r.kit_id ?? null,
         discPct: n(r.disc_pct),
       })),
       payments: [],
@@ -656,9 +669,10 @@ export async function loadDocForCopy(
 export async function canEdit(id: string): Promise<{ ok: boolean; reason?: string }> {
   return query(async (c) => {
     const { rows } = await c.query(
-      `select d.status::text as status,
+      `select d.status::text as status, d.kind::text as kind,
               (select doc_no from documents x
-               where x.parent_doc_id = d.id and x.status <> 'void' limit 1) as child_no
+               where x.parent_doc_id = d.id and x.status <> 'void' limit 1) as child_no,
+              (select coalesce(sum(p.amount), 0) from payments p where p.doc_id = d.id) as paid
        from documents d where d.id = $1`,
       [id],
     );
@@ -668,6 +682,9 @@ export async function canEdit(id: string): Promise<{ ok: boolean; reason?: strin
     if (d.child_no) {
       return { ok: false, reason: `แก้ไม่ได้เพราะมีเอกสาร ${d.child_no} ออกต่อจากใบนี้แล้ว` };
     }
+    /* กติกา (ผู้ใช้กำหนด): ใบที่ตัดสต๊อกแล้ว (ใบเสร็จ) หรือรับเงินแล้ว แก้ไม่ได้ — ให้ยกเลิกแล้วออกใหม่ */
+    if (d.kind === 'RC') return { ok: false, reason: 'ใบเสร็จตัดสต๊อกแล้ว แก้ไม่ได้ — ให้ยกเลิกใบนี้แล้วออกใบใหม่' };
+    if (Number(d.paid) > 0.004) return { ok: false, reason: 'ใบนี้รับเงินแล้ว แก้ไม่ได้ — ให้ยกเลิกใบนี้แล้วออกใบใหม่' };
     return { ok: true };
   });
 }
