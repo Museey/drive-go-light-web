@@ -53,12 +53,12 @@ describe('ที่อยู่หน้าออกเอกสารต่อ'
 
 describe('ปุ่มเปิดเอกสารใหม่', () => {
   it('ปุ่มขายหน้าร้านพาไปใบเปล่าที่เติมค่าให้แล้ว', () => {
-    expect(newBtnHref({ no: '03.3', kind: 'RC', label: '+ ขายหน้าร้าน', walkin: true }))
+    expect(newBtnHref({ no: '03.6', kind: 'RC', label: '+ ขายหน้าร้าน', walkin: true }))
       .toBe('/income/new?kind=RC&walkin=1');
   });
 
   it('ปุ่มปกติไม่พ่วง walkin ไปด้วย', () => {
-    expect(newBtnHref({ no: '03.3', kind: 'RC', label: '+ ใบเสร็จ' }))
+    expect(newBtnHref({ no: '03.4', kind: 'RC', label: '+ ใบเสร็จ' }))
       .toBe('/income/new?kind=RC');
   });
 
@@ -69,7 +69,7 @@ describe('ปุ่มเปิดเอกสารใหม่', () => {
     expect(walkins.length).toBeGreaterThan(0);
     for (const b of walkins) {
       expect(b.kind).toBe('RC');
-      expect(b.no).toBe('03.3');
+      expect(['03.4', '03.6']).toContain(b.no);   /* ใบเสร็จ 03.4 · ขายหน้าร้าน 03.6 */
     }
   });
 
