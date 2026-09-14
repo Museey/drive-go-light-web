@@ -58,6 +58,25 @@ export interface Contact {
 }
 
 /** ชื่อสำหรับแสดง — ตรงกับ custName() ของโปรแกรมเดิม */
+/**
+ * ที่อยู่แบบมีคำนำหน้าครบ (ผู้ใช้กำหนด): เลขที่ · หมู่บ้าน/อาคาร · หมู่ที่ · ซอย · ถนน · ตำบล/แขวง · อำเภอ/เขต · จังหวัด · รหัสไปรษณีย์
+ * กรุงเทพฯ ใช้ แขวง/เขต ที่อื่นใช้ ต./อ. — เว้นช่องที่ไม่ได้กรอก
+ */
+export function formatAddr(a: ContactAddr | null | undefined): string {
+  if (!a) return '';
+  const bkk = /กรุงเทพ|กทม/.test(a.province ?? '');
+  const parts = [
+    a.no ? `เลขที่ ${a.no}` : '', a.village ?? '', a.moo ? `หมู่ที่ ${a.moo}` : '', a.soi ? `ซอย${a.soi.startsWith('ซ') ? ' ' : ' '}${a.soi}` : '',
+    a.road ? `ถนน${a.road}` : '', a.subdistrict ? `${bkk ? 'แขวง' : 'ต.'}${a.subdistrict}` : '', a.district ? `${bkk ? 'เขต' : 'อ.'}${a.district}` : '',
+    a.province ? (bkk ? a.province : `จ.${a.province}`) : '', a.zip ?? '',
+  ];
+  return parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/** ที่อยู่ที่ใช้แสดง/พิมพ์: ถ้าพิมพ์ที่อยู่เต็มเองไว้ใช้อันนั้น ไม่งั้นประกอบจากช่องแยก */
+export const addrLineOf = (c: { addr?: ContactAddr | null; addrText?: string | null }): string =>
+  (c.addrText ?? '').trim() || formatAddr(c.addr);
+
 export const displayName = (c: {
   type: string; orgName: string; prefix: string; firstName: string; lastName: string;
 }): string =>
