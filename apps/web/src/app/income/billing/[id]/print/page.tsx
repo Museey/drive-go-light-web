@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { bahttext } from '@drivegolight/core';
 import { BankLine } from '@/components/bank-line';
 import { query, requireTab } from '@/lib/auth';
@@ -12,6 +13,8 @@ export const dynamic = 'force-dynamic';
 export default async function BillnotePrintPage({ params }: { params: Promise<{ id: string }> }) {
   await requireTab('income', 'billing');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
 
   const [data, shop] = await Promise.all([
     query((c) => getBillnote(c, id)),

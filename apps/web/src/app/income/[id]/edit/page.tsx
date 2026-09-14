@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
@@ -12,6 +13,8 @@ export const dynamic = 'force-dynamic';
 export default async function EditDocPage({ params }: { params: Promise<{ id: string }> }) {
   await requireTab('income', 'receipt');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
 
   const allowed = await canEdit(id);
   if (!allowed.ok) {

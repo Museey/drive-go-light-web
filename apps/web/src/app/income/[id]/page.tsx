@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { bahttext } from '@drivegolight/core';
 import { can, requireTab } from '@/lib/auth';
 import { DocSteps } from '@/components/doc-steps';
@@ -22,6 +23,8 @@ export default async function DocPage({
 }) {
   const session = await requireTab('income', 'receipt');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
   const sp = await searchParams;
   const [doc, shop, editable, payments, child] = await Promise.all([
     getDocDetail(id), getShop(), canEdit(id), listPayments(id),

@@ -91,6 +91,16 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
         );
       }
 
+      /* ผู้ขายของสินค้า (ไมเกรชัน 025) — ไฟล์ชุดทดสอบของรุ่น 6.4 ไม่มีข้อมูลนี้
+         ตารางว่างพิสูจน์การแยกอู่ไม่ได้ ทั้งฝั่ง "อ่านของคนอื่นไม่เห็น" และ "ของตัวเองยังเห็น" */
+      const supProduct = await admin.query(
+        `select id from products where tenant_id = $1 order by code limit 1`, [t]);
+      const supVendor = await admin.query(
+        `select id from contacts where tenant_id = $1 and kind = 'vendor' order by code limit 1`, [t]);
+      await admin.query(
+        `insert into product_suppliers (tenant_id, product_id, vendor_id, name)
+         values ($1, $2, $3, 'ร้านอะไหล่ทดสอบ')`,
+        [t, supProduct.rows[0].id, supVendor.rows[0]?.id ?? null]);
       /* ตารางใบเคลมที่เพิ่มในช่วงที่ 4 */
       const cl = await admin.query(
         `insert into claims (tenant_id, no, side, kind, claim_date, party_name, reason)

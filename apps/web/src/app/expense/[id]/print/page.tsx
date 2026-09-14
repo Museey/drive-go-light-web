@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { bahttext, EXPENSE_CATS } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { getDocDetail, getShop } from '@/lib/queries';
@@ -14,6 +15,8 @@ const CAT = Object.fromEntries(EXPENSE_CATS.map((c) => [c.key, c]));
 export default async function BuyPrintPage({ params }: { params: Promise<{ id: string }> }) {
   await requireTab('expense', 'purchase');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
 
   const [doc, meta, shop, payments] = await Promise.all([
     getDocDetail(id), getBuyDocMeta(id), getShop(), listPayments(id),

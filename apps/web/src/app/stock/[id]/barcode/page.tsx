@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { barcodeSVGFor } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { getProduct } from '@/lib/products';
@@ -21,6 +22,8 @@ export default async function BarcodePage({
 }) {
   await requireTab('stock', 'list');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
   const sp = await searchParams;
 
   const product = await getProduct(id);

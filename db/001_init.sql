@@ -1028,5 +1028,11 @@ create table product_suppliers (
 );
 create index product_suppliers_product_idx on product_suppliers (tenant_id, product_id, sort_order);
 alter table product_suppliers enable row level security;
+-- force เหมือนตารางข้อมูลอู่ทุกตัว — ไม่งั้นเจ้าของตารางอ่านข้ามอู่ได้ (ดู tenant-isolation.test.ts)
+alter table product_suppliers force row level security;
 create policy product_suppliers_tenant on product_suppliers
   using (tenant_id = current_tenant_id()) with check (tenant_id = current_tenant_id());
+
+-- ---------- ถังขยะ (028) ----------
+-- ต้องมีในภาพรวมด้วย ไม่งั้นอู่ที่เปิดใหม่ได้ดัชนีไม่ครบเท่าอู่ที่อัปเกรดมา (migrations.test.ts เทียบให้)
+create index documents_purged_idx on documents (tenant_id, purged_at) where purged_at is not null;

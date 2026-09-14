@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { bahttext, EXPENSE_CATS } from '@drivegolight/core';
 import { can, requireTab } from '@/lib/auth';
 import { canEdit as mayEditOf } from '@/lib/perms';
@@ -23,6 +24,8 @@ export default async function BuyDocPage({
 }) {
   const session = await requireTab('expense', 'purchase');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
   const sp = await searchParams;
 
   const [doc, meta, payments] = await Promise.all([

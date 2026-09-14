@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { query, requireTab } from '@/lib/auth';
 import { getCount } from '@/lib/stock-counts';
 import { getShop } from '@/lib/queries';
@@ -18,6 +19,8 @@ export default async function CountPrintPage({
 }) {
   await requireTab('stock', 'count');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
   const sp = await searchParams;
 
   const [count, shop] = await Promise.all([query((c) => getCount(c, id)), getShop()]);

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { requireOperator } from '@/lib/ops-auth';
 import { getShop, suggestRenewal } from '@/lib/ops-console';
 import { OpsShell } from '../../ops-shell';
@@ -16,6 +17,8 @@ export default async function OpsShopPage({
 }) {
   const session = await requireOperator();
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
   const shop = await getShop(session, id);
   if (!shop) notFound();
 

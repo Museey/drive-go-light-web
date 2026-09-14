@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { today } from '@drivegolight/core';
 import { query, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
@@ -18,6 +19,8 @@ export default async function BillnotePage({
 }) {
   await requireTab('income', 'billing');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (id !== 'new' && !isUuid(id)) notFound();
   const sp = await searchParams;
   const isNew = id === 'new';
 
