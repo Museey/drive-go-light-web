@@ -22,7 +22,7 @@ describe('แท็บย่อยที่กำลังเปิดอยู�
   it('เปิดแท็บหนึ่ง แล้วแท็บพี่น้องต้องไม่สว่างตาม', () => {
     const subs = MENU.find((m) => m.key === 'income')!.subs!;
     const สว่าง = subs.filter((s) => subIsCurrent(s.href, '/income', q('kind=RC')));
-    expect(สว่าง.map((s) => s.no)).toEqual(['03.3']);
+    expect(สว่าง.map((s) => s.no)).toEqual(['03.4']);
   });
 
   it('ตัวกรองอื่นที่ผู้ใช้เลือกเพิ่ม ไม่ทำให้ไฮไลต์หลุด', () => {
