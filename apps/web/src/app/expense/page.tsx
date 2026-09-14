@@ -1,10 +1,15 @@
 import Link from 'next/link';
+import { ActionTiles } from '@/components/action-tiles';
 import { EXPENSE_CATS } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { canEdit as mayEditOf, canExport as mayExportOf } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
-import { listBuyDocs } from '@/lib/purchases';
+import { blankBuyDoc, listBuyDocs, type BuyKind } from '@/lib/purchases';
+import { getShop } from '@/lib/queries';
+import { getDefaultNote, peekDocSeq } from '@/lib/sales';
+import { BuyEditor } from './buy-editor';
+import { SavedBanner } from '@/components/saved-banner';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, payLabel, thDate } from '@/lib/format';
@@ -25,7 +30,7 @@ export default async function ExpensePage({
 }: {
   searchParams: Promise<{
     q?: string; kind?: string; cat?: string; page?: string; size?: string;
-    from?: string; to?: string; month?: string; year?: string;
+    from?: string; to?: string; month?: string; year?: string; hist?: string; saved?: string; savedId?: string;
   }>;
 }) {
   const session = await requireTab('expense', 'purchase');
@@ -40,6 +45,22 @@ export default async function ExpensePage({
     kind: sp.kind, cat: sp.cat, search: sp.q, page, from, to, pageSize,
   });
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
+
+  /* ทุกเมนูย่อยเปิดมาเป็นฟอร์มสร้างใหม่ ประวัติต่อล่าง (hist=1 สลับ) — เหมือนรายรับ */
+  const formKind: BuyKind | null = sp.kind === 'PO' ? 'PO' : sp.kind === 'EX' ? 'EX' : null;
+  const histFirst = sp.hist === '1' || !formKind;
+  const returnTo = `/expense?kind=${sp.kind ?? ''}${sp.hist === '1' ? '&hist=1' : ''}`;
+  const form = formKind ? await (async () => {
+    const [shop, noteDefault] = await Promise.all([getShop(), getDefaultNote()]);
+    const initial = blankBuyDoc(formKind, noteDefault);
+    return { shop, initial, seq: await peekDocSeq(formKind, initial.docDate) };
+  })() : null;
+  const formBlock = form && formKind ? (
+    <div id="new-buy" style={{ marginBottom: 14 }}>
+      <BuyEditor initial={form.initial} vatRate={form.shop.vatRate} mode="new" returnTo={returnTo}
+                 docNoPreview={{ seq: form.seq, month: form.initial.docDate.slice(0, 7) }} />
+    </div>
+  ) : null;
 
   const keep: Record<string, string> = {
     ...(sp.q ? { q: sp.q } : {}),
@@ -60,34 +81,26 @@ export default async function ExpensePage({
       current="/expense"
       title="รายจ่าย"
       sub={`${total.toLocaleString('en-US')} รายการ`}
-      actions={
+      actions={<>
         <div className="tag-row">
           <Link className="btn" href={`/expense/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายการ</Link>
-          {/* ปุ่มตามแท็บที่เปิดอยู่ ตามรุ่น 6.4 ที่มีปุ่มเปิดเอกสารใหม่แยกต่อหน้า
-              (เลขเดิมเขียน 04.3 ซึ่งไม่ตรงกับผังเมนูที่เป็น 04.2) */}
-          {sp.kind === 'EX' ? (
-            <Link className="btn primary" href="/expense/new?kind=EX">
-              <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>04.2</span>+ ค่าใช้จ่าย
-            </Link>
-          ) : (
-            <Link className="btn primary" href="/expense/new?kind=PO">
-              <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>04.1</span>+ ใบซื้อ
-            </Link>
-          )}
         </div>
-      }
+      </>}
     >
       <SubNav menu="expense" current={sp.kind === 'EX' ? 'expense' : 'purchase'}>
+      {sp.saved && sp.savedId ? <SavedBanner docNo={sp.saved} printHref={`/expense/${sp.savedId}/print`} openHref={`/expense/${sp.savedId}`} /> : null}
       <div className="card">
         <div className="toolbar">
+          <div className="tiles">
           {TABS.map((t) => (
-            <Link key={t.key || 'all'} className="chip"
-                  href={{ pathname: '/expense', query: { ...keep, cat: undefined, ...(t.key ? { kind: t.key } : { kind: undefined }) } }}
-                  style={chipStyle((sp.kind ?? '') === t.key)}>
-              {t.no ? <span className="mono" style={{ opacity: 0.55 }}>{t.no}</span> : null}
+            <Link key={t.key || 'all'} className="tile" aria-current={(sp.kind ?? '') === t.key}
+                  href={{ pathname: '/expense', query: { ...keep, cat: undefined, ...(t.key ? { kind: t.key, hist: '1' } : { kind: undefined }) } }}>
+              {t.no ? <span className="k">{t.no}</span> : null}
               {t.label}
             </Link>
           ))}
+          <ActionTiles menu="expense" />
+          </div>
 
           {sp.kind === 'EX' ? (
             <>
@@ -104,15 +117,19 @@ export default async function ExpensePage({
 
           <div className="spacer" />
           <form action="/expense" method="get" style={{ display: 'flex', gap: 6 }}>
+            <input type="hidden" name="hist" value="1" />
             {sp.kind ? <input type="hidden" name="kind" value={sp.kind} /> : null}
             {sp.cat ? <input type="hidden" name="cat" value={sp.cat} /> : null}
             {from ? <input type="hidden" name="from" value={from} /> : null}
             {to ? <input type="hidden" name="to" value={to} /> : null}
-            <input className="in" type="search" name="q" defaultValue={sp.q ?? ''}
-                   placeholder="เลขที่ ชื่อผู้ขาย หรือเลขใบกำกับ" style={{ width: 240 }} />
+            <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
+                   placeholder="กรอกคำค้นหา — เลขที่ ชื่อผู้ขาย หรือเลขใบกำกับ" style={{ width: 240 }} />
             <button className="btn" type="submit">ค้นหา</button>
           </form>
         </div>
+      </div>
+      {!histFirst ? formBlock : null}
+      {histFirst ? (<div className="card">
 
         <DocDateFilter base="/expense" from={from} to={to}
                        keep={{
@@ -125,7 +142,7 @@ export default async function ExpensePage({
           <div className="empty">ไม่พบรายการที่ตรงกับเงื่อนไข</div>
         ) : (
           <div className="tablewrap">
-            <table className="tbl">
+            <table className="tbl hist fit">
               <thead>
                 <tr>
                   <th>เลขที่</th><th>ชนิด</th><th>วันที่</th><th>ผู้ขาย / ผู้รับเงิน</th>
@@ -198,7 +215,8 @@ export default async function ExpensePage({
           {page > 1 ? <Link className="btn" href={{ pathname: '/expense', query: { ...keep, page: page - 1 } }}>ก่อนหน้า</Link> : null}
           {page < lastPage ? <Link className="btn" href={{ pathname: '/expense', query: { ...keep, page: page + 1 } }}>ถัดไป</Link> : null}
         </div>
-      </div>
+      </div>) : null}
+
       </SubNav>
     </Shell>
   );

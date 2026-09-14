@@ -56,6 +56,12 @@ test('ยิงรัวเข้าใบตรวจนับ นับคร�
   await expect(row).toHaveCount(1);
   await expect(row.locator('input').first()).toHaveValue('3');
 
+  /* ตัวอักษรของนัดถัดไปต้องไม่หลงไปอยู่ช่องอื่น — เคยเจอ: Enter ของนัดแรกย้ายโฟกัสไปช่องค้นสินค้า
+     (EnterToNext ของชุดแก้ 13 ก.ย.) นัดที่สองและสามจึงหายไปเงียบ ๆ ทั้งที่ปืนดังครบ */
+  const stray = await page.locator('input:not(#scan)').evaluateAll(
+    (els, b) => els.filter((e) => (e as HTMLInputElement).value.includes(b as string)).length, barcode);
+  expect(stray).toBe(0);
+
   /* ช่องยิงว่างและยังโฟกัสอยู่ พร้อมนัดถัดไป */
   await expect(page.locator('#scan')).toHaveValue('');
   await expect(page.locator('#scan')).toBeFocused();

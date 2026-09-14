@@ -1,3 +1,4 @@
+import type { BarcodeType } from '@drivegolight/core';
 import 'server-only';
 import type pg from 'pg';
 import { stockFlags, today, type StockFlag } from '@drivegolight/core';
@@ -25,6 +26,9 @@ export interface ProductRow {
   categoryId: string | null;
   categoryName: string | null;
   lastCost: number;
+  /** วิธีคิดต้นทุนรายสินค้า */
+  costMethod: 'FIFO' | 'AVG' | 'FEFO';
+  barcodeType: BarcodeType;
   priceA: number;
   priceB: number;
   priceC: number;
@@ -178,6 +182,8 @@ function toProductRow(r: any): ProductRow {
     categoryId: r.category_id,
     categoryName: r.category_name,
     lastCost: n(r.last_cost),
+    costMethod: (r.cost_method ?? 'FEFO') as 'FIFO' | 'AVG' | 'FEFO',
+    barcodeType: (r.barcode_type ?? 'CODE39') as BarcodeType,
     priceA: n(r.price_a),
     priceB: n(r.price_b),
     priceC: n(r.price_c),
@@ -191,6 +197,16 @@ function toProductRow(r: any): ProductRow {
     flags,
     needReorder: flags.includes('min'),
   };
+}
+
+/** ผู้ขายของสินค้า — เรียงตามที่ผู้ใช้ใส่ */
+export async function productSuppliers(id: string): Promise<ProductSupplier[]> {
+  return query(async (c) => {
+    const { rows } = await c.query(
+      `select vendor_id, name from product_suppliers where product_id = $1 order by sort_order`, [id],
+    );
+    return rows.map((r) => ({ vendorId: r.vendor_id ?? null, name: r.name }));
+  });
 }
 
 export async function getProduct(id: string): Promise<ProductRow | null> {
@@ -273,6 +289,8 @@ export async function listStockMoves(productId: string, limit = 30): Promise<Sto
    การเขียนข้อมูล
    ===================================================================== */
 
+export interface ProductSupplier { vendorId: string | null; name: string }
+
 export interface ProductInput {
   id?: string;
   code: string;
@@ -282,6 +300,12 @@ export interface ProductInput {
   unit: string;
   categoryId: string | null;
   lastCost: number;
+  /** วิธีคิดต้นทุนของสินค้านี้ FIFO / AVG / FEFO — ค่าเริ่มต้น FEFO */
+  costMethod?: 'FIFO' | 'AVG' | 'FEFO';
+  /** ระบบบาร์โค้ด — ไม่ส่ง = เดาจากเลข (validateBarcode) */
+  barcodeType?: BarcodeType;
+  /** ผู้ขายของสินค้านี้ — vendorId ว่าง = ชื่อที่พิมพ์เอง เก็บกับสินค้าใบนี้เท่านั้น */
+  suppliers?: ProductSupplier[];
   priceA: number;
   priceB: number;
   priceC: number;
@@ -301,6 +325,22 @@ export interface ProductInput {
   openingExpiresOn?: string | null;
 }
 
+
+/** เขียนผู้ขายของสินค้าใหม่ทั้งชุด (ลบแล้วใส่ตามลำดับ) */
+async function writeSuppliers(c: pg.PoolClient, productId: string, list: ProductSupplier[] | undefined) {
+  if (!list) return;
+  await c.query(`delete from product_suppliers where product_id = $1`, [productId]);
+  let i = 0;
+  for (const sp of list) {
+    const name = sp.name.trim();
+    if (!name) continue;
+    await c.query(
+      `insert into product_suppliers (tenant_id, product_id, vendor_id, name, sort_order)
+       values (current_tenant_id(), $1, $2, $3, $4)`,
+      [productId, sp.vendorId || null, name, i++],
+    );
+  }
+}
 export async function saveProduct(input: ProductInput): Promise<string> {
   return mutate('stock', async (c, userId) => {
     if (input.id) {
@@ -308,26 +348,27 @@ export async function saveProduct(input: ProductInput): Promise<string> {
         `update products set code=$2, oem=$3, name=$4, unit=$5, category_id=$6,
                 last_cost=$7, price_a=$8, price_b=$9, price_c=$10,
                 qty_min=$11, qty_max=$12, active=$13, barcode=$14,
-                shelf_life_months=$15
+                shelf_life_months=$15, cost_method=$16, barcode_type=$17
          where id=$1`,
         [input.id, input.code, input.oem, input.name, input.unit, input.categoryId,
          input.lastCost, input.priceA, input.priceB, input.priceC,
          input.qtyMin, input.qtyMax, input.active, input.barcode.trim() || null,
-         input.shelfLifeMonths],
+         input.shelfLifeMonths, input.costMethod ?? 'FEFO', input.barcodeType ?? 'CODE39'],
       );
+      await writeSuppliers(c, input.id, input.suppliers);
       return input.id;
     }
 
     const { rows } = await c.query(
       `insert into products (tenant_id, code, oem, name, unit, category_id,
                              last_cost, price_a, price_b, price_c, qty_min, qty_max,
-                             active, barcode, shelf_life_months)
-       values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                             active, barcode, shelf_life_months, cost_method, barcode_type)
+       values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        returning id`,
       [input.code, input.oem, input.name, input.unit, input.categoryId,
        input.lastCost, input.priceA, input.priceB, input.priceC,
        input.qtyMin, input.qtyMax, input.active, input.barcode.trim() || null,
-       input.shelfLifeMonths],
+       input.shelfLifeMonths, input.costMethod ?? 'FEFO', input.barcodeType ?? 'CODE39'],
     );
     const id = rows[0].id;
 
@@ -340,6 +381,7 @@ export async function saveProduct(input: ProductInput): Promise<string> {
         [id, input.openingQty, input.lastCost, userId, input.openingExpiresOn || null],
       );
     }
+    await writeSuppliers(c, id, input.suppliers);
     return id;
   }, { sub: 'list' });
 }

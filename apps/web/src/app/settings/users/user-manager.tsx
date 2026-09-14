@@ -243,12 +243,14 @@ function PermSummary({ user }: { user: StaffUser }) {
   );
 }
 
-export function UserManager({ users, nextCode, currentUserId }: {
+export function UserManager({ users, nextCode, currentUserId, startNew }: {
+  /** เปิดฟอร์มเพิ่มพนักงานทันที (มาจากการ์ด 07.4 + เพิ่มพนักงาน) */
+  startNew?: boolean;
   users: StaffUser[];
   nextCode: string;
   currentUserId: string;
 }) {
-  const [editing, setEditing] = useState<string | 'new' | null>(null);
+  const [editing, setEditing] = useState<string | 'new' | null>(startNew ? 'new' : null);
   const [link, setLink] = useState<{ userId: string; url: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 

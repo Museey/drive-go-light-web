@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PrintReport } from '@/components/print-report';
 import { query, requireTab } from '@/lib/auth';
 import { canCost } from '@/lib/perms';
 import { Shell } from '@/components/shell';
@@ -31,7 +32,7 @@ export default async function CountPage({
       current="/stock"
       title="ตรวจนับสต๊อก"
       sub={`${rows.length} ฉบับ · ร่างที่ยังไม่ปรับยอด ${drafts}`}
-      actions={<NewCount today={today()} />}
+      actions={<><PrintReport />{" "}<NewCount today={today()} /></>}
     >
       <SubNav menu="stock" current="count">
         <div className="grid g4" style={{ marginBottom: 18 }}>

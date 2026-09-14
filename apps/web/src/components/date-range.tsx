@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ThaiDateInput } from './thai-date-input';
 
 /** ตัวเลือกช่วงเวลา — ปุ่มลัดที่ใช้บ่อยกับช่องกรอกเองสำหรับช่วงอื่น */
 export function DateRange({
@@ -26,6 +27,7 @@ export function DateRange({
       to: `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(new Date(last.getFullYear(), last.getMonth() + 1, 0).getDate()).padStart(2, '0')}`,
     },
     { label: 'ปีนี้', from: `${y}-01-01`, to: `${y}-12-31` },
+    { label: 'ปีที่แล้ว', from: `${y - 1}-01-01`, to: `${y - 1}-12-31` },
   ];
 
   const on = (p: { from: string; to: string }) => (from ?? '') === p.from && (to ?? '') === p.to;
@@ -44,9 +46,9 @@ export function DateRange({
 
       <form action={base} method="get" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <span className="subtle">ตั้งแต่</span>
-        <input className="in mono" type="date" name="from" defaultValue={from ?? ''} />
+        <ThaiDateInput name="from" defaultIso={from} ariaLabel="ตั้งแต่" />
         <span className="subtle">ถึง</span>
-        <input className="in mono" type="date" name="to" defaultValue={to ?? ''} />
+        <ThaiDateInput name="to" defaultIso={to} ariaLabel="ถึง" />
         <button className="btn" type="submit">ดู</button>
       </form>
     </div>

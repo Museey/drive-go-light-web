@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { PrintReport } from '@/components/print-report';
+import { RowLink } from '@/components/row-link';
 import { requireTab } from '@/lib/auth';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { Shell } from '@/components/shell';
@@ -61,7 +63,7 @@ export default async function CustomersPage({
       current="/customers"
       title="ข้อมูลลูกค้า / ผู้ขาย"
       sub={`${total.toLocaleString('en-US')} ราย`}
-      actions={
+      actions={<><PrintReport />{" "}<Link className="btn" href="/settings/import#contacts">นำเข้า / ส่งออก CSV</Link>{" "}
         <div className="tag-row">
           <Link className="btn" href={`/customers/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายชื่อ</Link>
           {/* ปุ่มตามแท็บ — อยู่หน้าทะเบียนผู้ขายแล้วกดเพิ่ม ควรได้ฟอร์มผู้ขาย
@@ -76,18 +78,11 @@ export default async function CustomersPage({
             </Link>
           )}
         </div>
-      }
+      </>}
     >
       <SubNav menu="customer" current={sp.kind === 'vendor' ? 'vendor' : 'customer'}>
       <div className="card">
         <div className="toolbar">
-          {KIND_TABS.map((t) => (
-            <Link key={t.key || 'all'} className="chip"
-                  href={{ pathname: '/customers', query: { ...(sp.q ? { q: sp.q } : {}), ...(sp.type ? { type: sp.type } : {}), ...(t.key ? { kind: t.key } : {}) } }}
-                  style={chipStyle((sp.kind ?? '') === t.key)}>
-              {t.label}
-            </Link>
-          ))}
           <span style={{ color: 'var(--line)' }}>|</span>
           {TYPE_TABS.map((t) => (
             <Link key={t.key || 'all'} className="chip"
@@ -102,8 +97,8 @@ export default async function CustomersPage({
           <form action="/customers" method="get" style={{ display: 'flex', gap: 6 }}>
             {sp.kind ? <input type="hidden" name="kind" value={sp.kind} /> : null}
             {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
-            <input className="in" type="search" name="q" defaultValue={sp.q ?? ''}
-                   placeholder="ชื่อ รหัส เบอร์โทร หรือทะเบียนรถ" style={{ width: 250 }} />
+            <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
+                   placeholder="กรอกคำค้นหา — ชื่อ รหัส เบอร์โทร หรือทะเบียนรถ" style={{ width: 250 }} />
             <button className="btn" type="submit">ค้นหา</button>
           </form>
         </div>
@@ -112,55 +107,51 @@ export default async function CustomersPage({
           <div className="empty">ไม่พบผู้ติดต่อที่ตรงกับเงื่อนไข</div>
         ) : (
           <div className="tablewrap">
-            <table className="tbl">
+            {/* ตารางพอดีหน้า ตัวอักษร 14px (ผู้ใช้กำหนด): รหัส · ชื่อ(ที่เหลือ) · โทร · ทะเบียนรถ/เลขภาษี · เครดิต · ยอดสะสม · คงค้าง · ปุ่ม */}
+            <table className="tbl hist fit cust">
+              <colgroup>
+                <col style={{ width: 92 }} /><col /><col style={{ width: 112 }} /><col style={{ width: 140 }} />
+                <col style={{ width: 64 }} /><col className="opt" style={{ width: 92 }} /><col style={{ width: 92 }} /><col style={{ width: 160 }} />
+              </colgroup>
               <thead>
                 <tr>
-                  <th>รหัส</th><th>ชื่อ</th><th>ประเภท</th><th>บันทึกเป็น</th>
-                  <th>โทรศัพท์</th><th>อีเมล</th><th>เลขผู้เสียภาษี</th>
-                  <th className="num">รถ</th><th className="num">เครดิต</th>
-                  <th className="num">ยอดสะสม</th><th className="num">คงค้าง</th>
+                  <th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>{sp.kind === 'vendor' ? 'เลขผู้เสียภาษี' : 'ทะเบียนรถ / ภาษี'}</th>
+                  <th className="num">เครดิต</th><th className="num opt">ยอดสะสม</th><th className="num">คงค้าง</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((c) => (
-                  <tr key={c.id}>
-                    <td className="mono">
-                      <Link href={`/customers/${c.id}`} style={{ textDecoration: 'underline' }}>{c.code}</Link>
-                    </td>
-                    <td className="wrap">{c.displayName || <span style={{ color: 'var(--ink-3)' }}>ไม่ระบุชื่อ</span>}</td>
-                    <td>{c.type === 'company' ? 'นิติบุคคล' : 'บุคคลธรรมดา'}</td>
-                    <td>
-                      <span className="chip">{c.kind === 'vendor' ? 'ผู้ขาย' : 'ลูกค้า'}</span>
+                  <RowLink key={c.id} href={`/customers/${c.id}`}>
+                    <td className="mono"><b>{c.code}</b></td>
+                    <td className="wrap">
+                      <b>{c.displayName || <span style={{ color: 'var(--ink-3)' }}>ไม่ระบุชื่อ</span>}</b>
+                      <div className="subtle" style={{ fontSize: 12.5 }}>
+                        {c.type === 'company' ? 'นิติบุคคล' : 'บุคคลธรรมดา'}{c.email ? ` · ${c.email}` : ''}
+                      </div>
                     </td>
                     <td className="mono">{c.tel || '-'}</td>
-                    <td className="wrap" style={{ color: 'var(--ink-3)' }}>{c.email || '-'}</td>
-                    <td className="mono" style={{ color: 'var(--ink-3)' }}>{c.taxId || '-'}</td>
-                    <td className="num">{c.vehicleCount || '-'}</td>
+                    <td className="mono" style={{ color: 'var(--ink-2)' }}>
+                      {c.kind === 'customer' ? (c.vehicleCount ? `รถ ${c.vehicleCount} คัน` : '-') : (c.taxId || '-')}
+                      {c.kind === 'customer' && c.taxId ? <div className="subtle" style={{ fontSize: 12 }}>{c.taxId}</div> : null}
+                    </td>
                     <td className="num">{c.creditDays ? `${c.creditDays} วัน` : '-'}</td>
-                    <td className="num mono">{c.spent > 0.004 ? baht(c.spent) : '-'}</td>
-                    {/* คงค้างเป็นตัวเลขที่ต้องสะดุดตา เพราะเป็นเงินที่ยังตามไม่ได้ */}
-                    <td className="num mono"
-                        style={{ color: c.owe > 0.004 ? 'var(--due)' : 'var(--ink-3)' }}>
+                    <td className="num mono opt">{c.spent > 0.004 ? baht(c.spent) : '-'}</td>
+                    <td className="num mono" style={{ color: c.owe > 0.004 ? 'var(--due)' : 'var(--ink-3)' }}>
                       {c.owe > 0.004 ? baht(c.owe) : '-'}
                     </td>
-                    {/* เปิดใบได้จากแถวเลย ตามรุ่น 6.4 — ลูกค้าโทรมาแล้วเปิดทะเบียน
-                        ไม่ต้องข้ามไปเมนูรายรับแล้วพิมพ์ชื่อค้นซ้ำอีกรอบ */}
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <span className="row-acts">
-                        {c.kind === 'customer' ? (
-                          <Link className="btn sm" href={`/income/new?kind=QT&party=${c.id}`}>
-                            เปิดใบซ่อม
-                          </Link>
-                        ) : (
-                          <Link className="btn sm" href={`/expense/new?kind=PO&party=${c.id}`}>
-                            เปิดใบซื้อ
-                          </Link>
-                        )}
-                        <Link className="btn sm" href={`/customers/${c.id}`}>เปิด</Link>
+                    <td>
+                      {/* ปุ่มสองบรรทัดแบบเดียวกับประวัติ: เปิดใบ(เขียว) แก้ไข(แดงอ่อน) / พิมพ์(เทา) เปิด(เทา) */}
+                      <span className="row-acts grid2">
+                        {c.kind === 'customer'
+                          ? <Link className="btn sm act-pay" href={`/income/new?kind=QT&party=${c.id}`}>ใบเสนอราคา</Link>
+                          : <Link className="btn sm act-pay" href={`/expense/new?kind=PO&party=${c.id}`}>ใบซื้อ</Link>}
+                        <Link className="btn sm act-edit" href={`/customers/${c.id}`}>แก้ไข</Link>
+                        <Link className="btn sm act-print" href={`/customers/print?q=${encodeURIComponent(c.code)}`}>พิมพ์</Link>
+                        <Link className="btn sm act-print" href={`/customers/${c.id}`}>เปิด</Link>
                       </span>
                     </td>
-                  </tr>
+                  </RowLink>
                 ))}
               </tbody>
             </table>

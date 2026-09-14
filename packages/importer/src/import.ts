@@ -53,8 +53,6 @@ export interface ImportOptions {
   externalTransaction?: boolean;
   /** วันที่ลงยอดสต๊อกยกมา ถ้าไม่ระบุใช้วันที่นำเข้า */
   openingStockDate?: string;
-  /** เลขที่เอกสารรีเซ็ตรายเดือนหรือไม่ — ค่าตั้งต้นคือไม่รีเซ็ต ตามพฤติกรรมโปรแกรมเดิม */
-  monthlyDocSequence?: boolean;
   /**
    * ผู้เรียกจะสร้างบัญชีเจ้าของกิจการต่อเองทันที
    *
@@ -69,6 +67,69 @@ export interface ImportResult {
   counts: Record<string, number>;
   /** เรื่องที่ต้องบอกผู้ใช้ — ไม่ถึงกับ error แต่ห้ามเงียบ */
   warnings: string[];
+}
+
+const COST_METHODS = new Set(['FIFO', 'AVG', 'FEFO']);
+const BARCODE_TYPES = new Set(['EAN13', 'EAN8', 'UPCA', 'CODE39', 'CODE128']);
+
+/** % ส่วนลด 0–100 ทศนิยม 2 ตำแหน่ง — ตรงกับ numeric(5,2) และ check ของตาราง */
+function pctOf(v: unknown): number {
+  const x = Math.round(Number(v) * 100) / 100;
+  return Number.isFinite(x) ? Math.min(100, Math.max(0, x)) : 0;
+}
+
+interface PeriodRows {
+  doc: [kind: string, period: string, last: number][];
+  bn: [period: string, last: number][];
+  cl: [side: string, period: string, last: number][];
+  ct: [period: string, last: number][];
+}
+
+/**
+ * ตัวนับเลขที่ครบทุกเดือนจากไฟล์ของเว็บ (`_seqPeriods`)
+ *
+ * เลขที่เอกสารนับใหม่ทุกเดือน ตัวนับจึงมีหลายแถวต่อชนิด `seq` ของรุ่น 6.4 เก็บได้เลขเดียว
+ * คืน null เมื่อไฟล์ไม่มีคีย์นี้ (ไฟล์เก่าหรือรุ่น 6.4) ให้ผู้เรียกใช้วิธีเดิม
+ */
+function seqPeriodsOf(raw: any): PeriodRows | null {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.doc)) return null;
+  const period = (v: unknown) => {
+    const t = String(v ?? '');
+    return t === '' || /^\d{4}$/.test(t) ? t : null;
+  };
+  const last = (v: unknown) => Math.max(0, Math.trunc(Number(v) || 0));
+  /* คีย์ซ้ำในไฟล์ (แก้ไฟล์ด้วยมือ) เอาค่าสูงสุด — ต่ำไปคือเสี่ยงออกเลขซ้ำ */
+  const keep = <T extends (string | number)[]>(rows: (T | null)[]): T[] => {
+    const m = new Map<string, T>();
+    for (const r of rows) {
+      if (!r) continue;
+      const k = r.slice(0, -1).join('|');
+      const prev = m.get(k);
+      if (!prev || (r.at(-1) as number) > (prev.at(-1) as number)) m.set(k, r);
+    }
+    return [...m.values()];
+  };
+  const kinds = new Set(Object.keys(KIND_SEQ_KEY));
+  const arr = (v: unknown) => (Array.isArray(v) ? v : []);
+  return {
+    doc: keep(raw.doc.map((r: any) => {
+      const p = period(r?.period);
+      return kinds.has(String(r?.kind)) && p !== null ? [String(r.kind), p, last(r.last)] : null;
+    })),
+    bn: keep(arr(raw.bn).map((r: any) => {
+      const p = period(r?.period);
+      return p !== null ? [p, last(r.last)] : null;
+    })),
+    cl: keep(arr(raw.cl).map((r: any) => {
+      const p = period(r?.period);
+      return ['customer', 'vendor'].includes(String(r?.side)) && p !== null
+        ? [String(r.side), p, last(r.last)] : null;
+    })),
+    ct: keep(arr(raw.ct).map((r: any) => {
+      const p = period(r?.period);
+      return p !== null ? [p, last(r.last)] : null;
+    })),
+  };
 }
 
 const KIND_SEQ_KEY: Record<string, string> = { QT: 'q', IV: 'iv', IVT: 'ivt', RC: 'r', PO: 'p', EX: 'e' };
@@ -128,6 +189,19 @@ export async function importBackup(
   const dropped = unsupportedCollections(raw);
 
   const db = normalizeBackup(raw);
+
+  /* รายการที่มีส่วนลดรายบรรทัด — ไฟล์ของเว็บส่งราคาหลังหักส่วนลดให้รุ่น 6.4 อ่าน
+     ราคาเต็มกับ % อยู่ใน _gross / _discPct ต้องคืนก่อนคิดยอด
+     ไม่งั้นยอดเอกสารคำนวณจากราคาสุทธิ ซึ่งปัดทศนิยมคนละที่กับตอนบันทึกจริง */
+  for (const d of [...db.quotes, ...db.invoices, ...db.receipts, ...db.purchases, ...db.expenses]) {
+    for (const it of d?.items ?? []) {
+      if (it && it._gross !== undefined) {
+        it.price = Number(it._gross);
+        it.discPct = pctOf(it._discPct);
+      }
+    }
+  }
+  const periods = seqPeriodsOf((db as any)._seqPeriods);
   const shop = db.shop as Record<string, any>;
   const ctx: ShopContext = { vatRate: shop.vatRate };
   const warnings: string[] = [...unsupportedWarnings(dropped)];
@@ -151,15 +225,38 @@ export async function importBackup(
       warnings.push('โลโก้เดิมฝังเป็น base64 ในไฟล์ — ต้องอัปโหลดขึ้น object storage แล้วตั้ง logo_url เอง');
     }
 
+    /* ข้อมูลร้านที่รุ่น 6.4 ไม่มี — ตั้งเฉพาะเมื่อไฟล์มีคีย์นั้นจริง
+       ไฟล์เก่าไม่มีคีย์เหล่านี้ ถ้าตั้งทุกครั้ง การกู้จากไฟล์เก่าจะล้างลายเซ็นกับบัญชีธนาคารที่ตั้งไว้ในเว็บทิ้ง */
+    const extraShop: [string, unknown][] = [];
+    if ('_ownerName' in shop) extraShop.push(['owner_name', text(shop._ownerName)]);
+    if ('_signature' in shop) extraShop.push(['signature_url', text(shop._signature) || null]);
+    if ('_noteDefault' in shop) extraShop.push(['note_default', text(shop._noteDefault)]);
+    if (Array.isArray(shop._bankAccounts)) {
+      const banks = shop._bankAccounts
+        .filter((b: any) => b && typeof b === 'object')
+        .map((b: any) => ({ bank: text(b.bank), no: text(b.no), name: text(b.name) }))
+        .filter((b: { bank: string; no: string; name: string }) => b.bank || b.no || b.name);
+      extraShop.push(['bank_accounts', JSON.stringify(banks)]);
+      /* บัญชีแรกสำเนาลงคอลัมน์เดิมด้วย — หน้าพิมพ์ยังอ่านจากตรงนั้น */
+      extraShop.push(
+        ['bank_name', banks[0]?.bank ?? ''],
+        ['bank_account_no', banks[0]?.no ?? ''],
+        ['bank_account_name', banks[0]?.name ?? ''],
+      );
+    }
+    const extraSet = extraShop.map(([col], i) => `, ${col}=$${13 + i}`).join('');
+    const extraCols = extraShop.map(([col]) => `, ${col}`).join('');
+    const extraVals = extraShop.map((_, i) => `,$${13 + i}`).join('');
+
     await client.query(
       restoring
         ? `update tenants set name=$2, tax_id=$3, addr_text=$4, tel=$5, tel2=$6,
                   vat_rate=$7, wht_rate=$8, price_tier=$9, proposer_name=$10,
-                  warranty_text=$11, ui_prefs=$12
+                  warranty_text=$11, ui_prefs=$12${extraSet}
              where id = $1`
         : `insert into tenants (id, name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
-                                price_tier, proposer_name, warranty_text, ui_prefs)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                                price_tier, proposer_name, warranty_text, ui_prefs${extraCols})
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12${extraVals})`,
       [
         tenantId,
         options.tenantName ?? text(shop.name) ?? 'อู่',
@@ -169,6 +266,7 @@ export async function importBackup(
         ['A', 'B', 'C'].includes(shop.priceTier) ? shop.priceTier : 'A',
         text(shop.proposerName), shop.warrantyText ? text(shop.warrantyText) : null,
         JSON.stringify(db.ui ?? {}),
+        ...extraShop.map(([, v]) => v),
       ],
     );
 
@@ -254,6 +352,8 @@ export async function importBackup(
         p.cat ? (catId.get(p.cat) ?? null) : null,
         money(num(p.cost)), money(num(p.pA)), money(num(p.pB)), money(num(p.pC)),
         qty(num(p.min)), qty(num(p.max)), text(p.id),
+        COST_METHODS.has(p._costMethod) ? p._costMethod : 'FEFO',
+        BARCODE_TYPES.has(p._barcodeType) ? p._barcodeType : 'CODE39',
       ]);
     }
     if (dupBarcode) {
@@ -264,7 +364,8 @@ export async function importBackup(
     }
     await insertRows(client, 'products',
       ['id', 'tenant_id', 'code', 'oem', 'barcode', 'name', 'unit', 'category_id',
-       'last_cost', 'price_a', 'price_b', 'price_c', 'qty_min', 'qty_max', 'legacy_id'],
+       'last_cost', 'price_a', 'price_b', 'price_c', 'qty_min', 'qty_max', 'legacy_id',
+       'cost_method', 'barcode_type'],
       productRows);
 
     /* ---------- รูปสินค้า ---------- */
@@ -372,7 +473,7 @@ export async function importBackup(
           vid, tenantId, id, text(v.brand), text(v.model), text(v.year), text(v.color),
           text(v.plateA), text(v.plateB), text(v.plateProv),
           text(v.engineNo), text(v.chassisNo), text(v.mileage),
-          v.lastService || null, text(v.id),
+          v.lastService || null, text(v.id), text(v._other),
         ]);
       }
     }
@@ -393,8 +494,26 @@ export async function importBackup(
     await insertRows(client, 'vehicles',
       ['id', 'tenant_id', 'contact_id', 'brand', 'model', 'year', 'color',
        'plate_a', 'plate_b', 'plate_province', 'engine_no', 'chassis_no', 'mileage',
-       'last_service_on', 'legacy_id'],
+       'last_service_on', 'legacy_id', 'other'],
       vehicleRows);
+
+    /* ---------- ผู้ขายของสินค้า (025) ----------
+       ต้องหลังผู้ติดต่อ — vendor_id อ้างผู้ติดต่อ ชื่อที่พิมพ์เองไม่มี vendorId */
+    const supplierRows: unknown[][] = [];
+    for (const p of db.products) {
+      const pid = productId.get(p.id);
+      if (!pid || !Array.isArray(p._suppliers)) continue;
+      let order = 0;
+      for (const sp of p._suppliers) {
+        const name = text(sp?.name).trim();
+        if (!name) continue;
+        supplierRows.push([
+          tenantId, pid, sp?.vendorId ? (contactId.get(text(sp.vendorId)) ?? null) : null, name, order++,
+        ]);
+      }
+    }
+    await insertRows(client, 'product_suppliers',
+      ['tenant_id', 'product_id', 'vendor_id', 'name', 'sort_order'], supplierRows);
 
     /* ---------- เอกสาร ---------- */
     /**
@@ -455,9 +574,12 @@ export async function importBackup(
     ) => {
       const id = docUuid.get(d)!;
       const t = opts.totals;
+      /* ตัวนำเข้าเดิมไม่อ่านธงนี้เลย — กู้ข้อมูลแล้วใบที่ยกเลิกกลับมาเป็นใบปกติ
+         เข้ารายงาน ลูกหนี้ และภาษีขายอีกครั้ง (มีมาก่อนชุดแก้ 13 ก.ย.) */
+      const voided = d.voided === true;
 
       docRows.push([
-        id, tenantId, kind, uniqueDocNo(kind, text(d.no)), d.date, opts.status,
+        id, tenantId, kind, uniqueDocNo(kind, text(d.no)), d.date, voided ? 'void' : opts.status,
         opts.parent ? (docUuid.get(opts.parent) ?? null) : null,
         text(d.invNo),
         opts.party.id, opts.party.type, opts.party.name, digitsOnly(opts.party.taxId),
@@ -481,6 +603,11 @@ export async function importBackup(
         kind === 'EX' && d.cat === 'asset' && num(d.assetLife) > 0 ? Math.trunc(num(d.assetLife)) : null,
         text(d.note),
         `${kind}:${text(d.id)}`,
+        voided ? (text(d._voidedAt) || new Date().toISOString()) : null,
+        voided ? (text(d.voidedReason) || null) : null,
+        d._discountMode === 'pct' ? 'pct' : 'baht',
+        d._discountMode === 'pct' ? pctOf(d._discountPct) : 0,
+        text(d._purgedAt) || null,
       ]);
 
       (d.items ?? []).forEach((it: any, i: number) => {
@@ -492,7 +619,7 @@ export async function importBackup(
         itemRows.push([
           randomUUID(), tenantId, id, i + 1, pid,
           text(it.code), text(it.oem), text(it.name) || '(ไม่ระบุชื่อรายการ)', text(it.unit),
-          qty(num(it.qty)), money(num(it.price)), isServiceItem(it),
+          qty(num(it.qty)), money(num(it.price)), isServiceItem(it), pctOf(it.discPct ?? 0),
         ]);
       });
 
@@ -659,22 +786,27 @@ export async function importBackup(
        'subtotal', 'net_amount', 'vat_amount', 'wht_amount', 'grand_total', 'payable',
        'credit_days', 'due_date', 'complaints', 'findings', 'approver', 'proposer',
        'warranty_text', 'received_by', 'wht_deducted', 'goods_received',
-       'expense_cat', 'asset_life_yrs', 'note', 'legacy_id'],
+       'expense_cat', 'asset_life_yrs', 'note', 'legacy_id',
+       'voided_at', 'voided_reason', 'discount_mode', 'discount_pct', 'purged_at'],
       docRows);
 
     await insertRows(client, 'doc_items',
       ['id', 'tenant_id', 'doc_id', 'line_no', 'product_id', 'code', 'oem', 'name', 'unit',
-       'qty', 'unit_price', 'is_service'],
+       'qty', 'unit_price', 'is_service', 'disc_pct'],
       itemRows);
 
     await insertRows(client, 'payments',
       ['id', 'tenant_id', 'doc_id', 'paid_on', 'amount', 'method', 'ref', 'at_issue'],
       paymentRows);
 
-    /* ---------- ตัวนับเลขที่เอกสาร ---------- */
-    const period = options.monthlyDocSequence ? new Date().toISOString().slice(0, 7).replace('-', '') : '';
-    const seqRows = Object.entries(KIND_SEQ_KEY)
-      .map(([kind, key]) => [tenantId, kind, period, Math.max(0, Math.trunc(num(db.seq?.[key])))]);
+    /* ---------- ตัวนับเลขที่เอกสาร ----------
+       ไฟล์ของเว็บมี _seqPeriods ครบทุกเดือน ใช้ตามจริง
+       ไฟล์เก่าและรุ่น 6.4 มีแค่ seq เลขเดียว ลงที่คีย์ว่างเหมือนเดิม
+       (เลขที่รูปแบบ ปปดดวว ไม่ชนกับเลขรูปแบบเดิม จึงไม่ต้องเดาว่าเป็นเดือนไหน) */
+    const seqRows = periods
+      ? periods.doc.map(([kind, period, last]) => [tenantId, kind, period, last])
+      : Object.entries(KIND_SEQ_KEY)
+        .map(([kind, key]) => [tenantId, kind, '', Math.max(0, Math.trunc(num(db.seq?.[key])))]);
     await insertRows(client, 'doc_sequences', ['tenant_id', 'kind', 'period', 'last_no'], seqRows);
 
     /* ---------- ใบวางบิล ---------- */
@@ -738,7 +870,8 @@ export async function importBackup(
         text(b?.byWhom), text(b?.note),
         money(num(b?.total)),
         voided ? 'void' : 'issued',
-        voided ? new Date().toISOString() : null,
+        voided ? (text(b?._voidedAt) || new Date().toISOString()) : null,
+        text(b?._purgedAt) || null,
       ]);
       for (const docId of docIds) billnoteDocRows.push([tenantId, id, docId, voided]);
     }
@@ -746,12 +879,14 @@ export async function importBackup(
     await insertRows(client, 'billnotes',
       ['id', 'tenant_id', 'no', 'bill_date', 'due_date', 'party_id',
        'party_name', 'party_tax_id', 'party_addr_text', 'by_whom', 'note',
-       'total_snapshot', 'status', 'voided_at'],
+       'total_snapshot', 'status', 'voided_at', 'purged_at'],
       billnoteRows);
     await insertRows(client, 'billnote_docs',
       ['tenant_id', 'billnote_id', 'doc_id', 'voided'], billnoteDocRows);
     await insertRows(client, 'billnote_sequences', ['tenant_id', 'period', 'last_no'],
-      [[tenantId, '', Math.max(0, Math.trunc(num(db.seq?.bn)))]]);
+      periods
+        ? periods.bn.map(([period, last]) => [tenantId, period, last])
+        : [[tenantId, '', Math.max(0, Math.trunc(num(db.seq?.bn)))]]);
 
     if (renamedBillNo) {
       warnings.push(`เลขที่ใบวางบิลซ้ำ ${renamedBillNo} ใบ — เติมเลขต่อท้ายให้ไม่ชน`);
@@ -865,10 +1000,12 @@ export async function importBackup(
       ['id', 'tenant_id', 'claim_id', 'line_no', 'product_id',
        'code', 'oem', 'name', 'unit', 'qty', 'unit_cost', 'cost_amount'],
       claimItemRows);
-    await insertRows(client, 'claim_sequences', ['tenant_id', 'side', 'period', 'last_no'], [
-      [tenantId, 'customer', '', Math.max(0, Math.trunc(num(db.seq?.cl)), claimSeen.customer)],
-      [tenantId, 'vendor', '', Math.max(0, Math.trunc(num(db.seq?.vc)), claimSeen.vendor)],
-    ]);
+    await insertRows(client, 'claim_sequences', ['tenant_id', 'side', 'period', 'last_no'], periods
+      ? periods.cl.map(([side, period, last]) => [tenantId, side, period, last])
+      : [
+        [tenantId, 'customer', '', Math.max(0, Math.trunc(num(db.seq?.cl)), claimSeen.customer)],
+        [tenantId, 'vendor', '', Math.max(0, Math.trunc(num(db.seq?.vc)), claimSeen.vendor)],
+      ]);
 
     if (renamedClaimNo) {
       warnings.push(`เลขที่ใบเคลมซ้ำ ${renamedClaimNo} ใบ — เติมเลขต่อท้ายให้ไม่ชน`);
@@ -957,7 +1094,9 @@ export async function importBackup(
        'counted_qty', 'system_qty', 'unit_cost'],
       countItemRows);
     await insertRows(client, 'stock_count_sequences', ['tenant_id', 'period', 'last_no'],
-      [[tenantId, '', Math.max(0, Math.trunc(num(db.seq?.ct)), countRows.length)]]);
+      periods
+        ? periods.ct.map(([period, last]) => [tenantId, period, last])
+        : [[tenantId, '', Math.max(0, Math.trunc(num(db.seq?.ct)), countRows.length)]]);
 
     if (renamedCountNo) {
       warnings.push(`เลขที่ใบตรวจนับซ้ำ ${renamedCountNo} ใบ — เติมเลขต่อท้ายให้ไม่ชน`);

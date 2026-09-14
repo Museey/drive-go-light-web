@@ -74,17 +74,20 @@ for (const path of PAGES) {
 }
 
 /* หน้ารายใบ — เอารหัสจากลิงก์แรกในหน้ารายการ ข้อมูลตัวอย่างสุ่มรหัสใหม่ทุกครั้ง */
+/* ลิงก์รายใบอาจมีส่วนต่อท้าย — แถวประวัติรายรับกดได้ทั้งแถวด้วย router.push (ไม่มี <a> ของแถว)
+   ลิงก์จริงในแถวคือปุ่ม รับชำระ (#pay) · แก้ไข (/edit) · พิมพ์ (/print) · ลบ (?void=1) จึงเก็บแค่รหัสใบ */
 const DETAIL: [string, RegExp][] = [
-  ['/income', /^\/income\/[0-9a-f-]{36}$/],
-  ['/expense', /^\/expense\/[0-9a-f-]{36}$/],
-  ['/stock', /^\/stock\/[0-9a-f-]{36}$/],
+  ['/income', /^(\/income\/[0-9a-f-]{36})(?:[/?#].*)?$/],
+  ['/expense', /^(\/expense\/[0-9a-f-]{36})(?:[/?#].*)?$/],
+  ['/stock', /^(\/stock\/[0-9a-f-]{36})(?:[/?#].*)?$/],
 ];
 
 for (const [list, pattern] of DETAIL) {
   test(`ข้อความอยู่กลางกรอบ — รายใบจาก ${list} พร้อมหน้าแก้ไขและหน้าพิมพ์`, async ({ page }) => {
-    await page.goto(list);
+    /* หน้ารายรับ/รายจ่ายเปิดมาเป็นฟอร์มสร้างใหม่ (ชุดแก้ 13 ก.ย.) — ลิงก์รายใบอยู่ในประวัติ (hist=1) */
+    await page.goto(list === '/stock' ? list : `${list}?hist=1`);
     const hrefs = await page.locator('a[href]').evaluateAll((as) => as.map((a) => a.getAttribute('href') ?? ''));
-    const href = hrefs.find((h) => pattern.test(h));
+    const href = hrefs.map((h) => pattern.exec(h)?.[1]).find(Boolean);
     expect(href, `ไม่เจอลิงก์รายใบใน ${list} — ข้อมูลตัวอย่างหายหรือเปล่า`).toBeTruthy();
 
     for (const suffix of ['', '/edit', '/print']) {

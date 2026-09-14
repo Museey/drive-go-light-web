@@ -1,3 +1,4 @@
+import { IntakeForm } from './intake-form';
 import type { ReactNode } from 'react';
 
 /**
@@ -99,9 +100,9 @@ const SumTable = ({ wht }: { wht?: boolean }) => (
   </table>
 );
 
-const Sign = ({ a, b }: { a: string; b: string }) => (
+const Sign = ({ a, b, c }: { a: string; b: string; c?: string }) => (
   <div className="sign">
-    {[a, b].map((label) => (
+    {[a, b, ...(c ? [c] : [])].map((label) => (
       <div key={label}>
         <div className="line" />{label}
         <br /><span style={{ fontSize: 11 }}>( ................................................ )</span>
@@ -118,29 +119,37 @@ const Foot = () => (
   </div>
 );
 
-export type FormKind = 'quote' | 'receipt' | 'jobcard' | 'purchase' | 'expense';
+export type FormKind = 'intake' | 'quote' | 'invoice' | 'receipt' | 'billnote' | 'jobcard' | 'purchase' | 'expense';
 
 export const FORM_LABEL: Record<FormKind, string> = {
+  intake: 'ใบรับรถ (ตรวจสภาพ/สั่งงาน)',
   quote: 'ใบเสนอราคา / ใบอนุมัติซ่อม',
+  invoice: 'ใบส่งมอบ / ใบกำกับภาษี',
   receipt: 'ใบเสร็จรับเงิน',
+  billnote: 'ใบวางบิล',
   jobcard: 'ใบรับรถ / ใบสั่งงานซ่อม',
   purchase: 'ใบบันทึกซื้อสินค้า',
   expense: 'ใบบันทึกค่าใช้จ่าย',
 };
 
 /** จำนวนบรรทัดรายการที่เลือกได้ตอนพิมพ์ — ชุดเดียวกับรุ่น 3.6 */
-export const FORM_ROWS = [8, 12, 16, 20] as const;
-export const DEFAULT_FORM_ROWS = 12;
+export const FORM_ROWS = [8, 10, 12] as const;
+export const DEFAULT_FORM_ROWS = 10;   /* 10 บรรทัดพอดี A4 หนึ่งหน้าพร้อมกล่องยอดและลายเซ็น */
 
 /** จำนวนชุดที่พิมพ์ในครั้งเดียว — พิมพ์เก็บไว้เป็นปึกที่เคาน์เตอร์ */
 export const FORM_COPIES = [1, 2, 3, 5, 10] as const;
 
-export function BlankForm({ kind, shop, rows = DEFAULT_FORM_ROWS }: {
+/** เพดานบรรทัดต่อชนิด — ให้ทั้งใบพอดี A4 แผ่นเดียวเสมอ (เลือกบรรทัดมากกว่านี้ระบบจะตัดให้พอดีกระดาษ) */
+const FIT_ROWS: Partial<Record<FormKind, number>> = { quote: 8, invoice: 12, receipt: 9, billnote: 8, purchase: 12, expense: 12, jobcard: 12 };
+
+export function BlankForm({ kind, shop, rows: rowsIn = DEFAULT_FORM_ROWS }: {
   kind: FormKind;
   shop: { name: string; addrText: string; tel: string; tel2: string; taxId: string };
   /** จำนวนบรรทัดว่างในตารางรายการ */
   rows?: number;
 }) {
+  const rows = Math.min(rowsIn, FIT_ROWS[kind] ?? rowsIn);
+  if (kind === 'intake') return <IntakeForm shop={shop} />;
   if (kind === 'quote') {
     return (
       <div className="paper">
@@ -177,6 +186,82 @@ export function BlankForm({ kind, shop, rows = DEFAULT_FORM_ROWS }: {
           <SumTable />
         </div>
         <Sign a="ผู้เสนอซ่อม" b="ผู้อนุมัติซ่อม" />
+        <Foot />
+      </div>
+    );
+  }
+
+  /* ใบส่งมอบ/ใบกำกับภาษี — โครงเดียวกับเอกสารจริง: ลูกค้า|เอกสาร · รถ · รายการ · ยอด · ลายเซ็น (ผู้ใช้กำหนด) */
+  if (kind === 'invoice') {
+    return (
+      <div className="paper">
+        <Head shop={shop} title="ใบส่งมอบ / ใบกำกับภาษี" en="DELIVERY NOTE / TAX INVOICE" rows={['เลขที่', 'วันที่', 'อ้างอิงใบเสนอราคา', 'ครบกำหนดชำระ']} />
+        <CustomerBox />
+        <VehicleBox />
+        <table className="doc">
+          <thead>
+            <tr>
+              <th style={{ width: 34 }}>ลำดับ</th><th style={{ width: 92 }}>รหัสสินค้า</th><th>รายการ</th>
+              <th style={{ width: 50 }}>จำนวน</th><th style={{ width: 44 }}>หน่วย</th><th style={{ width: 78 }}>ราคา/หน่วย</th>
+              <th style={{ width: 88 }}>จำนวนเงิน</th>
+            </tr>
+          </thead>
+          <tbody><BlankRows count={rows} cols={7} /></tbody>
+        </table>
+        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+          <div className="box" style={{ flex: 1, marginTop: 0 }}>
+            <h4>เงื่อนไขการชำระเงิน</h4>
+            <div style={{ fontSize: 12, lineHeight: 2 }}>
+              <div><Tick /> เงินสด &nbsp;&nbsp;<Tick /> เครดิต <Wl w={50} /> วัน ครบกำหนด <Wl w={110} /></div>
+              <div><b>ชำระเงินโอนเข้าบัญชี:</b> ธนาคาร <Wl w={90} /> เลขที่บัญชี <Wl w={130} /></div>
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11.5, borderTop: '1px dotted #999', paddingTop: 4 }}>จำนวนเงิน (ตัวอักษร) <Wl /></div>
+          </div>
+          <SumTable />
+        </div>
+        <Box title="หมายเหตุ"><div className="kv"><Wl /></div></Box>
+        <Sign a="ผู้รับสินค้า" b="ผู้ส่งมอบงาน" c="ผู้มีอำนาจลงนาม" />
+        <Foot />
+      </div>
+    );
+  }
+
+  /* ใบวางบิล — รายการเป็นเลขที่ใบส่งมอบที่รวมวางบิล */
+  if (kind === 'billnote') {
+    return (
+      <div className="paper">
+        <Head shop={shop} title="ใบวางบิล" en="BILLING NOTE" rows={['เลขที่', 'วันที่', 'กำหนดชำระภายใน']} />
+        <Box title="ลูกค้า">
+          <div className="kv"><b>ชื่อ:</b><Wl /></div>
+          <div className="kv"><b>ที่อยู่:</b><Wl /></div>
+          <div className="kv"><b>เลขประจำตัวผู้เสียภาษี:</b><Wl w={150} /><b>โทร:</b><Wl w={110} /></div>
+        </Box>
+        <table className="doc">
+          <thead>
+            <tr>
+              <th style={{ width: 34 }}>ลำดับ</th><th>เลขที่ใบส่งมอบ / ใบกำกับภาษี</th>
+              <th style={{ width: 100 }}>วันที่</th><th style={{ width: 100 }}>ครบกำหนด</th><th style={{ width: 100 }}>จำนวนเงิน</th>
+            </tr>
+          </thead>
+          <tbody><BlankRows count={Math.max(6, Math.min(rows, 12))} cols={5} /></tbody>
+        </table>
+        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+          <div className="box" style={{ flex: 1, marginTop: 0 }}>
+            <h4>กำหนดชำระ</h4>
+            <div style={{ fontSize: 12, lineHeight: 2 }}>
+              <div>ภายในวันที่ <Wl w={120} /> โดย <Tick /> เงินสด &nbsp;<Tick /> โอนเข้าบัญชี &nbsp;<Tick /> เช็ค</div>
+              <div><b>บัญชี:</b> ธนาคาร <Wl w={90} /> เลขที่บัญชี <Wl w={130} /> ชื่อบัญชี <Wl w={120} /></div>
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11.5, borderTop: '1px dotted #999', paddingTop: 4 }}>จำนวนเงิน (ตัวอักษร) <Wl /></div>
+          </div>
+          <table className="sum" style={{ width: 240, fontSize: 12.5 }}>
+            <tbody>
+              <tr><td>รวมยอดที่วางบิล</td><td style={{ textAlign: 'right' }}><Wl w={100} /></td></tr>
+              <tr><td><b>ยอดที่ต้องชำระ</b></td><td style={{ textAlign: 'right' }}><Wl w={100} /></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <Sign a="ผู้วางบิล" b="ผู้รับวางบิล" c="ผู้มีอำนาจลงนาม" />
         <Foot />
       </div>
     );

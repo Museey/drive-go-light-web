@@ -136,3 +136,50 @@ export const fifoValue = (lots: readonly Lot[]): number =>
 /** จำนวนคงเหลือรวมทุกล็อต */
 export const fifoQty = (lots: readonly Lot[]): number =>
   lots.reduce((s, l) => s + num(l.qty), 0);
+
+/* =====================================================================
+   วิธีคิดต้นทุน — เลือกได้ที่ตั้งค่าร้าน (เจ๊ก ข้อ 12): FIFO / AVG / FEFO
+   ---------------------------------------------------------------------
+   FEFO  = พฤติกรรมเดิมทุกประการ: ล็อตที่มีวันหมดอายุแทรกคิวตามวันหมด ที่ไม่มีต่อท้าย
+   FIFO  = เข้าก่อนออกก่อนล้วน ๆ ไม่สนวันหมดอายุ (ยังเก็บวันหมดอายุไว้เตือน)
+   AVG   = ต้นทุนถัวเฉลี่ยถ่วงน้ำหนัก: ทุกครั้งที่รับเข้า ปรับต้นทุนทุกล็อตเป็นค่าเฉลี่ยรวม
+           ล็อตยังแยกอยู่เพื่อจำนวน/วันหมดอายุ แต่ราคาต้นทุนเท่ากันหมด → ตัดออกได้ราคาเฉลี่ยเสมอ
+   ===================================================================== */
+export type CostMethod = 'FIFO' | 'AVG' | 'FEFO';
+
+export const COST_METHODS: { key: CostMethod; label: string; desc: string }[] = [
+  { key: 'FEFO', label: 'FEFO — หมดอายุก่อนออกก่อน', desc: 'ของที่ใกล้หมดอายุถูกตัดก่อน อะไหล่ทั่วไปเข้าก่อนออกก่อน (ค่าเริ่มต้น)' },
+  { key: 'FIFO', label: 'FIFO — เข้าก่อนออกก่อน', desc: 'ตัดตามลำดับรับเข้าเสมอ ไม่ดูวันหมดอายุ' },
+  { key: 'AVG', label: 'AVG — ถัวเฉลี่ย', desc: 'ต้นทุนทุกชิ้นเท่ากันที่ค่าเฉลี่ยถ่วงน้ำหนักของที่รับเข้า' },
+];
+
+/** รับของเข้าตามวิธีที่เลือก */
+export function lotAddBy(
+  method: CostMethod,
+  lots: readonly Lot[],
+  qty: Numeric,
+  unitCost: Numeric,
+  on: string,
+  expiresOn?: string | null,
+): Lot[] {
+  if (method === 'FEFO') return fifoAdd(lots, qty, unitCost, on, expiresOn);
+
+  /* FIFO และ AVG ต่อท้ายเสมอ — คงวันหมดอายุไว้บนล็อตเพื่อการเตือน แต่ไม่ใช้จัดคิว */
+  const q = num(qty);
+  const copy = lots.map((l) => ({ ...l }));
+  if (q <= 0) return copy;
+  const lot: Lot = expiresOn
+    ? { qty: q, unitCost: num(unitCost), on, expiresOn }
+    : { qty: q, unitCost: num(unitCost), on };
+  const next = [...copy, lot];
+  return method === 'AVG' ? averageOut(next) : next;
+}
+
+/** ปรับต้นทุนทุกล็อตเป็นค่าเฉลี่ยถ่วงน้ำหนักเดียวกัน (ใช้กับ AVG) */
+export function averageOut(lots: readonly Lot[]): Lot[] {
+  const qty = lots.reduce((s, l) => s + l.qty, 0);
+  if (qty <= 0) return lots.map((l) => ({ ...l }));
+  const cost = lots.reduce((s, l) => s + l.qty * l.unitCost, 0);
+  const avg = Math.round((cost / qty) * 10000) / 10000;   // ทศนิยม 4 กันสะสมคลาดเคลื่อน
+  return lots.map((l) => ({ ...l, unitCost: avg }));
+}

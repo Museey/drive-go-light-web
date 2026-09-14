@@ -125,7 +125,7 @@ describe.skipIf(!DB_URL)('ใบตรวจนับสต๊อก', () => {
 
   it('เปิดใบแล้วได้เลขที่ตามงวด และเป็นร่าง', async () => {
     const { id, no } = await createCount(app, { countDate: '2026-03-01' }, null);
-    expect(no).toBe('CT-202603-001');
+    expect(no).toBe('CT6903010001');
     const got = await getCount(app, id);
     expect(got!.status).toBe('draft');
     expect(got!.items).toEqual([]);
@@ -166,7 +166,7 @@ describe.skipIf(!DB_URL)('ใบตรวจนับสต๊อก', () => {
        where product_id = $1 and reason = 'count'`, [brake],
     );
     expect(n(rows[0].cost_amount)).toBe(1750);
-    expect(rows[0].note).toContain('CT-202603-001');
+    expect(rows[0].note).toContain('CT6903010001');
   });
 
   /*

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PrintReport } from '@/components/print-report';
 import { requireTab } from '@/lib/auth';
 import { canCost, HIDDEN_COST } from '@/lib/perms';
 import { Shell } from '@/components/shell';
@@ -49,13 +50,13 @@ export default async function SalesReportPage({
   }).toString();
 
   return (
-    <Shell actions={
+    <Shell actions={<><PrintReport />{" "}
       <div className="tag-row">
         <a className="btn" href={`/finance/csv${csvQuery ? `?${csvQuery}` : ''}`} download>ส่งออก CSV</a>
         <Link className="btn" href={`/finance/print${csvQuery ? `?${csvQuery}` : ''}`}>พิมพ์ / PDF</Link>
         <PagePrintButton />
       </div>
-    } current="/finance" title="ยอดขาย" sub="มูลค่าก่อนภาษีและภาษีขายรายงวด">
+    </>} current="/finance" title="ยอดขาย" sub="มูลค่าก่อนภาษีและภาษีขายรายงวด">
       <SubNav menu="finance" current="sales">
       <PrintHeader title="รายงานยอดขายและภาษี" range={{ from: sp.from, to: sp.to }} />
 

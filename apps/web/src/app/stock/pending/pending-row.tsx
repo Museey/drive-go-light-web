@@ -44,17 +44,18 @@ export function PendingRow({ item }: { item: PendingItem }) {
           <span className="subtle"> · {item.lastDocNo}</span>
         </td>
         <td>
-          <div className="tag-row">
-            <button className="btn" type="button"
+          {/* ปุ่มเรียงแถวเดียว ไม่ตกบรรทัด — หนึ่งรายการ = หนึ่งบรรทัด อ่านไล่ได้เร็ว */}
+          <div className="row-acts">
+            <button className="btn sm" type="button"
                     onClick={() => { setPanel(panel === 'link' ? null : 'link'); if (!results) search(); }}>
               ผูกกับสินค้า
             </button>
-            <button className="btn" type="button"
+            <button className="btn sm" type="button"
                     onClick={() => setPanel(panel === 'create' ? null : 'create')}>
               สร้างสินค้าใหม่
             </button>
             <form action={ignorePendingAction.bind(null, item.nameNorm)}>
-              <button className="btn" type="submit">ข้ามรายการนี้</button>
+              <button className="btn sm" type="submit">ข้าม</button>
             </form>
           </div>
         </td>

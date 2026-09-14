@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
+import { useLiveSearch } from '@/components/use-live-search';
 import { useRouter } from 'next/navigation';
 import {
   addCountItemsAction, applyCountAction, removeCountItemAction, saveCountHeadAction,
@@ -31,9 +32,8 @@ export function CountEditor({ count }: { count: StockCount }) {
   const scanRef = useRef<HTMLInputElement>(null);
 
   const [partQuery, setPartQuery] = useState('');
-  const [partHits, setPartHits] = useState<
-    Awaited<ReturnType<typeof searchCountPartsAction>> | null
-  >(null);
+  /* ค้นหาสด — พิมพ์แล้วขึ้นทันที (ข้อ 1) */
+  const { results: partHits, busy: partBusy, clear: clearParts } = useLiveSearch(partQuery, searchCountPartsAction);
 
   /* ช่องกรอกจำนวนเก็บเป็นข้อความ เพราะ "" กับ "0" ต่างกัน */
   const [draftQty, setDraftQty] = useState<Record<string, string>>({});
@@ -98,6 +98,8 @@ export function CountEditor({ count }: { count: StockCount }) {
               <div className="field" style={{ gridColumn: 'span 2' }}>
                 <label htmlFor="scan">ยิงบาร์โค้ดเข้าใบตรวจนับ</label>
                 <input className="in mono" id="scan" ref={scanRef} autoComplete="off"
+                       /* Enter ของปืนเป็นของช่องนี้ ไม่ใช่ "ไปช่องถัดไป" — ไม่งั้นนัดที่สองลงช่องค้นสินค้า */
+                       data-enter="own"
                        value={scanTerm}
                        onChange={(e) => setScanTerm(e.target.value)}
                        onKeyDown={(e) => {
@@ -123,16 +125,13 @@ export function CountEditor({ count }: { count: StockCount }) {
                          onChange={(e) => setPartQuery(e.target.value)}
                          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                          placeholder="รหัส ชื่อ หรือหมวด" />
-                  <button className="btn" type="button" disabled={busy}
-                          onClick={() => start(async () => {
-                            setPartHits(await searchCountPartsAction(partQuery));
-                          })}>ค้นหา</button>
+                  {partBusy ? <span className="subtle" style={{ alignSelf: 'center' }}>กำลังค้น…</span> : null}
                 </div>
               </div>
             </div>
 
             {partHits ? (
-              <div className="tablewrap" style={{ marginTop: 8, maxHeight: 220, overflowY: 'auto' }}>
+              <div className="tablewrap hits5" style={{ marginTop: 8 }}>
                 <table className="tbl">
                   <tbody>
                     {partHits.length === 0 ? (
@@ -146,28 +145,29 @@ export function CountEditor({ count }: { count: StockCount }) {
                                       const r = await addCountItemsAction(
                                         count.id, partHits.map((p) => p.id));
                                       if (r.error) setErr(r.error);
-                                      setPartHits(null);
+                                      setPartQuery(''); clearParts();
                                       router.refresh();
                                     })}>
                               + ดึงทั้ง {partHits.length} รายการเข้าใบ
                             </button>
                           </td>
                         </tr>
-                        {partHits.map((p) => (
-                          <tr key={p.id}>
-                            <td className="mono">{p.code}</td>
-                            <td className="wrap">{p.name}</td>
-                            <td className="num">คงเหลือ {p.qtyOnHand}</td>
-                            <td>
-                              <button className="btn" type="button" disabled={busy}
-                                      onClick={() => start(async () => {
-                                        const r = await addCountItemsAction(count.id, [p.id]);
-                                        if (r.error) setErr(r.error);
-                                        router.refresh();
-                                      })}>เลือก</button>
-                            </td>
-                          </tr>
-                        ))}
+                        {partHits.map((p) => {
+                          /* กดได้ทั้งแถว (ข้อ 13) — ดึงตัวเดียวเข้าใบ */
+                          const pickOne = () => start(async () => {
+                            const r = await addCountItemsAction(count.id, [p.id]);
+                            if (r.error) setErr(r.error);
+                            router.refresh();
+                          });
+                          return (
+                            <tr key={p.id} className="pick" role="button" tabIndex={0} onClick={pickOne}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickOne(); } }}>
+                              <td className="mono">{p.code}</td>
+                              <td className="wrap">{p.name}</td>
+                              <td className="num">คงเหลือ {p.qtyOnHand}</td>
+                            </tr>
+                          );
+                        })}
                       </>
                     )}
                   </tbody>

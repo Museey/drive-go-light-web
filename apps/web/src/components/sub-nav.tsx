@@ -2,7 +2,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Icon } from './icon';
 import { MENU, permSubKey, type SubItem } from './menu-map';
-import { currentSession } from '@/lib/auth';
+import { can, currentSession } from '@/lib/auth';
+import { SubnavPortal } from './subnav-portal';
 import { canTab, type PermKey } from '@/lib/perms';
 
 /**
@@ -37,12 +38,27 @@ export async function SubNav({
     ? all.filter((s2) => canTab(session, item.perm as PermKey, permSubKey(s2)))
     : all;
 
-  if (subs.length === 0) return <>{children}</>;
+  /* การ์ดสร้าง (สีอำพัน) — กรองตามสิทธิ์เมนูหลัก */
+  /* การ์ดสร้าง (อำพัน) ย้ายไปต่อท้ายแถบไทล์ด้านบนของหน้ารายการแล้ว (ActionTiles)
+     คอลัมน์ซ้ายเหลือเฉพาะการ์ดเครื่องมือ (โทนกลาง) และเมนูที่ไม่มีแถบไทล์ (ตั้งค่าร้าน) */
+  const acts = (item?.actions ?? []).filter((a) => (a.tone === 'neutral' || item?.key === 'settings' || item?.actionsFirst) && (!session || !item?.perm || can(session, item.perm)))
+    .sort((a, b) => Number(a.tone === 'neutral') - Number(b.tone === 'neutral'));   /* การ์ดเครื่องมือไปท้ายสุด (ชิดขวา) */
+  const actCards = acts.map((a) => (
+    <Link key={a.href} href={a.href} className={a.tone === 'neutral' ? 'tool' : 'act'}>
+      <span className="si"><Icon name={a.icon} size={26} color={a.tone === 'neutral' ? '#43535F' : '#7A4E00'} /></span>
+      <span className="sw"><span className="sl">{a.label}</span></span>
+      <u>{a.no}</u>
+    </Link>
+  ));
+
+  if (subs.length === 0 && acts.length === 0) return <>{children}</>;
 
   return (
     <div className="subwrap">
+      <SubnavPortal>
       <nav className="subnav">
         <div className="ttl">{item!.label}</div>
+        {item!.actionsFirst ? actCards : null}
 
         {subs.map((s: SubItem) => {
           const on = s.key === current;
@@ -72,8 +88,10 @@ export async function SubNav({
           );
         })}
 
+        {!item!.actionsFirst ? actCards : null}
         {actions ? <div className="acts">{actions}</div> : null}
       </nav>
+      </SubnavPortal>
 
       <div style={{ minWidth: 0 }}>{children}</div>
     </div>

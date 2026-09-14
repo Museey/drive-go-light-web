@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { RowLink } from '@/components/row-link';
 import type { OpenDoc } from '@/lib/sales';
 import { baht, KIND_SHORT, thDate } from '@/lib/format';
 
@@ -59,7 +60,8 @@ export function PickSource({
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id}>
+                  /* กดได้ทั้งแถว (ข้อ 13) */
+                  <RowLink key={r.id} href={`/income/new?kind=${kind}&from=${r.id}`}>
                     <td className="mono">{r.docNo}</td>
                     <td>{KIND_SHORT[r.kind] ?? r.kind}</td>
                     <td>{thDate(r.docDate)}</td>
@@ -76,7 +78,7 @@ export function PickSource({
                         เลือกใบนี้
                       </Link>
                     </td>
-                  </tr>
+                  </RowLink>
                 ))}
               </tbody>
             </table>

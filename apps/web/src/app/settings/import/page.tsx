@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { can, requireTab } from '@/lib/auth';
 import { canEdit, canExport } from '@/lib/perms';
 import { Shell } from '@/components/shell';
@@ -26,7 +25,6 @@ export default async function ImportPage() {
     <Shell
       current="/settings"
       title="นำข้อมูลเข้าระบบ"
-      actions={<Link className="btn" href="/settings">← กลับตั้งค่าร้าน</Link>}
     >
       <SubNav menu="settings" current="import">
 
@@ -40,7 +38,7 @@ export default async function ImportPage() {
             <div className="body">
               <div className="tag-row" style={{ marginBottom: 14 }}>
                 {canExport(session, 'stock', 'list') ? (
-                  <a className="btn" href="/stock/csv" download>ดาวน์โหลดข้อมูลสินค้า</a>
+                  <a className="btn" id="products" href="/stock/csv" download>ดาวน์โหลดข้อมูลสินค้า</a>
                 ) : null}
                 <a className="btn" href="/stock/csv?template=1" download>
                   ดาวน์โหลดแบบฟอร์มมาตรฐาน
@@ -70,7 +68,7 @@ export default async function ImportPage() {
               <div className="body">
                 <div className="tag-row" style={{ marginBottom: 14 }}>
                   {canExport(session, 'customer', 'customer') ? (
-                    <a className="btn" href="/contacts/csv?kind=customer" download>
+                    <a className="btn" id="contacts" href="/contacts/csv?kind=customer" download>
                       ดาวน์โหลดข้อมูลลูกค้า
                     </a>
                   ) : null}

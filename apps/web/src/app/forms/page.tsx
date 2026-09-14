@@ -1,3 +1,4 @@
+import { FitToPage } from '@/components/fit-to-page';
 import Link from 'next/link';
 import { requireSession } from '@/lib/auth';
 import { getShop } from '@/lib/queries';
@@ -44,7 +45,6 @@ export default async function FormsPage({
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href="/">← กลับหน้าแรก</Link>
         <div className="tag-row">
           {KINDS.map((k) => (
             <Link key={k} className="chip"
@@ -81,7 +81,7 @@ export default async function FormsPage({
         <PrintButton />
       </div>
 
-      <div className="printview">
+      <div className="printview blank-forms">
         {Array.from({ length: copies }).map((_, i) => (
           <BlankForm key={i} kind={kind} shop={info} rows={rows} />
         ))}

@@ -205,7 +205,7 @@ describe.skipIf(!DB_URL)('ใบวางบิล', () => {
     const first = await save([a]);
     const second = await save([b]);
 
-    expect(first.no).toMatch(/^BN-202603-\d{3}$/);
+    expect(first.no).toMatch(/^BN690331\d{4}$/);   // BN + ปปดดวว(พ.ศ.) + 4 หลัก
     expect(second.no).not.toBe(first.no);
     expect((await listBillnotes(app)).rows.map((x) => x.no).sort())
       .toEqual([first.no, second.no].sort());

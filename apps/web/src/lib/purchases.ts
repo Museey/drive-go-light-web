@@ -1,11 +1,13 @@
 import 'server-only';
-import { exTotals, poTotals, today, type VatMode } from '@drivegolight/core';
+import { docNoPeriod, formatDocNo } from './doc-no';
+import { lineAmount, exTotals, poTotals, today, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
 import { voidBuyDocWith, unvoidBuyDocWith } from './buy-void';
 
 const n = (v: unknown): number => Number(v ?? 0);
 const money = (v: number) => (Math.round(v * 100) / 100).toFixed(2);
+const r2 = (v: number) => Math.round(v * 100) / 100;
 const digits = (v: string) => String(v ?? '').replace(/\D/g, '');
 
 export type BuyKind = 'PO' | 'EX';
@@ -19,6 +21,8 @@ export interface BuyItemInput {
   unit: string;
   qty: number;
   unitPrice: number;
+  /** ส่วนลดรายบรรทัด 0–100 (%) — ไม่ส่ง = 0 */
+  discPct?: number;
   /**
    * วันหมดอายุของล็อตที่รับเข้าจากบรรทัดนี้ — ว่าง = ไม่มีวันหมดอายุ
    *
@@ -41,7 +45,10 @@ export interface BuyDocInput {
   /** เลขที่ใบกำกับของผู้ขาย */
   refDocNo: string;
 
+  /** ส่วนลดท้ายบิลที่กรอก (บาท เมื่อ mode='baht') · ระบบเก็บบาทที่มีผลจริง */
   discount: number;
+  discountMode?: 'baht' | 'pct';
+  discountPct?: number;
   vatMode: VatMode;
   whtRate: number;
   creditDays: number;
@@ -71,18 +78,52 @@ function addDays(dateIso: string, days: number): string {
  * ฝั่งซื้อไม่มีการหักภาษี ณ ที่จ่าย (สคีมาบังคับให้ wht_rate = 0)
  * ส่วนค่าใช้จ่ายอู่เป็นผู้จ่ายเงิน จึงมีหน้าที่หักและนำส่งเอง
  */
+/** บีบ % ให้อยู่ 0–100 ทศนิยม 2 ตำแหน่ง — DB มี check เดียวกัน */
+function clampPct(v: number | undefined): number {
+  const x = Number(v) || 0;
+  return Math.round(Math.min(100, Math.max(0, x)) * 100) / 100;
+}
+
+/** ใบซื้อ/ค่าใช้จ่ายเปล่า — ใช้ทั้งหน้าออกเอกสารและฟอร์มที่ฝังในหน้ารายการ */
+export function blankBuyDoc(kind: BuyKind, noteDefault: string, vendor?: PickedVendor | null): BuyDocInput {
+  return {
+    kind,
+    docDate: today(),
+    partyId: vendor?.id ?? null,
+    partyName: vendor?.name ?? '',
+    partyTaxId: vendor?.taxId ?? '',
+    partyTel: vendor?.tel ?? '',
+    partyAddrText: vendor?.addrText ?? '',
+    refDocNo: '',
+    discount: 0,
+    vatMode: kind === 'PO' ? 'ex' : 'none',
+    whtRate: kind === 'PO' ? 0 : 3,
+    creditDays: vendor?.creditDays ?? 0,
+    goodsReceived: kind === 'PO',
+    expenseCat: kind === 'EX' ? 'other' : null,
+    assetLifeYears: null,
+    note: noteDefault,
+    items: [],
+    payments: [],
+  };
+}
+
 export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docNo: string }> {
   return mutate('expense', async (c, userId) => {
     const shop = await c.query(`select vat_rate from tenants where id = current_tenant_id()`);
     const vatRate = n(shop.rows[0].vat_rate);
 
     const base = {
-      items: input.items.map((i) => ({ qty: i.qty, price: i.unitPrice })),
-      discount: input.discount,
+      items: input.items.map((i) => ({ qty: i.qty, price: i.unitPrice, discPct: clampPct(i.discPct) })),
+      discount: 0,
       vatMode: input.vatMode,
       date: input.docDate,
     };
 
+    base.discount = input.discountMode === 'pct'
+      ? r2(base.items.reduce((acc, it) => acc + lineAmount(it), 0) * clampPct(input.discountPct) / 100)
+      : r2(Math.max(0, Number(input.discount) || 0));
+    const discount = base.discount;
     const t = input.kind === 'PO'
       ? poTotals(base, { vatRate })
       : exTotals({ ...base, cat: input.expenseCat ?? 'other', whtRate: input.whtRate }, { vatRate });
@@ -107,18 +148,20 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
                 discount=$9, vat_mode=$10, vat_rate=$11, wht_rate=$12,
                 subtotal=$13, net_amount=$14, vat_amount=$15, wht_amount=$16,
                 grand_total=$17, payable=$18, credit_days=$19, due_date=$20,
-                goods_received=$21, expense_cat=$22, asset_life_yrs=$23, note=$24
+                goods_received=$21, expense_cat=$22, asset_life_yrs=$23, note=$24,
+                discount_mode=$25, discount_pct=$26
          where id=$1`,
         [
           id, input.docDate, input.refDocNo, input.partyId, input.partyName,
           digits(input.partyTaxId), input.partyTel, input.partyAddrText,
-          money(input.discount), input.vatMode, vatRate, input.kind === 'PO' ? 0 : input.whtRate,
+          money(discount), input.vatMode, vatRate, input.kind === 'PO' ? 0 : input.whtRate,
           money(t.sub), money(t.net), money(t.vat), money(t.wht), money(t.grand), money(t.payable),
           input.creditDays, dueDate,
           input.kind === 'PO' ? input.goodsReceived : false,
           input.kind === 'EX' ? input.expenseCat : null,
           isAsset && input.assetLifeYears && input.assetLifeYears > 0 ? input.assetLifeYears : null,
           input.note,
+          input.discountMode ?? 'baht', money(input.discountMode === 'pct' ? clampPct(input.discountPct) : 0),
         ],
       );
 
@@ -127,10 +170,10 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
       await c.query(`delete from stock_moves where doc_id = $1`, [id]);
     } else {
       const seq = await c.query(
-        `select next_doc_no(current_tenant_id(), $1, '') as no`, [input.kind],
+        `select next_doc_no(current_tenant_id(), $1, $2) as no`,
+        [input.kind, docNoPeriod(input.docDate)],
       );
-      const ym = input.docDate.slice(0, 4) + input.docDate.slice(5, 7);
-      docNo = `${input.kind}-${ym}-${String(seq.rows[0].no).padStart(3, '0')}`;
+      docNo = formatDocNo(input.kind, input.docDate, Number(seq.rows[0].no));
 
       const { rows } = await c.query(
         `insert into documents (tenant_id, kind, doc_no, doc_date, status, ref_doc_no,
@@ -138,23 +181,24 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
                 discount, vat_mode, vat_rate, wht_rate,
                 subtotal, net_amount, vat_amount, wht_amount, grand_total, payable,
                 credit_days, due_date, goods_received, expense_cat, asset_life_yrs,
-                note, created_by)
+                note, created_by, discount_mode, discount_pct)
          values (current_tenant_id(),$1,$2,$3,'issued',$4,
                  $5,'company',$6,$7,$8,$9,
                  $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-                 $20,$21,$22,$23,$24,$25,$26)
+                 $20,$21,$22,$23,$24,$25,$26,$27,$28)
          returning id`,
         [
           input.kind, docNo, input.docDate, input.refDocNo,
           input.partyId, input.partyName, digits(input.partyTaxId),
           input.partyTel, input.partyAddrText,
-          money(input.discount), input.vatMode, vatRate, input.kind === 'PO' ? 0 : input.whtRate,
+          money(discount), input.vatMode, vatRate, input.kind === 'PO' ? 0 : input.whtRate,
           money(t.sub), money(t.net), money(t.vat), money(t.wht), money(t.grand), money(t.payable),
           input.creditDays, dueDate,
           input.kind === 'PO' ? input.goodsReceived : false,
           input.kind === 'EX' ? input.expenseCat : null,
           isAsset && input.assetLifeYears && input.assetLifeYears > 0 ? input.assetLifeYears : null,
           input.note, userId,
+          input.discountMode ?? 'baht', money(input.discountMode === 'pct' ? clampPct(input.discountPct) : 0),
         ],
       );
       id = rows[0].id;
@@ -163,10 +207,10 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
     for (const [i, it] of input.items.entries()) {
       await c.query(
         `insert into doc_items (tenant_id, doc_id, line_no, product_id, code, oem, name, unit,
-                                qty, unit_price, is_service, expires_on)
-         values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,false,$10)`,
+                                qty, unit_price, is_service, expires_on, disc_pct)
+         values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,false,$10,$11)`,
         [id, i + 1, it.productId, it.code, it.oem, it.name || '(ไม่ระบุชื่อรายการ)',
-         it.unit, it.qty, money(it.unitPrice), it.expiresOn || null],
+         it.unit, it.qty, money(it.unitPrice), it.expiresOn || null, clampPct(it.discPct)],
       );
     }
 
@@ -256,7 +300,7 @@ export async function listBuyDocs(opts: {
   const search = (opts.search ?? '').trim();
 
   return query(async (c) => {
-    const where: string[] = [`d.kind in ('PO','EX')`];
+    const where: string[] = [`d.purged_at is null`, `d.kind in ('PO','EX')`];
     const params: unknown[] = [];
 
     if (opts.kind === 'PO' || opts.kind === 'EX') {
@@ -348,6 +392,8 @@ export async function loadBuyDoc(id: string): Promise<BuyDocInput | null> {
       partyAddrText: d.party_addr_text,
       refDocNo: d.ref_doc_no,
       discount: n(d.discount),
+      discountMode: (d.discount_mode ?? 'baht') as 'baht' | 'pct',
+      discountPct: n(d.discount_pct),
       vatMode: d.vat_mode_text as VatMode,
       whtRate: n(d.wht_rate),
       creditDays: Number(d.credit_days),
@@ -357,7 +403,7 @@ export async function loadBuyDoc(id: string): Promise<BuyDocInput | null> {
       note: d.note ?? '',
       items: items.rows.map((r) => ({
         productId: r.product_id, code: r.code, oem: r.oem, name: r.name, unit: r.unit,
-        qty: n(r.qty), unitPrice: n(r.unit_price),
+        qty: n(r.qty), unitPrice: n(r.unit_price), discPct: n(r.disc_pct),
         /* คืนวันหมดอายุกลับเข้าฟอร์ม ไม่งั้นเปิดใบมาแก้แล้วกดบันทึก ค่าจะหายเงียบ ๆ */
         expiresOn: r.expires_on ? String(r.expires_on).slice(0, 10) : null,
       })),

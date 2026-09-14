@@ -33,6 +33,8 @@ export const WIPE_ORDER = [
   'stock_count_items',
   'stock_counts',
   'stock_count_sequences',
+  /* ผู้ขายของสินค้า — ลบตามสินค้าได้เองด้วย cascade แต่ใส่ไว้ให้เห็นว่าถูกล้างจริง */
+  'product_suppliers',
   'doc_items',
   'documents',
   'vehicles',

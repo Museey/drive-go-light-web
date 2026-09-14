@@ -1,302 +1,393 @@
 'use client';
 
-import { useActionState, useState, useTransition } from 'react';
-import { useFormStatus } from 'react-dom';
+import { useActionState, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  addMonths, bahttext, EXPENSE_CATS, exTotals, poTotals, type VatMode,
+  addMonths, bahttext, EXPENSE_CATS, exTotals, lineAmount, poTotals, type VatMode,
 } from '@drivegolight/core';
 import { saveBuyDocAction, searchVendorsAction } from './actions';
 import { scanPartAction, searchProductsAction } from '../income/actions';
+import { useLiveSearch } from '@/components/use-live-search';
 import { ScanBox } from '@/components/scan-box';
+import { ConfirmSave } from '@/components/confirm-save';
+import { ThaiDateField } from '@/components/thai-date-input';
+import { Icon } from '@/components/icon';
 import type { FormResult } from '@/lib/mutate';
 import type { BuyDocInput, BuyItemInput, ExpenseCat, PickedVendor } from '@/lib/purchases';
 import type { PickedProduct } from '@/lib/sales';
-import { baht } from '@/lib/format';
+import { baht, thDate } from '@/lib/format';
+import { formatDocNo } from '@/lib/doc-no';
+
+/**
+ * ฟอร์มใบซื้อ / บันทึกค่าใช้จ่าย — โครงเดียวกับฟอร์มขาย (13 ก.ย. 69)
+ *
+ *   [ผู้ขาย | ข้อมูลเอกสาร] · [รายการ 5 บรรทัดว่าง ค้นหาในบรรทัด] · [หมายเหตุ | สรุปยอด + รับของ/จ่ายเงิน]
+ *
+ * ใบซื้อ (PO) ยิงบาร์โค้ดได้ — ยิงแล้วดึงชื่อ หน่วย OEM และวันหมดอายุจากอายุการเก็บมาให้
+ * ราคาซื้อกรอกเอง เพราะราคาที่จ่ายผู้ขายไม่ใช่ราคาขาย
+ * ค่าใช้จ่าย (EX) ไม่ผูกสินค้า พิมพ์ชื่อรายการเอง
+ */
 
 const EPS = 0.004;
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const MIN_ROWS = 5;
 
 const emptyItem = (): BuyItemInput => ({
-  productId: null, code: '', oem: '', name: '', unit: '', qty: 1, unitPrice: 0,
-  expiresOn: null,
+  productId: null, code: '', oem: '', name: '', unit: '', qty: 1, unitPrice: 0, expiresOn: null, discPct: 0,
 });
+const isRealItem = (it: BuyItemInput) => Boolean(it.productId) || it.name.trim() !== '' || it.code.trim() !== '';
+const padRows = (items: BuyItemInput[]) =>
+  items.length >= MIN_ROWS ? items : [...items, ...Array.from({ length: MIN_ROWS - items.length }, emptyItem)];
+const addDaysIso = (iso: string, days: number) => {
+  const d = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};
 
-function Submit({ label }: { label: string }) {
-  const { pending } = useFormStatus();
+/* ---------- บรรทัด — ใบซื้อค้นหาสินค้าในบรรทัด ผลหล่นใต้บรรทัด ---------- */
+function BuyLineRow({
+  i, item, isPurchase, isLast, onChange, onPick, onRemove, onEnterLast,
+}: {
+  i: number;
+  item: BuyItemInput;
+  isPurchase: boolean;
+  isLast: boolean;
+  onChange: (patch: Partial<BuyItemInput>) => void;
+  onPick: (p: PickedProduct) => void;
+  onRemove: () => void;
+  onEnterLast: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const { results, busy, clear } = useLiveSearch(isPurchase ? query : '', searchProductsAction);
+  const amount = lineAmount({ qty: item.qty, price: item.unitPrice, discPct: item.discPct ?? 0 });
+
+  const pick = (p: PickedProduct) => { onPick(p); setQuery(''); clear(); };
+  const enterKey = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter') return;
+    if (results && results.length > 0) { e.preventDefault(); e.stopPropagation(); pick(results[0]!); return; }
+    if (isLast && (e.target as HTMLElement).classList.contains('mono') && !item.name) { e.preventDefault(); e.stopPropagation(); onEnterLast(); }
+  };
+  const cols = isPurchase ? 10 : 8;
+
   return (
-    <button className="btn primary" type="submit" disabled={pending}>
-      {pending ? 'กำลังบันทึก…' : label}
-    </button>
+    <>
+      <tr>
+        <td className="idx">{i + 1}</td>
+        {isPurchase ? (
+          <td style={{ width: 150 }}>
+            <input className="in mono" placeholder="พิมพ์รหัส / ชื่อ" value={query || item.code}
+                   onChange={(e) => { setQuery(e.target.value); onChange({ code: e.target.value, productId: null }); }}
+                   onKeyDown={enterKey} />
+          </td>
+        ) : null}
+        <td>
+          <input className="in" placeholder={isPurchase ? '— เลือกสินค้า หรือพิมพ์ชื่อเอง —' : 'รายการค่าใช้จ่าย'}
+                 value={item.name} onChange={(e) => onChange({ name: e.target.value })} onKeyDown={enterKey} />
+          {isPurchase && item.productId ? <span className="chip ok" style={{ marginTop: 4 }}>เข้าสต๊อก</span> : null}
+        </td>
+        <td style={{ width: 84 }}>
+          <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.qty}
+                 onChange={(e) => onChange({ qty: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
+        </td>
+        <td style={{ width: 80 }}>
+          <input className="in" value={item.unit} placeholder="หน่วย" onChange={(e) => onChange({ unit: e.target.value })} onKeyDown={enterKey} />
+        </td>
+        <td style={{ width: 120 }}>
+          <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.unitPrice}
+                 onChange={(e) => onChange({ unitPrice: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
+        </td>
+        <td style={{ width: 84 }}>
+          <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.discPct ?? 0} title="ส่วนลดรายบรรทัด (%)"
+                 onChange={(e) => onChange({ discPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} onKeyDown={enterKey} />
+        </td>
+        <td className="amt">{baht(amount)}</td>
+        {isPurchase ? (
+          <td style={{ width: 118 }}>
+            {/* เฉพาะบรรทัดที่ผูกทะเบียน — บรรทัดที่พิมพ์ชื่อเองไม่เข้าสต๊อก จึงไม่มีล็อตให้ผูกวันหมดอายุ */}
+            {item.productId ? (
+              <ThaiDateField value={item.expiresOn ?? ''} onChange={(iso) => onChange({ expiresOn: iso || null })} style={{ width: 104 }} />
+            ) : <span className="subtle">—</span>}
+          </td>
+        ) : null}
+        <td style={{ width: 40 }}>
+          <button className="del" type="button" onClick={onRemove} title="ลบบรรทัด" aria-label="ลบบรรทัด">✕</button>
+        </td>
+      </tr>
+
+      {isPurchase && query.trim() && (results || busy) ? (
+        <tr className="hitrow">
+          <td colSpan={cols}>
+            {busy && !results ? <div className="subtle" style={{ padding: '6px 10px' }}>กำลังค้น…</div> : null}
+            {results ? (
+              <div className="tablewrap hits5">
+                <table className="tbl">
+                  <tbody>
+                    {results.length === 0 ? (
+                      <tr><td className="subtle">ไม่พบในทะเบียน — พิมพ์ชื่อเองได้ (บรรทัดนั้นจะไม่เข้าสต๊อก)</td></tr>
+                    ) : results.map((p) => (
+                      <tr key={p.id} className="pick" role="button" tabIndex={0}
+                          onClick={() => pick(p)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(p); } }}>
+                        <td className="mono">{p.code}</td>
+                        <td className="wrap">{p.name}</td>
+                        <td className="subtle">{p.unit}</td>
+                        <td className="num subtle">คงเหลือ {p.qtyOnHand.toLocaleString('en-US')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }
 
-export function BuyEditor({
-  initial, vatRate, mode,
-}: {
+/* ====================================================================== */
+
+export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPreview }: {
   initial: BuyDocInput;
   vatRate: number;
   mode: 'new' | 'edit';
+  docNo?: string;
+  /** เลขถัดไปของเดือน (ใบใหม่) — โชว์ทันที ยืนยันตอนบันทึก */
+  docNoPreview?: { seq: number; month: string };
+  /** บันทึกแล้วกลับหน้าเดิมพร้อมปุ่มพิมพ์ */
+  returnTo?: string;
 }) {
   const [state, action] = useActionState<FormResult, FormData>(saveBuyDocAction, {});
-  const [doc, setDoc] = useState<BuyDocInput>(initial);
+  const [doc, setDoc] = useState<BuyDocInput>({
+    ...initial,
+    discountMode: initial.discountMode ?? 'baht',
+    discountPct: initial.discountPct ?? 0,
+    items: padRows(initial.items.map((it) => ({ ...it, discPct: it.discPct ?? 0 }))),
+  });
   const [vendorQuery, setVendorQuery] = useState('');
-  const [vendors, setVendors] = useState<PickedVendor[] | null>(null);
-  const [partQuery, setPartQuery] = useState('');
-  const [parts, setParts] = useState<PickedProduct[] | null>(null);
-  /** บาร์โค้ดที่ยิงแล้วไม่เจอ — ค้างไว้เพื่อเสนอทางไปสร้างสินค้าใหม่ */
   const [notFound, setNotFound] = useState('');
-  const [pending, startTransition] = useTransition();
-
+  const [confirm, setConfirm] = useState(false);
+  const [precheck, setPrecheck] = useState('');
+  const [printAfter, setPrintAfter] = useState(false);
+  useEffect(() => { if (state.error) setConfirm(false); }, [state]);
   const isPurchase = doc.kind === 'PO';
+  const tryConfirm = () => {
+    const real = doc.items.filter(isRealItem);
+    const bad =
+      !doc.partyName.trim() ? (isPurchase ? 'ต้องระบุผู้ขาย' : 'ต้องระบุผู้รับเงิน')
+      : real.length === 0 ? 'ต้องมีรายการอย่างน้อยหนึ่งบรรทัด'
+      : real.some((i) => !i.name.trim()) ? 'ทุกบรรทัดต้องมีชื่อรายการ'
+      : real.some((i) => !(i.qty > 0)) ? 'จำนวนทุกบรรทัดต้องมากกว่า 0'
+      : '';
+    setPrecheck(bad);
+    if (!bad) setConfirm(true);
+  };
 
-  const set = <K extends keyof BuyDocInput>(k: K, v: BuyDocInput[K]) =>
-    setDoc((d) => ({ ...d, [k]: v }));
+  const { results: vendors, busy: vendorBusy, clear: clearVendors } = useLiveSearch(vendorQuery, searchVendorsAction);
 
+  const set = <K extends keyof BuyDocInput>(k: K, v: BuyDocInput[K]) => setDoc((d) => ({ ...d, [k]: v }));
   const setItem = (i: number, patch: Partial<BuyItemInput>) =>
     setDoc((d) => ({ ...d, items: d.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
 
-  const base = {
-    items: doc.items.map((i) => ({ qty: i.qty, price: i.unitPrice })),
-    discount: doc.discount,
-    vatMode: doc.vatMode,
-    date: doc.docDate,
-  };
+  /* ---------- ยอด (สูตรเดียวกับเซิร์ฟเวอร์) ---------- */
+  const realItems = doc.items.filter(isRealItem);
+  const coreItems = realItems.map((i) => ({ qty: i.qty, price: i.unitPrice, discPct: i.discPct ?? 0 }));
+  const subBefore = coreItems.reduce((s, it) => s + lineAmount(it), 0);
+  const effDiscount = doc.discountMode === 'pct'
+    ? round2(subBefore * (doc.discountPct ?? 0) / 100)
+    : round2(Math.max(0, doc.discount || 0));
+  const base = { items: coreItems, discount: effDiscount, vatMode: doc.vatMode, date: doc.docDate };
   const t = isPurchase
     ? poTotals(base, { vatRate })
     : exTotals({ ...base, cat: doc.expenseCat ?? 'other', whtRate: doc.whtRate }, { vatRate });
-
   const paidNow = round2(doc.payments.reduce((s, p) => s + p.amount, 0));
   const remain = round2(t.payable - paidNow);
+  const catInfo = EXPENSE_CATS.find((c) => c.key === doc.expenseCat);
+  const dueDate = doc.creditDays > 0 ? addDaysIso(doc.docDate, doc.creditDays) : doc.docDate;
 
-  /** เปลี่ยนหมวดค่าใช้จ่าย — ดึงอัตราหัก ณ ที่จ่ายที่แนะนำของหมวดนั้นมาให้ */
   const changeCat = (cat: ExpenseCat) => {
     const suggested = EXPENSE_CATS.find((x) => x.key === cat)?.wht ?? 0;
     const previous = EXPENSE_CATS.find((x) => x.key === doc.expenseCat)?.wht ?? 0;
     setDoc((d) => ({
-      ...d,
-      expenseCat: cat,
-      /* แก้อัตราให้เฉพาะตอนที่ผู้ใช้ยังไม่ได้ตั้งเอง — ไม่ทับค่าที่เขาแก้ไว้ */
-      whtRate: d.whtRate === previous ? suggested : d.whtRate,
+      ...d, expenseCat: cat,
+      whtRate: d.whtRate === previous ? suggested : d.whtRate,       /* ไม่ทับค่าที่ผู้ใช้แก้ไว้ */
       assetLifeYears: cat === 'asset' ? (d.assetLifeYears ?? 5) : null,
     }));
   };
 
-  const searchVendor = () => startTransition(async () => {
-    setVendors(await searchVendorsAction(vendorQuery));
-  });
-  const searchPart = () => startTransition(async () => {
-    setParts(await searchProductsAction(partQuery));
-  });
-
-  const addProduct = (p: PickedProduct, qty = 1) => {
-    setDoc((d) => {
-      const at = d.items.findIndex((i) => i.productId === p.id);
-      if (at >= 0) {
-        return { ...d, items: d.items.map((i, j) => (j === at ? { ...i, qty: i.qty + qty } : i)) };
-      }
-      return {
-        ...d,
-        items: [...d.items, {
-          productId: p.id, code: p.code, oem: p.oem, name: p.name, unit: p.unit,
-          qty, unitPrice: 0,
-          /* เติมวันหมดอายุให้จากอายุการเก็บของสินค้า แก้รายบรรทัดได้ถ้าของจริงไม่ตรง */
-          expiresOn: addMonths(d.docDate, p.shelfLifeMonths),
-        }],
-      };
-    });
+  const applyVendor = (v: PickedVendor) => {
+    setVendorQuery(''); clearVendors();
+    setDoc((d) => ({
+      ...d, partyId: v.id, partyName: v.name, partyTaxId: v.taxId, partyTel: v.tel, partyAddrText: v.addrText,
+      creditDays: d.creditDays || v.creditDays,
+    }));
   };
 
-  /* ยิงบาร์โค้ดตอนรับของเข้า — ใช้ตัวเดียวกับหน้าใบขาย ทะเบียนสินค้าเดียวกัน
-     ต่างกันแค่ใบซื้อไม่ดึงราคาขายมา เพราะราคาที่กรอกคือราคาที่จ่ายให้ผู้ขาย */
+  /* ---------- สินค้าลงบรรทัด (ใบซื้อ): ดึงชื่อ/หน่วย/OEM/วันหมดอายุจากทะเบียน ราคาซื้อกรอกเอง ---------- */
+  const fromProduct = (d: BuyDocInput, p: PickedProduct, qty: number): BuyItemInput => ({
+    ...emptyItem(), productId: p.id, code: p.code, oem: p.oem, name: p.name, unit: p.unit, qty,
+    expiresOn: addMonths(d.docDate, p.shelfLifeMonths),
+  });
+  const fillRow = (i: number, p: PickedProduct, qty = 1) =>
+    setDoc((d) => ({ ...d, items: d.items.map((it, j) => (j === i ? { ...fromProduct(d, p, qty), unitPrice: it.unitPrice, discPct: it.discPct } : it)) }));
+  const addProduct = (p: PickedProduct, qty = 1) => setDoc((d) => {
+    const at = d.items.findIndex((i) => i.productId === p.id);
+    if (at >= 0) return { ...d, items: d.items.map((i, j) => (j === at ? { ...i, qty: i.qty + qty } : i)) };
+    const line = fromProduct(d, p, qty);
+    const blank = d.items.findIndex((i) => !isRealItem(i));
+    return blank >= 0 ? { ...d, items: d.items.map((i, j) => (j === blank ? line : i)) } : { ...d, items: [...d.items, line] };
+  });
+  const addRow = (patch: Partial<BuyItemInput> = {}) => setDoc((d) => ({ ...d, items: [...d.items, { ...emptyItem(), ...patch }] }));
+  const removeRow = (i: number) => setDoc((d) => ({ ...d, items: padRows(d.items.filter((_, j) => j !== i)) }));
+
   const onScan = async (raw: string) => {
     const r = await scanPartAction(raw);
-
-    if (r.kind === 'one') {
-      addProduct(r.product, r.qty);
-      return { ok: true, message: `${r.product.code} ${r.product.name} · ${r.qty} ${r.product.unit}` };
-    }
-    if (r.kind === 'inactive') {
-      return { ok: false, message: `${r.code} ${r.name} ปิดใช้งานอยู่ — เปิดใช้งานที่ทะเบียนสินค้าก่อน` };
-    }
+    if (r.kind === 'one') { addProduct(r.product, r.qty); return { ok: true, message: `${r.product.code} ${r.product.name} · ${r.qty} ${r.product.unit}` }; }
+    if (r.kind === 'inactive') return { ok: false, message: `${r.code} ${r.name} ปิดใช้งานอยู่ — เปิดใช้งานที่ทะเบียนสินค้าก่อน` };
     if (r.kind === 'many') {
-      setPartQuery(r.term);
-      setParts(await searchProductsAction(r.term));
-      return { ok: false, message: `ตรงกับสินค้า ${r.count} รายการ — เลือกจากรายการด้านล่าง` };
+      const blank = doc.items.findIndex((i) => !isRealItem(i));
+      setItem(blank >= 0 ? blank : doc.items.length, { code: r.term });
+      return { ok: false, message: `ตรงกับสินค้า ${r.count} รายการ — พิมพ์ต่อในบรรทัดที่ขึ้นรหัสให้แล้วเลือก` };
     }
-
     setNotFound(r.term);
     return { ok: false, message: `ไม่พบ "${r.term}"` };
   };
 
-  const catInfo = EXPENSE_CATS.find((x) => x.key === doc.expenseCat);
+  const payload = useMemo(() => JSON.stringify({ ...doc, items: realItems }), [doc, realItems]);
+  const title = isPurchase ? 'ใบซื้อสินค้า' : 'บันทึกค่าใช้จ่าย';
+  const confirmLines = [
+    { label: isPurchase ? 'ผู้ขาย' : 'ผู้รับเงิน', value: doc.partyName || '(ไม่ระบุ)' },
+    { label: 'วันที่', value: thDate(doc.docDate) },
+    { label: 'รายการ', value: `${realItems.length} บรรทัด` },
+    ...(effDiscount > 0 ? [{ label: 'ส่วนลดท้ายบิล', value: `−${baht(effDiscount)}` }] : []),
+    { label: 'รวมทั้งสิ้น', value: baht(t.grand) },
+    ...(t.wht > 0 ? [{ label: 'ยอดที่ต้องจ่ายจริง', value: baht(t.payable) }] : []),
+    { label: 'จ่ายแล้ว', value: paidNow > EPS ? baht(paidNow) : `ยังไม่จ่าย (เจ้าหนี้ ${baht(remain)})` },
+    ...(isPurchase ? [{ label: 'รับของเข้าสต๊อก', value: doc.goodsReceived ? 'รับแล้ว' : 'ยังไม่รับ' }] : []),
+  ];
 
   return (
-    <form action={action}>
-      <input type="hidden" name="payload" value={JSON.stringify(doc)} />
-
+    <form action={action} id="buy-form"
+          onKeyDown={(e) => { const el = e.target as HTMLElement; if (e.key === 'Enter' && el.tagName === 'INPUT') e.preventDefault(); }}>
+      <input type="hidden" name="payload" value={payload} />
+      {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
+      {printAfter ? <input type="hidden" name="printAfter" value="1" /> : null}
       {state.error ? <div className="err" style={{ marginBottom: 16 }}>{state.error}</div> : null}
 
-      <div className="card">
+      <div className="card" style={{ marginBottom: 14 }}>
         <header>
-          <h2>{isPurchase ? 'ใบซื้อสินค้า' : 'บันทึกค่าใช้จ่าย'}</h2>
+          <h2>{mode === 'new' ? `สร้าง${title}` : `แก้ไข${title}`}</h2>
           <div className="spacer" />
-          <span className="subtle">
-            {isPurchase
-              ? 'รับอะไหล่เข้าสต๊อกและตั้งเป็นเจ้าหนี้ถ้ายังไม่จ่าย'
-              : catInfo?.desc ?? 'ค่าใช้จ่ายของกิจการ'}
-          </span>
+          <span className="subtle">{isPurchase ? 'รับอะไหล่เข้าสต๊อกและตั้งเป็นเจ้าหนี้ถ้ายังไม่จ่าย' : catInfo?.desc ?? 'ค่าใช้จ่ายของกิจการ'}</span>
         </header>
-        <div className="body">
-          <div className="row-fields f4">
-            <div className="field">
-              <label htmlFor="docDate">วันที่</label>
-              <input className="in mono" id="docDate" type="date" value={doc.docDate}
-                     onChange={(e) => set('docDate', e.target.value)} />
-            </div>
-
-            {!isPurchase ? (
-              <div className="field">
-                <label htmlFor="cat">หมวดค่าใช้จ่าย</label>
-                <select className="in" id="cat" value={doc.expenseCat ?? 'other'}
-                        onChange={(e) => changeCat(e.target.value as ExpenseCat)}>
-                  {EXPENSE_CATS.map((c) => (
-                    <option key={c.key} value={c.key}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-
-            <div className="field">
-              <label htmlFor="refDocNo">เลขที่ใบกำกับของผู้ขาย</label>
-              <input className="in mono" id="refDocNo" value={doc.refDocNo}
-                     onChange={(e) => set('refDocNo', e.target.value)} />
-            </div>
-
-            <div className="field">
-              <label htmlFor="vatMode">ภาษีมูลค่าเพิ่ม</label>
-              <select className="in" id="vatMode" value={doc.vatMode}
-                      onChange={(e) => set('vatMode', e.target.value as VatMode)}>
-                <option value="none">ไม่คิดภาษี</option>
-                <option value="ex">ราคายังไม่รวมภาษี</option>
-                <option value="in">ราคารวมภาษีแล้ว</option>
-              </select>
-            </div>
-
-            {!isPurchase ? (
-              <div className="field">
-                <label htmlFor="wht">หัก ณ ที่จ่าย (%)</label>
-                <input className="in mono" id="wht" inputMode="decimal" value={doc.whtRate}
-                       onChange={(e) => set('whtRate', Number(e.target.value) || 0)} />
-                <span className="hint">
-                  หมวดนี้แนะนำ {catInfo?.wht ?? 0}% · อู่เป็นผู้หักและนำส่งเอง
-                </span>
-              </div>
-            ) : null}
-
-            <div className="field">
-              <label htmlFor="creditDays">เครดิต (วัน)</label>
-              <input className="in mono" id="creditDays" inputMode="numeric" value={doc.creditDays}
-                     onChange={(e) => set('creditDays', Math.max(0, Number(e.target.value) || 0))} />
-            </div>
-
-            {doc.expenseCat === 'asset' ? (
-              <div className="field">
-                <label htmlFor="life">อายุการใช้งาน (ปี)</label>
-                <input className="in mono" id="life" inputMode="numeric"
-                       value={doc.assetLifeYears ?? 5}
-                       onChange={(e) => set('assetLifeYears', Math.max(1, Number(e.target.value) || 1))} />
-                <span className="hint">ใช้คิดค่าเสื่อมราคาในอนาคต — ระบบยังไม่คำนวณให้</span>
-              </div>
-            ) : null}
-          </div>
-        </div>
       </div>
 
-      {/* ---------- ผู้ขาย / ผู้รับเงิน ---------- */}
-      <div className={`card${state.field === 'party' ? ' bad' : ''}`}>
-        <header>
-          <h2>{isPurchase ? 'ผู้ขาย' : 'ผู้รับเงิน'}</h2>
-          {doc.partyId ? <span className="chip ok">เลือกจากทะเบียนแล้ว</span> : null}
-        </header>
-        <div className="body">
-          <div className="tag-row" style={{ marginBottom: 12 }}>
-            <input className="in" value={vendorQuery} placeholder="ค้นชื่อ รหัส หรือเบอร์โทร"
-                   style={{ width: 280 }}
-                   onChange={(e) => setVendorQuery(e.target.value)}
-                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchVendor(); } }} />
-            <button className="btn" type="button" onClick={searchVendor} disabled={pending}>
-              ค้นหาจากทะเบียนผู้ขาย
-            </button>
-            {doc.partyId ? (
-              <button className="btn" type="button" onClick={() => set('partyId', null)}>ล้างการเลือก</button>
-            ) : null}
-          </div>
-
-          {vendors ? (
-            <div className="tablewrap" style={{ marginBottom: 12, maxHeight: 200, overflowY: 'auto' }}>
-              <table className="tbl">
-                <tbody>
+      {/* ================= ผู้ขาย | ข้อมูลเอกสาร ================= */}
+      <div className="docgrid">
+        <div className={`card${state.field === 'party' ? ' bad' : ''}`}>
+          <header>
+            <span className="ic"><Icon name="seeShop" size={18} color="#C25A18" /></span>
+            <h2>{isPurchase ? 'ผู้ขาย' : 'ผู้รับเงิน'}</h2>
+            <div className="spacer" />
+            {doc.partyId ? <span className="chip ok">เลือกจากทะเบียนแล้ว</span> : null}
+          </header>
+          <div className="body">
+            <div className="field">
+              <label>ค้นจากทะเบียนผู้ขาย</label>
+              <div className="tag-row">
+                <input className="in" value={vendorQuery} style={{ flex: 1, minWidth: 200 }}
+                       placeholder="พิมพ์ชื่อ รหัส หรือเบอร์โทร — ผลขึ้นทันที" onChange={(e) => setVendorQuery(e.target.value)} />
+                {vendorBusy ? <span className="subtle">กำลังค้น…</span> : null}
+                {doc.partyId ? <button className="btn sm" type="button" onClick={() => set('partyId', null)}>ล้างการเลือก</button> : null}
+              </div>
+            </div>
+            {vendors ? (
+              <div className="tablewrap hits5" style={{ margin: '8px 0 12px', border: '1px solid var(--line)', borderRadius: 8 }}>
+                <table className="tbl"><tbody>
                   {vendors.length === 0 ? (
                     <tr><td className="subtle">ไม่พบ — พิมพ์ชื่อในช่องด้านล่างได้เลย</td></tr>
                   ) : vendors.map((v) => (
-                    <tr key={v.id}>
-                      <td className="mono">{v.code}</td>
-                      <td className="wrap">{v.name}</td>
-                      <td className="mono">{v.tel || '-'}</td>
-                      <td>
-                        <button className="btn" type="button" onClick={() => {
-                          setVendors(null);
-                          setDoc((d) => ({
-                            ...d,
-                            partyId: v.id, partyName: v.name, partyTaxId: v.taxId,
-                            partyTel: v.tel, partyAddrText: v.addrText,
-                            creditDays: d.creditDays || v.creditDays,
-                          }));
-                        }}>เลือก</button>
-                      </td>
+                    <tr key={v.id} className="pick" role="button" tabIndex={0} onClick={() => applyVendor(v)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyVendor(v); } }}>
+                      <td className="mono">{v.code}</td><td className="wrap">{v.name}</td><td className="mono">{v.tel || '-'}</td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+                </tbody></table>
+              </div>
+            ) : null}
+            <div className="row-fields f2" style={{ marginTop: 10 }}>
+              <div className="field"><label>ชื่อ *</label>
+                <input className="in" value={doc.partyName} onChange={(e) => set('partyName', e.target.value)} /></div>
+              <div className="field"><label>เลขประจำตัวผู้เสียภาษี</label>
+                <input className="in mono" inputMode="numeric" value={doc.partyTaxId} onChange={(e) => set('partyTaxId', e.target.value)} /></div>
             </div>
-          ) : null}
-
-          <div className="row-fields f3">
-            <div className="field">
-              <label>ชื่อ *</label>
-              <input className="in" value={doc.partyName}
-                     onChange={(e) => set('partyName', e.target.value)} />
-            </div>
-            <div className="field">
-              <label>เลขประจำตัวผู้เสียภาษี</label>
-              <input className="in mono" value={doc.partyTaxId} inputMode="numeric"
-                     onChange={(e) => set('partyTaxId', e.target.value)} />
-            </div>
-            <div className="field">
-              <label>โทรศัพท์</label>
-              <input className="in mono" value={doc.partyTel}
-                     onChange={(e) => set('partyTel', e.target.value)} />
-            </div>
+            <div className="field" style={{ marginTop: 10 }}><label>ที่อยู่</label>
+              <textarea className="in" value={doc.partyAddrText} placeholder="— แสดงอัตโนมัติเมื่อเลือกจากทะเบียน —" onChange={(e) => set('partyAddrText', e.target.value)} /></div>
+            <div className="field" style={{ marginTop: 10 }}><label>เบอร์โทร</label>
+              <input className="in mono" value={doc.partyTel} onChange={(e) => set('partyTel', e.target.value)} /></div>
           </div>
+        </div>
 
-          <div className="field" style={{ marginTop: 12 }}>
-            <label>ที่อยู่</label>
-            <textarea className="in" value={doc.partyAddrText}
-                      onChange={(e) => set('partyAddrText', e.target.value)} />
+        <div className="card">
+          <header><span className="ic"><Icon name="cart" size={18} color="#C25A18" /></span><h2>ข้อมูลเอกสาร</h2></header>
+          <div className="body">
+            <div className="row-fields f2">
+              <div className="field"><label>เลขที่เอกสาร</label>
+                <div className="in mono" style={{ background: 'var(--bg)', fontWeight: 700 }}>{docNo ?? (docNoPreview && doc.docDate.slice(0, 7) === docNoPreview.month ? formatDocNo(doc.kind, doc.docDate, docNoPreview.seq) : 'ออกเลขตามเดือนที่เลือกตอนบันทึก')}</div>{!docNo ? <span className="hint">เลขถัดไปของเดือน ขึ้นทันที · ยืนยันตอนบันทึก</span> : null}</div>
+              <div className="field"><label htmlFor="docDate">วันที่</label>
+                <ThaiDateField id="docDate" value={doc.docDate} onChange={(iso) => set('docDate', iso)} /></div>
+            </div>
+            <div className="row-fields f2" style={{ marginTop: 10 }}>
+              <div className="field"><label htmlFor="refDocNo">เลขที่ใบกำกับของผู้ขาย</label>
+                <input className="in mono" id="refDocNo" value={doc.refDocNo} onChange={(e) => set('refDocNo', e.target.value)} /></div>
+              <div className="field"><label htmlFor="vatMode">ภาษีมูลค่าเพิ่ม</label>
+                <select className="in" id="vatMode" value={doc.vatMode} onChange={(e) => set('vatMode', e.target.value as VatMode)}>
+                  <option value="none">ไม่คิดภาษี</option><option value="ex">ราคายังไม่รวมภาษี</option><option value="in">ราคารวมภาษีแล้ว</option>
+                </select></div>
+            </div>
+            {!isPurchase ? (
+              <div className="row-fields f2" style={{ marginTop: 10 }}>
+                <div className="field"><label htmlFor="cat">หมวดค่าใช้จ่าย</label>
+                  <select className="in" id="cat" value={doc.expenseCat ?? 'other'} onChange={(e) => changeCat(e.target.value as ExpenseCat)}>
+                    {EXPENSE_CATS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  </select></div>
+                <div className="field"><label htmlFor="wht">หัก ณ ที่จ่าย (%)</label>
+                  <input className="in mono" id="wht" inputMode="decimal" value={doc.whtRate} onChange={(e) => set('whtRate', Number(e.target.value) || 0)} />
+                  <span className="hint">หมวดนี้แนะนำ {catInfo?.wht ?? 0}% · อู่เป็นผู้หักและนำส่งเอง</span></div>
+                {doc.expenseCat === 'asset' ? (
+                  <div className="field"><label htmlFor="life">อายุการใช้งาน (ปี)</label>
+                    <input className="in mono" id="life" inputMode="numeric" value={doc.assetLifeYears ?? 5}
+                           onChange={(e) => set('assetLifeYears', Math.max(1, Number(e.target.value) || 1))} />
+                    <span className="hint">ใช้คิดค่าเสื่อมราคาในอนาคต — ระบบยังไม่คำนวณให้</span></div>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="row-fields f3" style={{ marginTop: 10 }}>
+              <div className="field"><label>เงื่อนไขชำระเงิน</label>
+                <select className="in amber" value={doc.creditDays > 0 ? 'credit' : 'cash'}
+                        onChange={(e) => set('creditDays', e.target.value === 'credit' ? Math.max(doc.creditDays, 30) : 0)}>
+                  <option value="cash">เงินสด</option><option value="credit">เครดิต</option>
+                </select></div>
+              <div className="field"><label htmlFor="creditDays">กำหนดชำระ (วัน)</label>
+                <input className="in mono amber" id="creditDays" inputMode="numeric" value={doc.creditDays}
+                       onChange={(e) => set('creditDays', Math.max(0, Number(e.target.value) || 0))} /></div>
+              <div className="field"><label>วันครบกำหนด <span className="hint">พิมพ์ วว/ดด/ปป หรือกดปฏิทิน</span></label>
+                <ThaiDateField value={doc.creditDays > 0 ? dueDate : ''} style={{ background: '#FFF3CC', borderColor: '#F0C24A', fontWeight: 600 }}
+                               onChange={(iso) => set('creditDays', Math.max(0, Math.round((new Date(iso + 'T00:00:00').getTime() - new Date(doc.docDate + 'T00:00:00').getTime()) / 86400000)))} /></div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ---------- รายการ ---------- */}
+      {/* ================= รายการ ================= */}
       <div className={`card${state.field === 'items' ? ' bad' : ''}`}>
         <header>
-          <h2>รายการ</h2>
+          <h2>{isPurchase ? 'รายการสินค้า' : 'รายการค่าใช้จ่าย'}</h2>
           <div className="spacer" />
-          <span className="subtle">{doc.items.length} บรรทัด</span>
+          <span className="subtle">{isPurchase ? 'เฉพาะบรรทัดที่ผูกทะเบียนสินค้าเท่านั้นที่จะเข้าสต๊อก' : ''} · {realItems.length} บรรทัด</span>
         </header>
 
-        {/* ยิงบาร์โค้ดได้เฉพาะใบซื้อ — ใบค่าใช้จ่ายไม่มีอะไหล่ให้ยิง */}
         {isPurchase ? <ScanBox onScan={onScan} /> : null}
 
         {notFound ? (
@@ -304,226 +395,128 @@ export function BuyEditor({
             <div className="note" style={{ background: '#FCF1F1', borderColor: '#EEC4C4' }}>
               ยิงแล้วไม่พบบาร์โค้ด <b className="mono">{notFound}</b> ในทะเบียนสินค้า
               <div className="tag-row" style={{ marginTop: 8 }}>
-                <a className="btn" target="_blank" rel="noreferrer"
-                   href={`/stock/new?barcode=${encodeURIComponent(notFound)}`}>
-                  เพิ่มเป็นสินค้าใหม่ (เปิดแท็บใหม่)
-                </a>
+                <a className="btn" target="_blank" rel="noreferrer" href={`/stock/new?barcode=${encodeURIComponent(notFound)}`}>เพิ่มเป็นสินค้าใหม่ (เปิดแท็บใหม่)</a>
                 <button className="btn" type="button" onClick={() => setNotFound('')}>ปิด</button>
               </div>
-              <span className="hint">
-                เปิดแท็บใหม่เพื่อไม่ให้ใบที่กำลังทำอยู่หาย — สร้างเสร็จแล้วกลับมายิงซ้ำได้เลย
+            </div>
+          </div>
+        ) : null}
+
+        <div className="tablewrap">
+          <table className="tbl lines picked">
+            <thead><tr>
+              <th className="idx">ลำดับ</th>
+              {isPurchase ? <th>รหัสสินค้า</th> : null}
+              <th>{isPurchase ? 'ชื่อสินค้า' : 'รายการ'}</th>
+              <th className="num">จำนวน</th>
+              <th>หน่วย</th>
+              <th className="num">{isPurchase ? 'ราคาซื้อ/หน่วย' : 'ราคา/หน่วย'}</th>
+              <th className="num">ส่วนลด %</th>
+              <th className="num">จำนวนเงิน</th>
+              {isPurchase ? <th>วันหมดอายุ</th> : null}
+              <th />
+            </tr></thead>
+            <tbody>
+              {doc.items.map((it, i) => (
+                <BuyLineRow key={i} i={i} item={it} isPurchase={isPurchase} isLast={i === doc.items.length - 1}
+                            onChange={(patch) => setItem(i, patch)} onPick={(p) => fillRow(i, p, it.qty || 1)}
+                            onRemove={() => removeRow(i)} onEnterLast={() => addRow()} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="toolbar" style={{ borderTop: '1px solid var(--line)', borderBottom: 0 }}>
+          <button className="btn" type="button" onClick={() => addRow()}>+ เพิ่มบรรทัด</button>
+          <span className="subtle">เคล็ดลับ: กด Enter ที่บรรทัดสุดท้ายเพื่อเพิ่มบรรทัดใหม่{isPurchase ? ' · ในช่องรหัส Enter = เลือกผลค้นหาตัวแรก' : ''}</span>
+        </div>
+      </div>
+
+      {/* ================= หมายเหตุ | สรุปยอด ================= */}
+      <div className="docgrid">
+        <div className="card">
+          <header><h2>หมายเหตุเอกสาร</h2></header>
+          <div className="body">
+            <div className="field"><label>หมายเหตุ</label>
+              <textarea className="in" value={doc.note} placeholder="เช่น อ้างอิงใบสั่งซื้อ / เงื่อนไขการส่งมอบ" onChange={(e) => set('note', e.target.value)} /></div>
+            {isPurchase ? (
+              <label className="tag-row" style={{ fontSize: 14, marginTop: 12 }}>
+                <input type="checkbox" checked={doc.goodsReceived} onChange={(e) => set('goodsReceived', e.target.checked)} />
+                รับของเข้าสต๊อกแล้ว — อะไหล่ที่ผูกทะเบียนจะถูกบวกเข้าคงเหลือ และราคาซื้อล่าสุดอัปเดตตามใบนี้
+              </label>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="card sumbox">
+          <header><h2>สรุปยอด</h2><div className="spacer" />
+            <span className="chip">{doc.vatMode === 'none' ? 'ไม่มีภาษีมูลค่าเพิ่ม' : doc.vatMode === 'in' ? 'ราคารวมภาษีแล้ว' : `ภาษีมูลค่าเพิ่ม ${vatRate}%`}</span></header>
+          <div className="body">
+            <div className="row"><span className="lbl">รวมเป็นเงิน{doc.vatMode !== 'none' ? ' (ก่อนภาษี)' : ''}</span><span>{baht(t.sub)}</span></div>
+            <div className="row">
+              <span className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                ส่วนลดท้ายบิล
+                <input className="in mono" inputMode="decimal" style={{ width: 96, textAlign: 'right' }}
+                       value={doc.discountMode === 'pct' ? (doc.discountPct ?? 0) : doc.discount}
+                       onChange={(e) => { const v = Number(e.target.value) || 0;
+                         if (doc.discountMode === 'pct') set('discountPct', Math.min(100, Math.max(0, v))); else set('discount', Math.max(0, v)); }} />
+                <span className="pctswitch" role="group" aria-label="หน่วยส่วนลด">
+                  {(['pct', 'baht'] as const).map((m) => (
+                    <button key={m} type="button" aria-pressed={doc.discountMode === m} onClick={() => set('discountMode', m)}>{m === 'pct' ? '%' : 'บาท'}</button>
+                  ))}
+                </span>
               </span>
+              <span>{effDiscount > 0 ? `−${baht(effDiscount)}` : baht(0)}</span>
             </div>
-          </div>
-        ) : null}
-
-        <div className="toolbar">
-          {isPurchase ? (
-            <>
-              <input className="in" value={partQuery} placeholder="ค้นอะไหล่ จากรหัส ชื่อ บาร์โค้ด หรือ OEM"
-                     style={{ width: 260 }}
-                     onChange={(e) => setPartQuery(e.target.value)}
-                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchPart(); } }} />
-              <button className="btn" type="button" onClick={searchPart} disabled={pending}>ค้นหาอะไหล่</button>
-            </>
-          ) : null}
-          <button className="btn" type="button"
-                  onClick={() => setDoc((d) => ({ ...d, items: [...d.items, emptyItem()] }))}>
-            + บรรทัดเปล่า
-          </button>
-          {isPurchase ? (
-            <span className="subtle">เฉพาะบรรทัดที่ผูกทะเบียนสินค้าเท่านั้นที่จะเข้าสต๊อก</span>
-          ) : null}
-        </div>
-
-        {parts ? (
-          <div className="tablewrap" style={{ maxHeight: 220, overflowY: 'auto', borderBottom: '1px solid var(--line)' }}>
-            <table className="tbl">
-              <tbody>
-                {parts.length === 0 ? (
-                  <tr><td className="subtle">ไม่พบอะไหล่ในทะเบียน</td></tr>
-                ) : parts.map((p) => (
-                  <tr key={p.id}>
-                    <td className="mono">{p.code}</td>
-                    <td className="wrap">{p.name}</td>
-                    <td className="num subtle">คงเหลือ {p.qtyOnHand.toLocaleString('en-US')}</td>
-                    <td><button className="btn" type="button" onClick={() => addProduct(p)}>เพิ่ม</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-
-        {doc.items.length === 0 ? (
-          <div className="empty">ยังไม่มีรายการ</div>
-        ) : (
-          <div className="tablewrap">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th style={{ width: 34 }}>#</th>
-                  {isPurchase ? <th style={{ width: 100 }}>รหัส</th> : null}
-                  <th>รายการ</th>
-                  <th style={{ width: 80 }} className="num">จำนวน</th>
-                  <th style={{ width: 70 }}>หน่วย</th>
-                  <th style={{ width: 110 }} className="num">ราคา/หน่วย</th>
-                  <th style={{ width: 110 }} className="num">จำนวนเงิน</th>
-                  {isPurchase ? <th style={{ width: 130 }}>วันหมดอายุ</th> : null}
-                  <th style={{ width: 44 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {doc.items.map((it, i) => (
-                  <tr key={i}>
-                    <td className="subtle">
-                      {i + 1}
-                      {isPurchase && it.productId ? <span className="chip ok" style={{ marginLeft: 4 }}>สต๊อก</span> : null}
-                    </td>
-                    {isPurchase ? (
-                      <td>
-                        <input className="in mono" style={{ padding: '4px 6px' }} value={it.code}
-                               onChange={(e) => setItem(i, { code: e.target.value })} />
-                      </td>
-                    ) : null}
-                    <td>
-                      <input className="in" style={{ padding: '4px 6px' }} value={it.name}
-                             onChange={(e) => setItem(i, { name: e.target.value })} />
-                    </td>
-                    <td>
-                      <input className="in mono" style={{ padding: '4px 6px', textAlign: 'right' }}
-                             inputMode="decimal" value={it.qty}
-                             onChange={(e) => setItem(i, { qty: Number(e.target.value) || 0 })} />
-                    </td>
-                    <td>
-                      <input className="in" style={{ padding: '4px 6px' }} value={it.unit}
-                             onChange={(e) => setItem(i, { unit: e.target.value })} />
-                    </td>
-                    <td>
-                      <input className="in mono" style={{ padding: '4px 6px', textAlign: 'right' }}
-                             inputMode="decimal" value={it.unitPrice}
-                             onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) || 0 })} />
-                    </td>
-                    <td className="num">{baht(round2(it.qty * it.unitPrice))}</td>
-                    {isPurchase ? (
-                      <td>
-                        {/* เฉพาะบรรทัดที่ผูกทะเบียนสินค้า — บรรทัดที่พิมพ์ชื่อเองไม่เข้าสต๊อก
-                            จึงไม่มีล็อตให้ผูกวันหมดอายุ */}
-                        {it.productId ? (
-                          <input className="in mono" type="date" value={it.expiresOn ?? ''}
-                                 onChange={(e) => setItem(i, { expiresOn: e.target.value || null })} />
-                        ) : <span className="subtle">—</span>}
-                      </td>
-                    ) : null}
-                    <td>
-                      <button className="btn danger" type="button" style={{ padding: '2px 8px' }}
-                              onClick={() => setDoc((d) => ({ ...d, items: d.items.filter((_, j) => j !== i) }))}>
-                        ✕
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="body" style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <div className="field" style={{ width: 200 }}>
-            <label>ส่วนลด (บาท)</label>
-            <input className="in mono" inputMode="decimal" value={doc.discount}
-                   onChange={(e) => set('discount', Number(e.target.value) || 0)} />
-          </div>
-
-          <div className="totals">
-            <div className="row"><span className="lbl">รวมเป็นเงิน</span><span>{baht(t.sub)}</span></div>
-            {doc.discount > 0 ? (
-              <div className="row"><span className="lbl">ส่วนลด</span><span>−{baht(t.disc)}</span></div>
-            ) : null}
-            {doc.vatMode !== 'none' ? (
-              <>
-                <div className="row"><span className="lbl">มูลค่าก่อนภาษี</span><span>{baht(t.net)}</span></div>
-                <div className="row"><span className="lbl">ภาษีมูลค่าเพิ่ม {vatRate}%</span><span>{baht(t.vat)}</span></div>
-              </>
-            ) : null}
+            {doc.vatMode !== 'none' ? (<>
+              <div className="row"><span className="lbl">มูลค่าก่อนภาษี</span><span>{baht(t.net)}</span></div>
+              <div className="row"><span className="lbl">ภาษีมูลค่าเพิ่ม {vatRate}%</span><span>{baht(t.vat)}</span></div>
+            </>) : null}
             <div className="row grand"><span>รวมทั้งสิ้น</span><span>{baht(t.grand)}</span></div>
-            {t.wht > 0 ? (
-              <>
-                <div className="row">
-                  <span className="lbl">หัก ณ ที่จ่าย {doc.whtRate}%</span><span>−{baht(t.wht)}</span>
-                </div>
-                <div className="row grand"><span>ยอดที่ต้องจ่ายจริง</span><span>{baht(t.payable)}</span></div>
-              </>
-            ) : null}
-            <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--ink-3)' }}>
-              ({bahttext(t.payable)})
+            {t.wht > 0 ? (<>
+              <div className="row"><span className="lbl">หัก ณ ที่จ่าย {doc.whtRate}%</span><span>−{baht(t.wht)}</span></div>
+              <div className="row grand"><span>ยอดที่ต้องจ่ายจริง</span><span>{baht(t.payable)}</span></div>
+            </>) : null}
+            <div className="subtle" style={{ fontSize: 12.5, marginTop: 4 }}>({bahttext(t.payable)})</div>
+
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+              <div className="tag-row" style={{ marginBottom: 8 }}><b>การจ่ายเงิน</b>
+                <span className="subtle">{paidNow > EPS ? `จ่ายแล้ว ${baht(paidNow)} · ` : ''}{remain > EPS ? <b style={{ color: 'var(--warn)' }}>ค้างชำระ {baht(remain)} (ตั้งเป็นเจ้าหนี้)</b> : 'จ่ายครบแล้ว'}</span></div>
+              <div className="row-fields f3">
+                {['เงินสด', 'เงินโอน', 'บัตรเครดิต'].map((method) => {
+                  const at = doc.payments.findIndex((p) => p.method === method);
+                  const amount = at >= 0 ? doc.payments[at]!.amount : 0;
+                  return (
+                    <div className="field" key={method}><label>{method}</label>
+                      <input className="in mono" id={`bpay-${method}`} inputMode="decimal" value={amount || ''} placeholder="0.00"
+                             onChange={(e) => { const v = Number(e.target.value) || 0;
+                               setDoc((d) => { const rest = d.payments.filter((p) => p.method !== method);
+                                 const ref = d.payments.find((p) => p.method === method)?.ref ?? '';
+                                 return { ...d, payments: v > 0 ? [...rest, { method, amount: v, ref }] : rest }; }); }} />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="tag-row" style={{ marginTop: 10 }}>
+                <button className="btn sm" type="button" onClick={() => setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: t.payable, ref: '' }] }))}>จ่ายสดเต็มจำนวน</button>
+                <button className="btn sm" type="button" onClick={() => setDoc((d) => ({ ...d, payments: [{ method: 'เงินโอน', amount: t.payable, ref: '' }] }))}>โอนเต็มจำนวน</button>
+                <button className="btn sm" type="button" onClick={() => { setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: 0, ref: '' }] })); setTimeout(() => (document.getElementById('bpay-เงินสด') as HTMLInputElement | null)?.focus(), 0); }}>ชำระบางส่วน — กรอกยอด</button>
+                <button className="btn sm" type="button" onClick={() => setDoc((d) => ({ ...d, payments: [] }))}>ยังไม่จ่าย (ตั้งเป็นเจ้าหนี้)</button>
+              </div>
+            </div>
+
+            <div className="formbar" style={{ marginTop: 14 }}>
+              <button className="btn primary" type="button" onClick={() => { setPrintAfter(false); tryConfirm(); }}>{mode === 'new' ? `บันทึก${title}` : 'บันทึกการแก้ไข'}</button>
+              {initial.id ? <Link className="btn amber" href={`/expense/${initial.id}/print`} target="_blank" rel="noreferrer">🖨 พิมพ์เอกสาร</Link>
+                : <button className="btn amber" type="button" onClick={() => { setPrintAfter(true); tryConfirm(); }}>🖨 พิมพ์เอกสาร</button>}
+              {precheck ? <span className="chip due" role="alert">{precheck}</span> : null}
+              <Link className="btn" href="/expense">ยกเลิก</Link>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ---------- รับของและจ่ายเงิน ---------- */}
-      <div className="card">
-        <header><h2>การรับของและการจ่ายเงิน</h2></header>
-        <div className="body">
-          {isPurchase ? (
-            <label className="tag-row" style={{ fontSize: 14, marginBottom: 14 }}>
-              <input type="checkbox" checked={doc.goodsReceived}
-                     onChange={(e) => set('goodsReceived', e.target.checked)} />
-              รับของเข้าสต๊อกแล้ว — ติ๊กแล้วอะไหล่ที่ผูกทะเบียนจะถูกบวกเข้าคงเหลือ และทุนล่าสุดอัปเดตตามราคาที่ซื้อ
-            </label>
-          ) : null}
-
-          <div className="row-fields f3">
-            {['เงินสด', 'เงินโอน', 'บัตรเครดิต'].map((method) => {
-              const at = doc.payments.findIndex((p) => p.method === method);
-              const amount = at >= 0 ? doc.payments[at]!.amount : 0;
-              return (
-                <div className="field" key={method}>
-                  <label>จ่ายด้วย{method}</label>
-                  <input className="in mono" inputMode="decimal" value={amount || ''} placeholder="0.00"
-                         onChange={(e) => {
-                           const v = Number(e.target.value) || 0;
-                           setDoc((d) => {
-                             const rest = d.payments.filter((p) => p.method !== method);
-                             const ref = d.payments.find((p) => p.method === method)?.ref ?? '';
-                             return { ...d, payments: v > 0 ? [...rest, { method, amount: v, ref }] : rest };
-                           });
-                         }} />
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="tag-row" style={{ marginTop: 12 }}>
-            <button className="btn" type="button"
-                    onClick={() => setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: t.payable, ref: '' }] }))}>
-              จ่ายสดเต็มจำนวน
-            </button>
-            <button className="btn" type="button"
-                    onClick={() => setDoc((d) => ({ ...d, payments: [{ method: 'เงินโอน', amount: t.payable, ref: '' }] }))}>
-              โอนเต็มจำนวน
-            </button>
-            <button className="btn" type="button"
-                    onClick={() => setDoc((d) => ({ ...d, payments: [] }))}>
-              ยังไม่จ่าย (ตั้งเป็นเจ้าหนี้)
-            </button>
-            <span className="subtle">
-              {remain > EPS ? `จะตั้งเป็นเจ้าหนี้ ${baht(remain)} บาท` : 'จ่ายครบแล้ว'}
-            </span>
-          </div>
-
-          <div className="field" style={{ marginTop: 14 }}>
-            <label>หมายเหตุ</label>
-            <textarea className="in" value={doc.note} onChange={(e) => set('note', e.target.value)} />
-          </div>
-
-          <div className="formbar">
-            <Submit label={mode === 'new' ? 'บันทึก' : 'บันทึกการแก้ไข'} />
-            <Link className="btn" href="/expense">ยกเลิก</Link>
-          </div>
-        </div>
-      </div>
+      <ConfirmSave open={confirm} title={title} lines={confirmLines}
+                   submitLabel={mode === 'new' ? 'บันทึก' : 'บันทึกการแก้ไข'} onEdit={() => setConfirm(false)} />
     </form>
   );
 }

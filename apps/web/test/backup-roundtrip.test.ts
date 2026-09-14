@@ -14,6 +14,7 @@ import pg from 'pg';
 import { importBackup } from '@drivegolight/importer';
 import { readPic, savePic, sha256 } from '../src/lib/pics';
 import { exportBackupWith } from '../src/lib/backup';
+import { recTotals } from '@drivegolight/core';
 import { openInvoices, saveBillnote } from '../src/lib/billnotes';
 import { saveClaim } from '../src/lib/claims';
 import {
@@ -44,6 +45,11 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
   let countNo = '';
   let countedTo = 0;
   let picProductCode = '';
+  let discDocNo = '';
+  let voidDocNo = '';
+  let purgedDocNo = '';
+  let supplierProductCode = '';
+  let vendorCode = '';
 
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: DB_URL });
@@ -149,6 +155,100 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     await applyCount(app, ct.id, null);
     countNo = ct.no;
 
+    /* ---------- ข้อมูลที่ชุดแก้ 13–14 ก.ย. เพิ่มเข้ามา — ไฟล์สำรองต้องพากลับมาครบทุกช่อง ----------
+       ทำผ่านผู้ดูแลตรง ๆ เพราะฟังก์ชันบันทึกของหน้าจอผูกกับ session */
+
+    /* ใบเสร็จที่มีส่วนลดรายบรรทัดและส่วนลดท้ายบิลแบบ %
+       ยอดเอกสารคิดใหม่ด้วย recTotals ตัวเดียวกับที่หน้าจอใช้ตอนบันทึก
+       ไม่งั้นยอดที่เก็บไว้ไม่ตรงกับรายการ แล้วการเทียบไปกลับจะไม่พิสูจน์อะไร */
+    const rc = await admin.query(
+      `select d.id, d.doc_no, d.vat_mode::text as vat_mode, d.wht_rate, d.vat_rate
+         from documents d
+        where d.tenant_id = $1 and d.kind = 'RC' and d.status = 'issued'
+          and (select count(*) from doc_items i where i.doc_id = d.id) >= 2
+        order by d.doc_no limit 1`, [firstTenant]);
+    discDocNo = rc.rows[0].doc_no;
+    await admin.query(
+      `update doc_items set disc_pct = 12.5
+        where id = (select id from doc_items where doc_id = $1 order by line_no limit 1)`,
+      [rc.rows[0].id]);
+    const rcItems = (await admin.query(
+      `select qty, unit_price, disc_pct, is_service, code from doc_items
+        where doc_id = $1 order by line_no`, [rc.rows[0].id])).rows.map((i) => ({
+      qty: n(i.qty), price: n(i.unit_price), discPct: n(i.disc_pct),
+      ...(i.is_service ? { svc: true } : {}), code: i.code as string,
+    }));
+    const lineSum = rcItems.reduce((t, it) => t + it.qty * it.price * (1 - it.discPct / 100), 0);
+    const billDiscount = Math.round(lineSum * 5) / 100;
+    const rcTotals = recTotals(
+      { items: rcItems, discount: billDiscount, vatMode: rc.rows[0].vat_mode, whtRate: n(rc.rows[0].wht_rate) } as never,
+      { vatRate: n(rc.rows[0].vat_rate) },
+    );
+    await admin.query(
+      `update documents set discount = $2, discount_mode = 'pct', discount_pct = 5,
+              subtotal = $3, net_amount = $4, vat_amount = $5, wht_amount = $6,
+              grand_total = $7, payable = $8
+        where id = $1`,
+      [rc.rows[0].id, billDiscount, rcTotals.sub, rcTotals.net, rcTotals.vat,
+       rcTotals.wht, rcTotals.grand, rcTotals.payable]);
+
+    /* ค่าใช้จ่ายที่ยกเลิกหนึ่งใบ และยกเลิกแล้วลบถาวรอีกหนึ่งใบ
+       ใช้ค่าใช้จ่ายเพราะไม่มีใบต่อ ไม่อยู่ในใบวางบิล และไม่ตัดสต๊อก — ไม่กระทบข้ออื่น
+       (ใบเสนอราคาในไฟล์ชุดทดสอบออกใบต่อไปหมดแล้วทั้ง 240 ใบ) */
+    const qts = (await admin.query(
+      `select id, doc_no from documents
+        where tenant_id = $1 and kind = 'EX' and status = 'issued'
+        order by doc_no limit 2`, [firstTenant])).rows;
+    expect(qts, 'ไฟล์ชุดทดสอบต้องมีค่าใช้จ่ายอย่างน้อยสองใบ').toHaveLength(2);
+    voidDocNo = qts[0].doc_no;
+    purgedDocNo = qts[1].doc_no;
+    await admin.query(
+      `update documents set status = 'void', voided_at = '2026-08-20T03:00:00Z',
+              voided_reason = 'ลูกค้ายกเลิก'
+        where id = any($1)`, [qts.map((q) => q.id)]);
+    await admin.query(
+      `update documents set purged_at = '2026-08-21T04:00:00Z' where id = $1`, [qts[1].id]);
+
+    /* วิธีคิดต้นทุน ระบบบาร์โค้ด และผู้ขายของสินค้า — ทั้งผู้ขายในทะเบียนและชื่อที่พิมพ์เอง */
+    const vendor = (await admin.query(
+      `select id, code from contacts where tenant_id = $1 and kind = 'vendor'
+        order by code limit 1`, [firstTenant])).rows[0];
+    vendorCode = vendor.code;
+    supplierProductCode = part.code;
+    await admin.query(
+      `update products set cost_method = 'AVG', barcode_type = 'EAN13' where id = $1`, [part.id]);
+    await admin.query(
+      `insert into product_suppliers (tenant_id, product_id, vendor_id, name, sort_order)
+       values ($1, $2, $3, 'ผู้ขายในทะเบียน', 0), ($1, $2, null, 'ร้านข้างนอกพิมพ์เอง', 1)`,
+      [firstTenant, part.id, vendor.id]);
+
+    /* ข้อมูลร้านที่เพิ่มในชุดแก้ */
+    await admin.query(
+      `update tenants set owner_name = 'สมศักดิ์ ใจดี',
+              signature_url = 'data:image/png;base64,iVBORw0KGgo=',
+              note_default = 'รับประกันงานซ่อม 3 เดือน',
+              bank_accounts = $2::jsonb,
+              bank_name = 'กสิกรไทย', bank_account_no = '123-4-56789-0', bank_account_name = 'อู่ทดสอบ'
+        where id = $1`,
+      [firstTenant, JSON.stringify([
+        { bank: 'กสิกรไทย', no: '123-4-56789-0', name: 'อู่ทดสอบ' },
+        { bank: 'ไทยพาณิชย์', no: '987-6-54321-0', name: 'อู่ทดสอบ' },
+      ])]);
+
+    /* ช่อง "อื่นๆ" ของรถ */
+    await admin.query(
+      `update vehicles set other = 'คุณเอ 081-111-2222'
+        where id = (select id from vehicles where tenant_id = $1 order by plate_b, id limit 1)`,
+      [firstTenant]);
+
+    /* ตัวนับหลายเดือน — ใบวางบิล ใบเคลม ใบตรวจนับข้างบนลงเดือน 6908 ไว้แล้ว
+       เพิ่มเดือน 6907 ให้ทุกชนิด เดือนก่อนหน้าต้องตามไปด้วย ไม่ใช่เฉพาะเดือนล่าสุด */
+    await admin.query(`select next_doc_no($1, 'RC', '6907')`, [firstTenant]);
+    await admin.query(`select next_doc_no($1, 'RC', '6907')`, [firstTenant]);
+    await admin.query(`select next_billnote_no($1, '6907')`, [firstTenant]);
+    await admin.query(`select next_claim_no($1, 'customer', '6907')`, [firstTenant]);
+    await admin.query(`select next_count_no($1, '6907')`, [firstTenant]);
+
     /* ส่งออกจากอู่แรก แล้วนำเข้าเป็นอู่ที่สอง */
     const exported = await exportBackupWith(app);
 
@@ -229,15 +329,22 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     expect(a).toBeGreaterThan(40);
   });
 
-  it('เลขที่เอกสารชุดเดิมถูกยกมาด้วย ออกใบใหม่แล้วไม่ซ้ำของเก่า', async () => {
-    const seqs = async (tenantId: string) => {
-      const { rows } = await admin.query(
-        `select kind::text as kind, last_no from doc_sequences where tenant_id = $1 order by kind`,
-        [tenantId],
-      );
-      return Object.fromEntries(rows.map((r) => [r.kind, n(r.last_no)]));
-    };
-    expect(await seqs(secondTenant)).toEqual(await seqs(firstTenant));
+  /**
+   * เลขที่เอกสารนับใหม่ทุกเดือน ตัวนับจึงมีหลายแถวต่อชนิด — ต้องตามมาครบทุกเดือน
+   * แบบเดิมเทียบชนิดละเลขเดียว ซึ่งผ่านได้ทั้งที่ตัวนับของเดือนนี้หายไป
+   */
+  it('ตัวนับเลขที่เอกสารตามมาครบทุกเดือน ออกใบใหม่แล้วไม่ซ้ำของเก่า', async () => {
+    const seqs = async (tenantId: string) => (await admin.query(
+      `select kind::text as kind, period, last_no from doc_sequences
+        where tenant_id = $1 order by kind, period`, [tenantId],
+    )).rows.map((r) => [r.kind, r.period, n(r.last_no)]);
+    const a = await seqs(firstTenant);
+    expect(a).toContainEqual(['RC', '6907', 2]);
+    expect(await seqs(secondTenant)).toEqual(a);
+
+    /* ใบถัดไปของเดือนนั้นต้องต่อจากเลขเดิม ไม่ใช่เริ่ม 1 ใหม่ */
+    const next = await admin.query(`select next_doc_no($1, 'RC', '6907') as no`, [secondTenant]);
+    expect(n(next.rows[0].no)).toBe(3);
   });
 
   /**
@@ -274,15 +381,18 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     expect(b[0].docs.slice().sort()).toEqual(billnoteDocNos);
   });
 
-  it('ตัวนับเลขที่ใบวางบิลตามมาด้วย ออกใบใหม่แล้วไม่ซ้ำของเก่า', async () => {
-    const last = async (tenantId: string) => {
-      const { rows } = await admin.query(
-        `select last_no from billnote_sequences where tenant_id = $1`, [tenantId],
-      );
-      return rows[0] ? n(rows[0].last_no) : null;
-    };
-    expect(await last(secondTenant)).toBe(await last(firstTenant));
-    expect(await last(firstTenant)).toBeGreaterThan(0);
+  it('ตัวนับเลขที่ใบวางบิลตามมาครบทุกเดือน ออกใบใหม่แล้วไม่ซ้ำของเก่า', async () => {
+    const read = async (tenantId: string) => (await admin.query(
+      `select period, last_no from billnote_sequences where tenant_id = $1 order by period`,
+      [tenantId],
+    )).rows.map((r) => [r.period, n(r.last_no)]);
+    const a = await read(firstTenant);
+    expect(a).toContainEqual(['6907', 1]);
+    expect(a).toContainEqual(['6908', 1]);
+    expect(await read(secondTenant)).toEqual(a);
+
+    const next = await admin.query(`select next_billnote_no($1, '6908') as n`, [secondTenant]);
+    expect(n(next.rows[0].n)).toBe(2);
   });
 
   /**
@@ -331,17 +441,27 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     expect(moves.rows[0].c).toBe(0);
   });
 
-  it('ตัวนับเลขที่ใบเคลมตามมาแยกตามทิศทาง', async () => {
-    const read = async (tenantId: string) => {
-      const { rows } = await admin.query(
-        `select side::text as side, last_no from claim_sequences
-         where tenant_id = $1 order by side`,
-        [tenantId],
-      );
-      return rows.map((r) => [r.side, n(r.last_no)]);
-    };
-    expect(await read(secondTenant)).toEqual(await read(firstTenant));
-    expect(await read(firstTenant)).toEqual([['customer', 1], ['vendor', 1]]);
+  it('ตัวนับเลขที่ใบเคลมตามมาแยกตามทิศทางและเดือน', async () => {
+    const read = async (tenantId: string) => (await admin.query(
+      `select side::text as side, period, last_no from claim_sequences
+        where tenant_id = $1 order by side, period`, [tenantId],
+    )).rows.map((r) => [r.side, r.period, n(r.last_no)]);
+    const a = await read(firstTenant);
+    expect(a).toContainEqual(['customer', '6907', 1]);
+    expect(a).toContainEqual(['customer', '6908', 1]);
+    expect(a).toContainEqual(['vendor', '6908', 1]);
+    expect(await read(secondTenant)).toEqual(a);
+  });
+
+  it('ตัวนับเลขที่ใบตรวจนับตามมาครบทุกเดือน', async () => {
+    const read = async (tenantId: string) => (await admin.query(
+      `select period, last_no from stock_count_sequences where tenant_id = $1 order by period`,
+      [tenantId],
+    )).rows.map((r) => [r.period, n(r.last_no)]);
+    const a = await read(firstTenant);
+    expect(a).toContainEqual(['6907', 1]);
+    expect(a).toContainEqual(['6908', 1]);
+    expect(await read(secondTenant)).toEqual(a);
   });
 
   /**
@@ -484,5 +604,143 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
 
     const { validateBackup } = await import('@drivegolight/importer');
     expect(validateBackup(exported)).toEqual([]);
+  });
+
+  /* ---------- ข้อมูลที่ชุดแก้ 13–14 ก.ย. เพิ่มเข้ามา ---------- */
+
+  it('ส่วนลดรายบรรทัดและส่วนลดท้ายบิลแบบ % กลับมาครบ ยอดเอกสารเท่าเดิมทุกสตางค์', async () => {
+    const read = async (tenantId: string) => {
+      const d = (await admin.query(
+        `select id, discount, discount_mode, discount_pct, subtotal, net_amount, vat_amount,
+                wht_amount, grand_total, payable
+           from documents where tenant_id = $1 and kind = 'RC' and doc_no = $2`,
+        [tenantId, discDocNo])).rows[0];
+      const items = (await admin.query(
+        `select unit_price, disc_pct, line_total from doc_items where doc_id = $1 order by line_no`,
+        [d.id])).rows;
+      const { id: _id, ...doc } = d;
+      return { doc, items };
+    };
+    const a = await read(firstTenant);
+    expect(n(a.items[0].disc_pct)).toBe(12.5);
+    expect(a.doc.discount_mode).toBe('pct');
+    expect(await read(secondTenant)).toEqual(a);
+  });
+
+  it('ไฟล์ที่เปิดด้วยรุ่น 6.4 เห็นราคาหลังหักส่วนลด ยอดบรรทัดที่นั่นจึงถูก', async () => {
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [firstTenant]);
+    const file = await exportBackupWith(app) as unknown as Record<string, any>;
+    const doc = file.receipts.find((r: any) => r.no === discDocNo);
+    const line = doc.items[0];
+    expect(line._discPct).toBe(12.5);
+    /* รุ่น 6.4 คิดยอดบรรทัด = qty × price */
+    expect(line.qty * line.price).toBeCloseTo(line.qty * line._gross * 0.875, 6);
+    expect(doc.items[1]._gross, 'บรรทัดที่ไม่มีส่วนลดไม่ต้องมีคีย์เสริม').toBeUndefined();
+    expect(doc._discountMode).toBe('pct');
+    expect(doc._discountPct).toBe(5);
+  });
+
+  it('วิธีคิดต้นทุน ระบบบาร์โค้ด และผู้ขายของสินค้าตามมาครบ', async () => {
+    const read = async (tenantId: string) => {
+      const p = (await admin.query(
+        `select id, cost_method, barcode_type from products where tenant_id = $1 and code = $2`,
+        [tenantId, supplierProductCode])).rows[0];
+      const suppliers = (await admin.query(
+        `select c.code as vendor_code, s.name, s.sort_order from product_suppliers s
+           left join contacts c on c.id = s.vendor_id
+          where s.product_id = $1 order by s.sort_order`, [p.id])).rows;
+      return { cost: p.cost_method, barcodeType: p.barcode_type, suppliers };
+    };
+    const a = await read(firstTenant);
+    expect(a).toEqual({
+      cost: 'AVG', barcodeType: 'EAN13',
+      suppliers: [
+        { vendor_code: vendorCode, name: 'ผู้ขายในทะเบียน', sort_order: 0 },
+        { vendor_code: null, name: 'ร้านข้างนอกพิมพ์เอง', sort_order: 1 },
+      ],
+    });
+    expect(await read(secondTenant)).toEqual(a);
+  });
+
+  it('ชื่อเจ้าของ ลายเซ็น หมายเหตุมาตรฐาน และบัญชีรับโอนทุกธนาคารตามมาครบ', async () => {
+    const read = async (tenantId: string) => (await admin.query(
+      `select owner_name, signature_url, note_default, bank_accounts,
+              bank_name, bank_account_no, bank_account_name
+         from tenants where id = $1`, [tenantId])).rows[0];
+    const a = await read(firstTenant);
+    expect(a.bank_accounts).toHaveLength(2);
+    expect(a.owner_name).toBe('สมศักดิ์ ใจดี');
+    expect(await read(secondTenant)).toEqual(a);
+  });
+
+  it('ช่อง "อื่นๆ" ของรถตามมา', async () => {
+    const read = async (tenantId: string) => (await admin.query(
+      `select c.code, v.plate_a, v.plate_b, v.other
+         from vehicles v join contacts c on c.id = v.contact_id
+        where v.tenant_id = $1 and v.other <> '' order by c.code`, [tenantId])).rows;
+    const a = await read(firstTenant);
+    expect(a).toHaveLength(1);
+    expect(await read(secondTenant)).toEqual(a);
+  });
+
+  /**
+   * เอกสารที่ยกเลิกต้องกลับมาเป็นยกเลิก ด้วยวันที่ยกเลิกเดิม
+   *
+   * ตัวนำเข้าเดิมไม่อ่านธง voided ของเอกสารเลย กู้ข้อมูลแล้วใบที่ยกเลิกไปกลับมาเป็นใบปกติ
+   * เข้ารายงาน ลูกหนี้ และภาษีขายอีกครั้ง (มีมาก่อนชุดแก้) — ถังขยะค้นตามวันที่ยกเลิก
+   * จึงต้องได้วันเดิมด้วย ไม่ใช่วันที่กู้
+   */
+  it('เอกสารที่ยกเลิกยังเป็นยกเลิกด้วยวันที่เดิม และที่ลบถาวรยังลบถาวร', async () => {
+    const read = async (tenantId: string) => (await admin.query(
+      `select doc_no, status::text as status, voided_at, voided_reason, purged_at
+         from documents where tenant_id = $1 and kind = 'EX' and doc_no = any($2)
+        order by doc_no`, [tenantId, [voidDocNo, purgedDocNo]],
+    )).rows.map((r) => ({
+      ...r,
+      voided_at: r.voided_at ? new Date(r.voided_at).toISOString() : null,
+      purged_at: r.purged_at ? new Date(r.purged_at).toISOString() : null,
+    }));
+    const a = await read(firstTenant);
+    expect(a.map((r) => r.status)).toEqual(['void', 'void']);
+    expect(a.find((r) => r.doc_no === voidDocNo)!.purged_at).toBeNull();
+    expect(a.find((r) => r.doc_no === purgedDocNo)!.purged_at).toBe('2026-08-21T04:00:00.000Z');
+    expect(await read(secondTenant)).toEqual(a);
+  });
+
+  /* แยกเป็นการส่งออกรอบใหม่ เหมือนข้อสิทธิ์พนักงาน — ใบวางบิลที่เพิ่มตรงนี้จึงไม่กระทบข้อก่อนหน้า */
+  it('ใบวางบิลที่ยกเลิกและลบถาวร ไปกลับแล้วยังเป็นแบบเดิม', async () => {
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [firstTenant]);
+    const open = await openInvoices(app);
+    const one = open.find((v) => !billnoteDocNos.includes(v.docNo))!;
+    await saveBillnote(app, {
+      billDate: '2026-08-29', dueDate: '2026-09-30',
+      partyId: one.partyId ?? null, partyName: one.partyName,
+      partyTaxId: '', partyAddrText: '', byWhom: '', note: 'ใบที่จะยกเลิกและลบถาวร',
+      docIds: [one.id],
+    }, null);
+    const bn = (await admin.query(
+      `select id, no from billnotes where tenant_id = $1 and note = 'ใบที่จะยกเลิกและลบถาวร'`,
+      [firstTenant])).rows[0];
+    await admin.query(
+      `update billnotes set status = 'void', voided_at = '2026-08-30T02:00:00Z',
+              purged_at = '2026-08-31T02:00:00Z' where id = $1`, [bn.id]);
+    await admin.query(`update billnote_docs set voided = true where billnote_id = $1`, [bn.id]);
+
+    const file = await exportBackupWith(app);
+    const back = await importBackup(app, file as never, { openingStockDate: '2026-08-28' });
+
+    const read = async (tenantId: string) => (await admin.query(
+      `select status::text as status, voided_at, purged_at from billnotes
+        where tenant_id = $1 and no = $2`, [tenantId, bn.no],
+    )).rows.map((r) => ({
+      status: r.status,
+      voided_at: new Date(r.voided_at).toISOString(),
+      purged_at: r.purged_at ? new Date(r.purged_at).toISOString() : null,
+    }));
+    const a = await read(firstTenant);
+    expect(a).toEqual([{
+      status: 'void', voided_at: '2026-08-30T02:00:00.000Z', purged_at: '2026-08-31T02:00:00.000Z',
+    }]);
+    expect(await read(back.tenantId)).toEqual(a);
   });
 });

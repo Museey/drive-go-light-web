@@ -20,7 +20,6 @@ export default async function PendingPage() {
       actions={
         <div className="tag-row">
           <Link className="btn" href="/stock/pending/print">พิมพ์รายการ</Link>
-          <Link className="btn" href="/stock">← ทะเบียนสินค้า</Link>
         </div>
       }
     >

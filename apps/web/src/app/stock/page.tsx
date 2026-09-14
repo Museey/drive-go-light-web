@@ -1,11 +1,14 @@
 import Link from 'next/link';
+import { RowLink } from '@/components/row-link';
 import { STOCK_FLAG_LABEL, STOCK_FLAG_SHORT, STOCK_FLAGS, toStockFlag } from '@drivegolight/core';
 import { query, requireTab } from '@/lib/auth';
-import { PageSize, pageSizeOf } from '@/components/page-size';
-import { getStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
+import { PageSize, pageSizeOf, STOCK_DEFAULT_PAGE_SIZE, STOCK_PAGE_SIZES } from '@/components/page-size';
+import { Pager } from '@/components/pager';
+import { getStockHiddenCols, STOCK_COLS, STOCK_COLS_FIXED } from '@/lib/ui-prefs';
 import { picShaOf } from '@/lib/pics';
 import { listPendingItems } from '@/lib/pending';
 import { ColPicker } from './col-picker';
+import { ActionTiles } from '@/components/action-tiles';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listCategories, listProducts } from '@/lib/products';
@@ -18,7 +21,7 @@ export const dynamic = 'force-dynamic';
 export default async function StockPage({
   searchParams,
 }: {
-  searchParams: Promise<{
+  searchParams: Promise<{ cols?: string;
     q?: string; cat?: string; reorder?: string; all?: string; page?: string; flag?: string; size?: string;
   }>;
 }) {
@@ -26,7 +29,8 @@ export default async function StockPage({
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const flag = toStockFlag(sp.flag);
-  const pageSize = pageSizeOf(sp.size);
+  /* ทะเบียนสินค้า: หน้าละ 10 ตั้งต้น เลือก 10/20 */
+  const pageSize = pageSizeOf(sp.size, STOCK_PAGE_SIZES, STOCK_DEFAULT_PAGE_SIZE);
 
   const [cats, hidden, pending, { rows, total, stockValue }] = await Promise.all([
     listCategories(),
@@ -70,27 +74,26 @@ export default async function StockPage({
         `${total.toLocaleString('en-US')} รายการ` +
         (show('cost') ? ` · มูลค่าสต๊อกตามบัญชี ${baht(stockValue)} บาท` : '')
       }
-      actions={
+      actions={<>
         <div className="tag-row">
           <Link className="btn" href={`/stock/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายการ</Link>
           <Link className="btn" href={`/stock/barcodes${printQuery ? `?${printQuery}` : ''}`}>
             พิมพ์ฉลากบาร์โค้ด
           </Link>
-          <ColPicker cols={STOCK_COLS} hidden={hidden} />
-          <Link className="btn" href="/settings/import">นำเข้า / ส่งออก CSV</Link>
+          <ColPicker cols={STOCK_COLS} hidden={hidden} fixed={STOCK_COLS_FIXED} startOpen={sp.cols === '1'} />
           <Link className="btn" href="/stock/pending">
             <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>05.2</span>รายการค้างทำ
           </Link>
-          <Link className="btn primary" href="/stock/new">+ เพิ่มสินค้า</Link>
+          <span className="tiles"><ActionTiles menu="stock" /></span>
         </div>
-      }
+      </>}
     >
       <SubNav menu="stock" current="list" badges={{ pending: pending.length }}>
       <div className="card">
         <div className="toolbar">
           <form action="/stock" method="get" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <input className="in" type="search" name="q" defaultValue={sp.q ?? ''}
-                   placeholder="รหัส ชื่อ หรือรหัส OEM" style={{ width: 240 }} />
+            <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
+                   placeholder="กรอกคำค้นหา — รหัส ชื่อ หรือรหัส OEM" style={{ width: 240 }} />
             <select className="in" name="cat" defaultValue={sp.cat ?? ''}>
               <option value="">ทุกหมวดหมู่</option>
               {cats.map((c) => (
@@ -124,20 +127,38 @@ export default async function StockPage({
         {rows.length === 0 ? (
           <div className="empty">ไม่พบสินค้าที่ตรงกับเงื่อนไข</div>
         ) : (
-          <div className="tablewrap">
+          <>
+          {/* มือถือ: การ์ดต่อสินค้า (รูป · ชื่อ · รหัส · ราคาขาย/หน่วย · คงเหลือ) — จอใหญ่ยังเป็นตาราง (ผู้ใช้กำหนด) */}
+          <div className="stock-cards">
+            {rows.map((p) => (
+              <Link key={p.id} href={`/stock/${p.id}`} className="scard">
+                <div className="top">
+                  {picSha.get(p.id) ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img className="thumb" src={`/pics/${p.id}/${picSha.get(p.id)}?t=1`} alt="" />
+                  ) : <span className="thumb">📷</span>}
+                  <b className="nm">{p.name}</b>
+                  <span className="code mono">{p.code}</span>
+                </div>
+                <div className="kv"><span>ราคาขาย/หน่วย</span><b>{baht(p.priceA)} บาท</b></div>
+                <div className="kv"><span>จำนวนคงเหลือ</span><b>{p.qtyOnHand.toLocaleString('en-US')} {p.unit}</b></div>
+              </Link>
+            ))}
+          </div>
+          <div className="tablewrap stock-table">
             <table className="tbl">
               <thead>
                 <tr>
                   <th style={{ width: 46 }} />
                   <th>รหัส</th>
-                  <th>OEM</th>
+                  {show('oem') ? <th>OEM</th> : null}
                   <th>ชื่อสินค้า</th>
-                  <th>หมวดหมู่</th>
+                  {show('cat') ? <th>หมวดหมู่</th> : null}
                   {show('qty') ? <th className="num">คงเหลือ</th> : null}
                   {show('min') ? <th className="num">จุดสั่ง</th> : null}
                   {show('max') ? <th className="num">สูงสุด</th> : null}
-                  {show('cost') ? <th className="num" title="ราคาซื้อครั้งล่าสุด ใช้ตั้งราคาและประมาณเงินที่ต้องใช้สั่งของ — ไม่ใช่ตัวที่ใช้คิดมูลค่าสต๊อก">ทุนล่าสุด</th> : null}
-                  <th className="num">ราคา A</th>
+                  {show('cost') ? <th className="num" title="ราคาซื้อครั้งล่าสุด ใช้ตั้งราคาและประมาณเงินที่ต้องใช้สั่งของ — ไม่ใช่ตัวที่ใช้คิดมูลค่าสต๊อก">ราคาซื้อล่าสุด</th> : null}
+                  {show('pA') ? <th className="num">ราคา A</th> : null}
                   {show('pB') ? <th className="num">ราคา B</th> : null}
                   {show('pC') ? <th className="num">ราคา C</th> : null}
                   {show('move') ? <th>เคลื่อนไหวล่าสุด</th> : null}
@@ -145,7 +166,7 @@ export default async function StockPage({
               </thead>
               <tbody>
                 {rows.map((p) => (
-                  <tr key={p.id}>
+                  <RowLink key={p.id} href={`/stock/${p.id}`}>
                     <td style={{ padding: 4 }}>
                       {picSha.get(p.id) ? (
                         <Link href={`/stock/${p.id}`}>
@@ -170,9 +191,9 @@ export default async function StockPage({
                         </span>
                       ))}
                     </td>
-                    <td className="mono" style={{ color: 'var(--ink-3)' }}>{p.oem || '-'}</td>
+                    {show('oem') ? <td className="mono" style={{ color: 'var(--ink-3)' }}>{p.oem || '-'}</td> : null}
                     <td className="wrap">{p.name}</td>
-                    <td>{p.categoryName ?? <span style={{ color: 'var(--ink-3)' }}>ไม่ระบุ</span>}</td>
+                    {show('cat') ? <td>{p.categoryName ?? <span style={{ color: 'var(--ink-3)' }}>ไม่ระบุ</span>}</td> : null}
                     {show('qty') ? (
                       <td className="num">
                         {p.needReorder
@@ -189,35 +210,35 @@ export default async function StockPage({
                       </td>
                     ) : null}
                     {show('cost') ? <td className="num">{baht(p.lastCost)}</td> : null}
-                    <td className="num">{baht(p.priceA)}</td>
+                    {show('pA') ? <td className="num">{baht(p.priceA)}</td> : null}
                     {show('pB') ? <td className="num">{baht(p.priceB)}</td> : null}
                     {show('pC') ? <td className="num">{baht(p.priceC)}</td> : null}
                     {show('move') ? <td>{thDate(p.lastMoveOn)}</td> : null}
-                  </tr>
+                  </RowLink>
                 ))}
               </tbody>
             </table>
           </div>
+          </>
         )}
 
-        {/* คนอ่านตารางจะเอาคอลัมน์ทุนล่าสุดคูณคงเหลือเองแล้วได้ไม่ตรงกับยอดรวมด้านบน
+        {/* คนอ่านตารางจะเอาคอลัมน์ราคาซื้อล่าสุดคูณคงเหลือเองแล้วได้ไม่ตรงกับยอดรวมด้านบน
             ถ้าไม่บอกว่าสองอย่างนี้คิดคนละแบบและเพราะอะไร */}
         {show('cost') ? (
           <div className="body" style={{ paddingBottom: 0 }}>
             <div className="note">
               <b>มูลค่าสต๊อกคิดตามบัญชี</b> — ต้นทุนของที่รับเข้าจริง ลบต้นทุนของที่ตัดออกไปแล้ว
-              ตามลำดับเข้าก่อนออกก่อน จึงไม่เท่ากับคงเหลือคูณทุนล่าสุดเมื่อราคาซื้อเปลี่ยนไป
-              ส่วนคอลัมน์ <b>ทุนล่าสุด</b> คือราคาซื้อครั้งหลังสุด ใช้ตั้งราคาขายและประมาณเงินที่ต้องใช้สั่งของ
+              ตามลำดับเข้าก่อนออกก่อน จึงไม่เท่ากับคงเหลือคูณราคาซื้อล่าสุดเมื่อราคาซื้อเปลี่ยนไป
+              ส่วนคอลัมน์ <b>ราคาซื้อล่าสุด</b> คือราคาซื้อครั้งหลังสุด ใช้ตั้งราคาขายและประมาณเงินที่ต้องใช้สั่งของ
             </div>
           </div>
         ) : null}
 
         <div className="pager">
           <span>หน้า {page} จาก {lastPage}</span>
-          <PageSize base="/stock" size={pageSize} keep={keep as Record<string, string>} />
+          <PageSize base="/stock" size={pageSize} keep={keep as Record<string, string>} sizes={STOCK_PAGE_SIZES} defaultSize={STOCK_DEFAULT_PAGE_SIZE} />
           <div className="spacer" />
-          {page > 1 ? <Link className="btn" href={{ pathname: '/stock', query: { ...paged, page: page - 1 } }}>ก่อนหน้า</Link> : null}
-          {page < lastPage ? <Link className="btn" href={{ pathname: '/stock', query: { ...paged, page: page + 1 } }}>ถัดไป</Link> : null}
+          <Pager base="/stock" query={paged as Record<string, string | number | undefined>} page={page} lastPage={lastPage} />
         </div>
       </div>
 

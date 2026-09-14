@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { barcodeSVG } from '@drivegolight/core';
+import { isUuid } from '@/lib/ids';
+import { barcodeSVGFor } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { getProduct } from '@/lib/products';
 import { PrintButton } from '../../../income/[id]/print/print-button';
@@ -22,6 +22,8 @@ export default async function BarcodePage({
 }) {
   await requireTab('stock', 'list');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
   const sp = await searchParams;
 
   const product = await getProduct(id);
@@ -37,18 +39,17 @@ export default async function BarcodePage({
             สินค้า <b>{product.code} {product.name}</b> ยังไม่มีบาร์โค้ด —
             เข้าไปแก้ไขสินค้าแล้วกดปุ่มสร้างบาร์โค้ดก่อน
           </div>
-          <Link className="btn" href={`/stock/${id}`}>← กลับหน้าสินค้า</Link>
         </div>
       </div>
     );
   }
 
-  const svg = barcodeSVG(product.barcode, 180, 44);
+  /* วาดตามระบบบาร์โค้ดของสินค้า (UPC/EAN/Code 39/Code 128) */
+  const svg = barcodeSVGFor(product.barcode, product.barcodeType, 180, 44);
 
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href={`/stock/${id}`}>← กลับหน้าสินค้า</Link>
         <form action={`/stock/${id}/barcode`} method="get"
               style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <label className="subtle" htmlFor="n">จำนวนดวง</label>

@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { docNoPeriod, formatDocNo } from './doc-no';
 import { BOOK_UNIT_COST_SQL, BOOK_VALUE_SQL, consumeStock, receiveStock } from './stock-cost';
 import { findByScanWith } from './scan';
 
@@ -249,9 +250,10 @@ export async function createCount(
   input: { countDate: string; note?: string },
   userId: string | null,
 ): Promise<{ id: string; no: string }> {
-  const seq = await c.query(`select next_count_no(current_tenant_id(), '') as no`);
-  const ym = input.countDate.slice(0, 4) + input.countDate.slice(5, 7);
-  const no = `CT-${ym}-${String(n(seq.rows[0].no)).padStart(3, '0')}`;
+  const seq = await c.query(
+    `select next_count_no(current_tenant_id(), $1) as no`, [docNoPeriod(input.countDate)],
+  );
+  const no = formatDocNo('CT', input.countDate, n(seq.rows[0].no));
 
   const { rows } = await c.query(
     `insert into stock_counts (tenant_id, no, count_date, note, created_by)

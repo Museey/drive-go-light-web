@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
@@ -7,7 +6,8 @@ import { UserManager } from './user-manager';
 
 export const dynamic = 'force-dynamic';
 
-export default async function UsersPage() {
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
+  const sp = await searchParams;
   const session = await requireTab('settings', 'staff');
   const [users, nextCode] = await Promise.all([listUsers(), nextUserCode()]);
 
@@ -16,7 +16,6 @@ export default async function UsersPage() {
       current="/settings"
       title="ผู้ใช้งานและสิทธิ์"
       sub={`${users.length} คน`}
-      actions={<Link className="btn" href="/settings">← กลับตั้งค่าร้าน</Link>}
     >
       <div className="note">
         ระบบยังไม่ส่งอีเมลเอง — กด &quot;ออกลิงก์ตั้งรหัสผ่าน&quot; แล้วส่งลิงก์ให้พนักงานเอง
@@ -26,7 +25,7 @@ export default async function UsersPage() {
       <SubNav menu="settings" current="staff">
       <div className="card">
         <header><h2>รายชื่อผู้ใช้งาน</h2></header>
-        <UserManager users={users} nextCode={nextCode} currentUserId={session.userId} />
+        <UserManager users={users} nextCode={nextCode} currentUserId={session.userId} startNew={sp.new === '1'} />
       </div>
 
       <div className="card">

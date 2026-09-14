@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { bahttext, EXPENSE_CATS } from '@drivegolight/core';
 import { can, requireTab } from '@/lib/auth';
 import { canEdit as mayEditOf } from '@/lib/perms';
@@ -24,6 +24,8 @@ export default async function BuyDocPage({
 }) {
   const session = await requireTab('expense', 'purchase');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
   const sp = await searchParams;
 
   const [doc, meta, payments] = await Promise.all([
@@ -40,7 +42,6 @@ export default async function BuyDocPage({
       current="/expense"
       title={isPurchase ? 'ใบซื้อสินค้า' : `ค่าใช้จ่าย — ${cat?.label ?? ''}`}
       sub={`เลขที่ ${doc.docNo} · ${thDateLong(doc.docDate)}`}
-      actions={<Link className="btn" href="/expense">← กลับรายการ</Link>}
     >
       {sp.saved ? (
         <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย — เลขที่ {sp.saved}</div>

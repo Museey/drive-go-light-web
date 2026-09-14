@@ -3,6 +3,7 @@ import { today } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
+import { getDefaultNote, peekDocSeq } from '@/lib/sales';
 import type { BuyDocInput, BuyKind } from '@/lib/purchases';
 import { pickVendorById } from '@/lib/purchases';
 import { BuyEditor } from '../buy-editor';
@@ -18,9 +19,10 @@ export default async function NewBuyPage({
   const sp = await searchParams;
   const kind: BuyKind = sp.kind === 'EX' ? 'EX' : 'PO';
   /* เปิดใบซื้อจากแถวทะเบียนผู้ขาย — เติมผู้ขายมาให้เหมือนกดเลือกจากช่องค้นหา */
-  const [shop, vendor] = await Promise.all([
+  const [shop, vendor, noteDefault] = await Promise.all([
     getShop(),
     sp.party ? pickVendorById(sp.party) : Promise.resolve(null),
+    getDefaultNote(),
   ]);
 
   const initial: BuyDocInput = {
@@ -40,7 +42,7 @@ export default async function NewBuyPage({
     goodsReceived: kind === 'PO',
     expenseCat: kind === 'EX' ? 'other' : null,
     assetLifeYears: null,
-    note: '',
+    note: noteDefault,   /* หมายเหตุมาตรฐานของร้าน แก้รายใบได้ */
     items: [],
     payments: [],
   };
@@ -51,7 +53,8 @@ export default async function NewBuyPage({
       title={kind === 'PO' ? 'บันทึกใบซื้อสินค้า' : 'บันทึกค่าใช้จ่าย'}
       sub={vendor ? `เปิดจากทะเบียนผู้ขาย — ${vendor.name}` : undefined}
     >
-      <BuyEditor initial={initial} vatRate={shop.vatRate} mode="new" />
+      <BuyEditor initial={initial} vatRate={shop.vatRate} mode="new"
+                 docNoPreview={{ seq: await peekDocSeq(kind, initial.docDate), month: initial.docDate.slice(0, 7) }} />
     </Shell>
   );
 }

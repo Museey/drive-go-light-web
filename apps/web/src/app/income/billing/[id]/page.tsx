@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { today } from '@drivegolight/core';
 import { query, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
@@ -14,10 +15,12 @@ export default async function BillnotePage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; void?: string; from?: string }>;
+  searchParams: Promise<{ saved?: string; void?: string; from?: string; vat?: string }>;
 }) {
   await requireTab('income', 'billing');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (id !== 'new' && !isUuid(id)) notFound();
   const sp = await searchParams;
   const isNew = id === 'new';
 
@@ -30,7 +33,10 @@ export default async function BillnotePage({
 
     const source = fromId ? await getBillnote(c, fromId) : null;
     const keep = note?.docs.map((d) => d.id) ?? [];
-    const open = await openInvoices(c, { includeDocIds: keep });
+    const openAll = await openInvoices(c, { includeDocIds: keep });
+    /* + ใบวางบิล (IVT) / (IV): เสนอเฉพาะใบส่งมอบชนิดนั้น */
+    const open = sp.vat === 'yes' ? openAll.filter((v) => v.vatMode !== 'none' || keep.includes(v.id))
+      : sp.vat === 'no' ? openAll.filter((v) => v.vatMode === 'none' || keep.includes(v.id)) : openAll;
     return { note, open, source };
   });
 
@@ -87,7 +93,6 @@ export default async function BillnotePage({
               ) : null}
             </>
           ) : null}
-          <Link className="btn" href="/income/billing">← กลับรายการ</Link>
         </div>
       }
     >

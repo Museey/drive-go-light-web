@@ -44,9 +44,27 @@ export interface BackupFile {
   _piclib?: Record<string, string>;
   /** รูปย่อ — คีย์ที่รุ่น 6.4 ไม่รู้จักและข้ามไปเอง */
   _picthumbs?: Record<string, string>;
+  /**
+   * ตัวนับเลขที่ครบทุกเดือน — รุ่น 6.4 ไม่รู้จักและข้ามไปเอง
+   *
+   * เลขที่เอกสารนับใหม่ทุกเดือน (คีย์ period = ปปดด) ตัวนับจึงมีหลายแถวต่อชนิด
+   * `seq` ที่รุ่น 6.4 อ่านเก็บได้แค่เลขเดียว ถ้ากู้จาก `seq` อย่างเดียว
+   * ตัวนับของเดือนนี้จะหาย แล้วเลขที่ใบถัดไปเริ่มนับ 1 ใหม่กลางเดือน
+   */
+  _seqPeriods?: SeqPeriods;
+}
+
+export interface SeqPeriods {
+  doc: { kind: string; period: string; last: number }[];
+  bn: { period: string; last: number }[];
+  cl: { side: string; period: string; last: number }[];
+  ct: { period: string; last: number }[];
 }
 
 const n = (v: unknown): number => Number(v ?? 0);
+
+const maxLast = (rows: { last_no: unknown }[]): number =>
+  rows.reduce((m, r) => Math.max(m, Number(r.last_no ?? 0)), 0);
 
 /** คีย์ seq ของโปรแกรมเดิม ↔ ชนิดเอกสารของเรา */
 const SEQ_KEY: Record<string, string> = { QT: 'q', IV: 'iv', IVT: 'ivt', RC: 'r', PO: 'p', EX: 'e' };
@@ -95,15 +113,18 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
     const items = await c.query(`select * from doc_items order by doc_id, line_no`);
     const pays = await c.query(`select * from payments order by doc_id, paid_on, created_at`);
     const users = await c.query(`select * from users order by code`);
-    const seqs = await c.query(`select kind::text as kind, last_no from doc_sequences`);
-    const billSeq = await c.query(`select coalesce(max(last_no), 0)::int as last_no from billnote_sequences`);
+    /* ตัวนับเลขที่ — เก็บครบทุกเดือนไว้ใน _seqPeriods ส่วน seq ของรุ่น 6.4 ใช้ค่าสูงสุด
+       (เดิมเอาแถวไหนก็ได้ของชนิดนั้น ซึ่งไม่แน่นอนเมื่อมีหลายเดือน) */
+    const seqs = await c.query(
+      `select kind::text as kind, period, last_no from doc_sequences order by kind, period`);
+    const billSeq = await c.query(
+      `select period, last_no from billnote_sequences order by period`);
     const claimSeq = await c.query(
-      `select side::text as side, max(last_no)::int as last_no
-       from claim_sequences group by side`,
-    );
+      `select side::text as side, period, last_no from claim_sequences order by side, period`);
     const countSeq = await c.query(
-      `select coalesce(max(last_no), 0)::int as last_no from stock_count_sequences`,
-    );
+      `select period, last_no from stock_count_sequences order by period`);
+    const suppliers = await c.query(
+      `select product_id, vendor_id, name from product_suppliers order by product_id, sort_order`);
     const counts = await c.query(
       `select ct.*, ct.count_date::text as count_date, ct.status::text as status,
               coalesce(json_agg(json_build_object(
@@ -152,9 +173,22 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
       items.rows.filter((i) => i.doc_id === docId).map((i) => ({
         pid: i.product_id,
         code: i.code, oem: i.oem, name: i.name, unit: i.unit,
-        qty: n(i.qty), price: n(i.unit_price),
+        qty: n(i.qty),
+        /* รุ่น 6.4 ไม่มีส่วนลดรายบรรทัด คิดยอดบรรทัด = qty × price
+           จึงส่งราคาหลังหักส่วนลดให้อ่าน (ยอดที่นั่นถูก) แล้วเก็บราคาเต็มกับ % ไว้ในคีย์เสริม
+           ให้เว็บกู้กลับได้ครบ — ตัดสินใจร่วมกับเจ้าของกิจการ 14 ก.ย. 2569 */
+        price: n(i.disc_pct) > 0 ? n(i.unit_price) * (1 - n(i.disc_pct) / 100) : n(i.unit_price),
+        ...(n(i.disc_pct) > 0 ? { _gross: n(i.unit_price), _discPct: n(i.disc_pct) } : {}),
         ...(i.is_service ? { svc: true } : {}),
       }));
+
+    /** ส่วนลดท้ายบิลแบบ % และการลบถาวร — คีย์เสริม ยอด discount (บาท) ยังเป็นค่าที่มีผลจริง */
+    const docExtras = (d: any) => ({
+      ...(d.discount_mode === 'pct' ? { _discountMode: 'pct', _discountPct: n(d.discount_pct) } : {}),
+      ...(d.purged_at ? { _purgedAt: new Date(d.purged_at).toISOString() } : {}),
+      /* ถังขยะค้นตามวันที่ยกเลิก — กู้แล้วต้องได้วันเดิม ไม่ใช่วันที่กู้ */
+      ...(d.voided_at ? { _voidedAt: new Date(d.voided_at).toISOString() } : {}),
+    });
 
     const paysOf = (docId: string) =>
       pays.rows.filter((p) => p.doc_id === docId).map((p) => ({
@@ -189,6 +223,7 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
       note: d.note,
       payments: paysOf(d.id),
       ...(d.status_text === 'void' ? { voided: true, voidedReason: d.voided_reason } : {}),
+      ...docExtras(d),
     });
 
     const buyDoc = (d: any) => ({
@@ -208,9 +243,15 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
       payRef: '',
       payDate: '',
       ...(d.status_text === 'void' ? { voided: true, voidedReason: d.voided_reason } : {}),
+      ...docExtras(d),
     });
 
     const byKind = (k: string) => docs.rows.filter((d) => d.kind_text === k);
+
+    /** ผู้ขายของสินค้า — vendorId อ้าง id ของผู้ติดต่อในไฟล์นี้ ว่างได้ถ้าพิมพ์ชื่อเอง */
+    const supplierOf = (productId: string) =>
+      suppliers.rows.filter((r) => r.product_id === productId)
+        .map((r) => ({ vendorId: r.vendor_id ?? null, name: r.name }));
 
     return {
       schemaVersion: 1,
@@ -229,6 +270,11 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         logo: s.logo_url ?? '',
         proposerName: s.proposer_name ?? '',
         warrantyText: s.warranty_text ?? '',
+        /* ข้อมูลร้านที่รุ่น 6.4 ไม่มี — ขึ้นต้นด้วย _ ให้รุ่นเดิมข้ามไป */
+        _ownerName: s.owner_name ?? '',
+        _signature: s.signature_url ?? '',
+        _noteDefault: s.note_default ?? '',
+        _bankAccounts: Array.isArray(s.bank_accounts) ? s.bank_accounts : [],
       },
 
       categories: cats.rows.map((r) => r.name),
@@ -242,6 +288,9 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         lastMove: p.last_move_on ?? '',
         ...(picKey.has(p.id) ? { pics: [picKey.get(p.id)!] } : {}),
         ...(p.active ? {} : { active: false }),
+        _costMethod: p.cost_method ?? 'FEFO',
+        _barcodeType: p.barcode_type ?? 'CODE39',
+        ...(supplierOf(p.id).length ? { _suppliers: supplierOf(p.id) } : {}),
       })),
 
       customers: contacts.rows.map((k) => ({
@@ -256,6 +305,7 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
           plateA: v.plate_a, plateB: v.plate_b, plateProv: v.plate_province,
           engineNo: v.engine_no, chassisNo: v.chassis_no, mileage: v.mileage,
           lastService: v.last_service_on ?? '',
+          ...(v.other ? { _other: v.other } : {}),
         })),
       })),
 
@@ -333,16 +383,26 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
 
       seq: {
         ...Object.fromEntries(
-          seqs.rows.map((r) => [SEQ_KEY[r.kind] ?? r.kind, Number(r.last_no)]),
+          [...new Set(seqs.rows.map((r) => r.kind as string))].map((k) => [
+            SEQ_KEY[k] ?? k,
+            maxLast(seqs.rows.filter((r) => r.kind === k)),
+          ]),
         ),
         /* ตัวนับใบวางบิล — ชื่อคีย์ bn ตรงกับ DB.seq.bn ของรุ่น 6.4 */
-        bn: Number(billSeq.rows[0]?.last_no ?? 0),
+        bn: maxLast(billSeq.rows),
         /* ตัวนับใบเคลม — cl ฝั่งลูกค้า vc ฝั่งผู้ขาย เหมือนรุ่น 6.4 */
-        cl: Number(claimSeq.rows.find((r) => r.side === 'customer')?.last_no ?? 0),
-        vc: Number(claimSeq.rows.find((r) => r.side === 'vendor')?.last_no ?? 0),
+        cl: maxLast(claimSeq.rows.filter((r) => r.side === 'customer')),
+        vc: maxLast(claimSeq.rows.filter((r) => r.side === 'vendor')),
         /* ตัวนับใบตรวจนับ — ชื่อคีย์ ct ตรงกับ DB.seq.ct ของรุ่น 6.4 */
-        ct: Number(countSeq.rows[0]?.last_no ?? 0),
+        ct: maxLast(countSeq.rows),
       } as Record<string, number>,
+
+      _seqPeriods: {
+        doc: seqs.rows.map((r) => ({ kind: r.kind, period: r.period, last: Number(r.last_no) })),
+        bn: billSeq.rows.map((r) => ({ period: r.period, last: Number(r.last_no) })),
+        cl: claimSeq.rows.map((r) => ({ side: r.side, period: r.period, last: Number(r.last_no) })),
+        ct: countSeq.rows.map((r) => ({ period: r.period, last: Number(r.last_no) })),
+      },
 
       lic: sub.rows[0]
         ? { installedAt: sub.rows[0].started_on, key: '', expires: sub.rows[0].expires_on }
@@ -367,6 +427,8 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         total: n(b.total_snapshot),
         invIds: b.inv_ids ?? [],
         ...(b.status === 'void' ? { void: true } : {}),
+        ...(b.purged_at ? { _purgedAt: new Date(b.purged_at).toISOString() } : {}),
+        ...(b.voided_at ? { _voidedAt: new Date(b.voided_at).toISOString() } : {}),
       })),
 
       /* ใบเคลม — รูปแบบเดียวกับ DB.claims ของรุ่น 6.4 เพื่อให้เปิดด้วยโปรแกรมเดิมได้

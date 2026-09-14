@@ -1,6 +1,7 @@
 import 'server-only';
+import { docNoPeriod, formatDocNo } from './doc-no';
 import type pg from 'pg';
-import { recTotals, today, totalsOf, whtBaseOf, type VatMode } from '@drivegolight/core';
+import { barcodeAliases, lineAmount, recTotals, today, totalsOf, whtBaseOf, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
 import {
   openDocsForWith, plateOf, resolveSourceForNewWith, syncVehicleFromDocWith,
@@ -9,6 +10,7 @@ import {
 import { mutate } from './mutate';
 import { consumeStock, returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
+import { voidSalesDocWith } from './sales-void';
 import { REMAINING_LOTS_SQL } from './expiry';
 import { findByScanWith, parseScan } from './scan';
 
@@ -26,6 +28,8 @@ export interface DocItemInput {
   qty: number;
   unitPrice: number;
   isService: boolean;
+  /** ส่วนลดรายบรรทัด 0–100 (%) — ไม่ส่ง = 0 (ฟิกซ์เจอร์/ผู้เรียกเดิมไม่ต้องแก้) */
+  discPct?: number;
 }
 
 export interface PaymentInput {
@@ -53,7 +57,11 @@ export interface SalesDocInput {
   vehicle: Record<string, string> | null;
 
   priceTier: 'A' | 'B' | 'C' | null;
+  /** ส่วนลดท้ายบิล — ค่าที่ผู้ใช้กรอก (บาท เมื่อ mode='baht') · ตอนบันทึกระบบเก็บบาทที่มีผลจริง */
   discount: number;
+  discountMode?: DiscountMode;
+  /** ตัวเลข % เมื่อ mode='pct' */
+  discountPct?: number;
   vatMode: VatMode;
   whtRate: number;
   creditDays: number;
@@ -74,6 +82,26 @@ export interface SalesDocInput {
 
 const PREFIX: Record<SalesKind, string> = { QT: 'QT', IV: 'IV', IVT: 'IVT', RC: 'RC' };
 
+export type DiscountMode = 'baht' | 'pct';
+
+/** บีบ % ให้อยู่ 0–100 และเป็นทศนิยม 2 ตำแหน่ง — DB มี check เดียวกัน */
+function clampPct(v: number | undefined): number {
+  const x = Number(v) || 0;
+  return Math.round(Math.min(100, Math.max(0, x)) * 100) / 100;
+}
+
+/** ส่วนลดท้ายบิลเป็นบาทที่มีผลจริง: % คิดจากผลรวมบรรทัดหลังส่วนลดรายบรรทัด */
+function effectiveDiscount(
+  items: { qty: number; price: number; discPct?: number }[],
+  input: { discount: number; discountMode?: DiscountMode; discountPct?: number },
+): number {
+  if (input.discountMode === 'pct') {
+    const sub = items.reduce((s, it) => s + lineAmount(it), 0);
+    return r2(sub * clampPct(input.discountPct) / 100);
+  }
+  return r2(Math.max(0, Number(input.discount) || 0));
+}
+
 /**
  * บันทึกเอกสารขาย — สร้างใหม่หรือแก้ของเดิม
  *
@@ -90,9 +118,15 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
 
     /* ยอดคำนวณฝั่งเซิร์ฟเวอร์เสมอ ไม่เชื่อค่าที่หน้าเว็บส่งมา
        ใช้สูตรชุดเดียวกับที่หน้าเว็บใช้แสดงผล ตัวเลขจึงตรงกันอยู่แล้ว */
+    const items = input.items.map((i) => ({
+      qty: i.qty, price: i.unitPrice, svc: i.isService, discPct: i.discPct ?? 0,
+    }));
+    /* ส่วนลดท้ายบิลเป็นบาทที่มีผลจริง — % คิดจากยอดรวมหลังส่วนลดรายบรรทัด
+       คำนวณฝั่งเซิร์ฟเวอร์เท่านั้น documents.discount จึงเป็นบาทเสมอ รายงานเดิมไม่ต้องแก้ */
+    const discount = effectiveDiscount(items, input);
     const doc = {
-      items: input.items.map((i) => ({ qty: i.qty, price: i.unitPrice, svc: i.isService })),
-      discount: input.discount,
+      items,
+      discount,
       vatMode,
       whtRate: input.kind === 'QT' ? 0 : input.whtRate,
       date: input.docDate,
@@ -120,9 +154,10 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
                 subtotal=$19, net_amount=$20, vat_amount=$21, wht_amount=$22,
                 grand_total=$23, payable=$24, credit_days=$25, due_date=$26,
                 complaints=$27, findings=$28, approver=$29, proposer=$30,
-                warranty_text=$31, received_by=$32, note=$33
+                warranty_text=$31, received_by=$32, note=$33,
+                discount_mode=$34, discount_pct=$35
          where id=$1`,
-        updateParams(id, input, vatMode, vatRate, t, dueDate),
+        updateParams(id, input, vatMode, vatRate, t, dueDate, discount),
       );
 
       await c.query(`delete from doc_items where doc_id = $1`, [id]);
@@ -138,10 +173,10 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
       });
     } else {
       const seq = await c.query(
-        `select next_doc_no(current_tenant_id(), $1, '') as no`, [input.kind],
+        `select next_doc_no(current_tenant_id(), $1, $2) as no`,
+        [input.kind, docNoPeriod(input.docDate)],
       );
-      const ym = input.docDate.slice(0, 4) + input.docDate.slice(5, 7);
-      docNo = `${PREFIX[input.kind]}-${ym}-${String(seq.rows[0].no).padStart(3, '0')}`;
+      docNo = formatDocNo(PREFIX[input.kind], input.docDate, Number(seq.rows[0].no));
 
       const { rows } = await c.query(
         `insert into documents (tenant_id, kind, doc_no, doc_date, status, parent_doc_id,
@@ -150,11 +185,12 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
                 price_tier, discount, vat_mode, vat_rate, wht_rate,
                 subtotal, net_amount, vat_amount, wht_amount, grand_total, payable,
                 credit_days, due_date, complaints, findings, approver, proposer,
-                warranty_text, received_by, note, created_by)
+                warranty_text, received_by, note, created_by,
+                discount_mode, discount_pct)
          values (current_tenant_id(),$1,$2,$3,'issued',$4,
                  $5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
                  $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
-                 $27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
+                 $27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38)
          returning id`,
         [
           input.kind, docNo, input.docDate, input.parentDocId,
@@ -162,7 +198,7 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
           input.partyTel, input.partyEmail, JSON.stringify(input.partyAddr), input.partyAddrText,
           input.vehicleId, input.vehicle ? JSON.stringify(input.vehicle) : null, plateOf(input.vehicle),
           input.priceTier,
-          money(input.discount), vatMode, vatRate, input.kind === 'QT' ? 0 : input.whtRate,
+          money(discount), vatMode, vatRate, input.kind === 'QT' ? 0 : input.whtRate,
           money(t.sub), money(t.net), money(t.vat), money(t.wht), money(t.grand), money(t.payable),
           input.creditDays, dueDate,
           input.kind === 'QT' ? input.complaints : null,
@@ -170,6 +206,7 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
           input.kind === 'QT' ? input.approver : '',
           input.kind === 'QT' ? input.proposer : '',
           input.warrantyText || null, input.receivedBy, input.note, userId,
+          input.discountMode ?? 'baht', money(input.discountMode === 'pct' ? (input.discountPct ?? 0) : 0),
         ],
       );
       id = rows[0].id;
@@ -179,10 +216,10 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
     for (const [i, it] of input.items.entries()) {
       await c.query(
         `insert into doc_items (tenant_id, doc_id, line_no, product_id, code, oem, name, unit,
-                                qty, unit_price, is_service)
-         values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                                qty, unit_price, is_service, disc_pct)
+         values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [id, i + 1, it.productId, it.code, it.oem, it.name || '(ไม่ระบุชื่อรายการ)',
-         it.unit, it.qty, money(it.unitPrice), it.isService],
+         it.unit, it.qty, money(it.unitPrice), it.isService, clampPct(it.discPct)],
       );
     }
 
@@ -242,6 +279,7 @@ function updateParams(
   id: string, input: SalesDocInput, vatMode: VatMode, vatRate: number,
   t: { sub: number; net: number; vat: number; wht: number; grand: number; payable: number },
   dueDate: string,
+  discount: number,
 ): unknown[] {
   return [
     id, input.docDate, input.partyId, input.partyType, input.partyName,
@@ -249,7 +287,7 @@ function updateParams(
     JSON.stringify(input.partyAddr), input.partyAddrText,
     input.vehicleId, input.vehicle ? JSON.stringify(input.vehicle) : null, plateOf(input.vehicle),
     input.priceTier,
-    money(input.discount), vatMode, vatRate, input.kind === 'QT' ? 0 : input.whtRate,
+    money(discount), vatMode, vatRate, input.kind === 'QT' ? 0 : input.whtRate,
     money(t.sub), money(t.net), money(t.vat), money(t.wht), money(t.grand), money(t.payable),
     input.creditDays, dueDate,
     input.kind === 'QT' ? input.complaints : null,
@@ -257,10 +295,13 @@ function updateParams(
     input.kind === 'QT' ? input.approver : '',
     input.kind === 'QT' ? input.proposer : '',
     input.warrantyText || null, input.receivedBy, input.note,
+    input.discountMode ?? 'baht', money(input.discountMode === 'pct' ? (input.discountPct ?? 0) : 0),
   ];
 }
 
 const money = (v: number) => (Math.round(v * 100) / 100).toFixed(2);
+/** ปัดสองตำแหน่งเป็นตัวเลข (money() คืน string สำหรับพารามิเตอร์ SQL) */
+const r2 = (v: number) => Math.round(v * 100) / 100;
 const digits = (v: string) => String(v ?? '').replace(/\D/g, '');
 function addDays(dateIso: string, days: number): string {
   const d = new Date(dateIso + 'T00:00:00');
@@ -273,36 +314,9 @@ function addDays(dateIso: string, days: number): string {
  * สต๊อกที่ตัดไปต้องคืนกลับด้วย ไม่งั้นของหายจากบัญชีทั้งที่ยังอยู่ในร้าน
  */
 export async function voidSalesDoc(id: string, reason: string): Promise<void> {
-  return mutate('income', async (c, userId) => {
-    const child = await c.query(
-      `select doc_no from documents where parent_doc_id = $1 and status <> 'void' limit 1`, [id],
-    );
-    if (child.rows[0]) {
-      throw new Error(`ยกเลิกไม่ได้เพราะมีเอกสาร ${child.rows[0].doc_no} ออกต่อจากใบนี้แล้ว`);
-    }
-
-    /* ใบที่ถูกวางบิลไปแล้วยกเลิกไม่ได้ — ลูกค้าถือใบวางบิลที่มีเลขใบนี้อยู่ในมือ
-       ถ้าหายไปเฉย ๆ ยอดบนกระดาษกับในระบบจะไม่ตรงกันโดยไม่มีใครอธิบายได้ */
-    const bn = await billnoteOfDoc(c, id);
-    if (bn) {
-      throw new Error(`ใบนี้ถูกรวมอยู่ในใบวางบิล ${bn} — เอาออกจากใบวางบิลก่อน`);
-    }
-
-    /* คืนของด้วยต้นทุนที่เคยตัดไป ไม่ใช่ต้นทุนวันนี้ — ไม่งั้นการยกเลิกใบเสร็จ
-       จะกลายเป็นกำไรหรือขาดทุนจากอากาศ รายการคืนอ้างเอกสารที่ยกเลิกเสมอ
-       ทั้งเพราะสคีมาบังคับและเพราะต้องตามได้ว่าของกลับมาเพราะใบไหน */
-    await returnDocStock(c, id, {
-      movedOn: today(),
-      note: 'คืนสต๊อกจากการยกเลิกเอกสาร',
-      userId,
-    });
-
-    await c.query(
-      `update documents set status='void', voided_at=now(), voided_reason=$2 where id=$1`,
-      [id, reason || 'ยกเลิกโดยผู้ใช้'],
-    );
-  }, { sub: 'receipt' });
+  return mutate('income', (c, userId) => voidSalesDocWith(c, id, reason, userId), { sub: 'receipt' });
 }
+
 
 /* =====================================================================
    ตัวช่วยสำหรับหน้าจอออกเอกสาร
@@ -368,16 +382,16 @@ export async function searchProducts(q: string, limit = 15): Promise<PickedProdu
   return query(async (c) => {
     const { rows } = await c.query(
       `${PICK_SELECT}
-       where p.active and ($1 = '' or p.barcode ilike $2 or p.code ilike $2
+       where p.active and ($1 = '' or upper(p.barcode) = any($4) or p.barcode ilike $2 or p.code ilike $2
                         or p.name ilike $2 or p.oem ilike $2)
        /* ตัวที่ตรงเป๊ะมาก่อนเสมอ — ยิงบาร์โค้ดแล้วต้องได้ตัวนั้นเป็นตัวแรก
-          ไม่ใช่ตัวที่บังเอิญมีเลขนั้นอยู่กลางชื่อ */
-       order by case when upper(p.barcode) = upper($1) then 0
+          ไม่ใช่ตัวที่บังเอิญมีเลขนั้นอยู่กลางชื่อ · รูปแบบเทียบเท่า (UPC-A ↔ EAN-13 นำ 0) นับว่าตรงเป๊ะด้วย */
+       order by case when upper(p.barcode) = any($4) then 0
                      when upper(p.code) = upper($1) then 1
                      when upper(p.oem) = upper($1) then 2 else 3 end,
                 p.code
        limit $3`,
-      [term, `%${term}%`, limit],
+      [term, `%${term}%`, limit, barcodeAliases(term).map((a) => a.toUpperCase())],
     );
     return rows.map(toPickedProduct);
   });
@@ -522,6 +536,65 @@ export async function resolveSourceForNew(
  * @param allowVoid ยอมให้คัดลอกจากเอกสารที่ถูกยกเลิกแล้ว — ใช้ตอนกด "คัดลอกใบใหม่"
  *   ซึ่งเป็นทางออกเดียวที่เหลือของใบที่ยกเลิกไปแล้ว ตัวใบเดิมไม่ถูกแตะต้อง
  */
+/**
+ * เลขที่ "ถัดไป" ของเดือนสำหรับโชว์ทันทีในฟอร์ม (ผู้ใช้ขอเห็นเลขก่อนบันทึก)
+ * ไม่จองเลข — เลขจริงออกใน saveSalesDoc ตอนบันทึก ถ้ามีคนบันทึกแทรก เลขจริงจะขยับไป 1
+ * คืน seq ให้ฝั่งเว็บประกอบเองตามวันที่ที่ผู้ใช้เปลี่ยนได้
+ */
+export async function peekDocSeq(kind: string, iso: string): Promise<number> {
+  return query(async (c) => {
+    const { rows } = await c.query(
+      `select last_no from doc_sequences
+       where tenant_id = current_tenant_id() and kind = $1::doc_kind and period = $2`,
+      [kind, docNoPeriod(iso)],
+    );
+    return (rows[0] ? Number(rows[0].last_no) : 0) + 1;
+  });
+}
+
+/** ใบที่ออกต่อจากใบนี้ (ไม่นับที่ยกเลิก) — ไว้วาดขั้นตอน A→B→C */
+export async function childOf(id: string): Promise<{ id: string; docNo: string; kind: string } | null> {
+  return query(async (c) => {
+    const { rows } = await c.query(
+      `select id, doc_no, kind::text as kind from documents
+       where parent_doc_id = $1 and status <> 'void' order by doc_date desc limit 1`, [id],
+    );
+    return rows[0] ? { id: rows[0].id, docNo: rows[0].doc_no, kind: rows[0].kind } : null;
+  });
+}
+
+/** ใบเปล่าตามชนิด — ใช้ทั้งหน้าออกเอกสารและหน้าขายหน้าร้าน */
+export function blankSalesDoc(kind: SalesKind, warranty: string, whtRate: number): SalesDocInput {
+  return {
+    kind,
+    docDate: today(),
+    parentDocId: null,
+    partyId: null, partyType: 'person', partyName: '', partyTaxId: '',
+    partyTel: '', partyEmail: '', partyAddr: {}, partyAddrText: '',
+    vehicleId: null, vehicle: null,
+    priceTier: 'A',
+    discount: 0,
+    discountMode: 'baht',
+    discountPct: 0,
+    vatMode: kind === 'IVT' ? 'ex' : kind === 'IV' ? 'none' : 'ex',
+    whtRate: kind === 'QT' ? 0 : whtRate,
+    creditDays: 0,
+    complaints: ['', '', ''], findings: ['', '', ''],
+    approver: '', proposer: '',
+    warrantyText: kind === 'RC' ? warranty : '',
+    receivedBy: '', note: '',
+    items: [], payments: [],
+  };
+}
+
+/** เลขที่ของเอกสาร — ฟอร์มแก้ไขโชว์ในช่อง "เลขที่เอกสาร" */
+export async function docNoOf(id: string): Promise<string | null> {
+  return query(async (c) => {
+    const { rows } = await c.query(`select doc_no from documents where id = $1`, [id]);
+    return (rows[0]?.doc_no as string | undefined) ?? null;
+  });
+}
+
 export async function loadDocForCopy(
   id: string,
   allowVoid = false,
@@ -556,6 +629,8 @@ export async function loadDocForCopy(
       vehicle: d.vehicle,
       priceTier: d.price_tier,
       discount: n(d.discount),
+      discountMode: (d.discount_mode ?? 'baht') as DiscountMode,
+      discountPct: n(d.discount_pct),
       vatMode: d.vat_mode_text as VatMode,
       whtRate: n(d.wht_rate),
       creditDays: Number(d.credit_days),
@@ -570,6 +645,7 @@ export async function loadDocForCopy(
         productId: r.product_id,
         code: r.code, oem: r.oem, name: r.name, unit: r.unit,
         qty: n(r.qty), unitPrice: n(r.unit_price), isService: r.is_service,
+        discPct: n(r.disc_pct),
       })),
       payments: [],
     };
@@ -597,6 +673,16 @@ export async function canEdit(id: string): Promise<{ ok: boolean; reason?: strin
 }
 
 /** ข้อความรับประกันตั้งต้นของร้าน */
+/** หมายเหตุมาตรฐานของร้าน — เติมให้ตอนสร้างเอกสารใหม่ทุกชนิด (ตั้งที่ 07 ตั้งค่าร้าน) */
+export async function getDefaultNote(): Promise<string> {
+  return query(async (c) => {
+    const { rows } = await c.query(
+      `select coalesce(note_default, '') as n from tenants where id = current_tenant_id()`,
+    );
+    return rows[0].n;
+  });
+}
+
 export async function getDefaultWarranty(): Promise<string> {
   return query(async (c) => {
     const { rows } = await c.query(

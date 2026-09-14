@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
@@ -11,6 +11,8 @@ export const dynamic = 'force-dynamic';
 export default async function EditBuyPage({ params }: { params: Promise<{ id: string }> }) {
   await requireTab('expense', 'purchase');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
 
   const [doc, meta, shop] = await Promise.all([loadBuyDoc(id), getBuyDocMeta(id), getShop()]);
   if (!doc || !meta) notFound();
@@ -24,9 +26,8 @@ export default async function EditBuyPage({ params }: { params: Promise<{ id: st
       current="/expense"
       title={doc.kind === 'PO' ? 'แก้ไขใบซื้อ' : 'แก้ไขค่าใช้จ่าย'}
       sub={`เลขที่ ${meta.docNo}`}
-      actions={<Link className="btn" href={`/expense/${id}`}>← กลับหน้าเอกสาร</Link>}
     >
-      <BuyEditor initial={doc} vatRate={shop.vatRate} mode="edit" />
+      <BuyEditor initial={doc} vatRate={shop.vatRate} mode="edit" docNo={meta.docNo} />
     </Shell>
   );
 }

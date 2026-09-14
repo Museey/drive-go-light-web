@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PrintReport } from '@/components/print-report';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
@@ -28,13 +29,13 @@ export default async function PLPage({
   }).toString();
 
   return (
-    <Shell actions={
+    <Shell actions={<><PrintReport />{" "}
       <div className="tag-row">
         <a className="btn" href={`/finance/csv${csvQuery ? `?${csvQuery}` : ''}`} download>ส่งออก CSV</a>
         <Link className="btn" href={`/finance/print${csvQuery ? `?${csvQuery}` : ''}`}>พิมพ์ / PDF</Link>
         <PagePrintButton />
       </div>
-    } current="/finance" title="งบกำไรขาดทุน" sub="คิดจากมูลค่าก่อนภาษีมูลค่าเพิ่ม">
+    </>} current="/finance" title="งบกำไรขาดทุน" sub="คิดจากมูลค่าก่อนภาษีมูลค่าเพิ่ม">
       <SubNav menu="finance" current="pl">
       <PrintHeader title="งบกำไรขาดทุน" range={{ from: sp.from, to: sp.to }} />
 

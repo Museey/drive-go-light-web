@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { query, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { CLAIM_SIDE, getClaim, kindLabel } from '@/lib/claims';
@@ -16,6 +17,8 @@ export default async function ClaimDetailPage({
 }) {
   await requireTab('stock', 'claim');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
   const sp = await searchParams;
 
   const claim = await query((c) => getClaim(c, id));
@@ -35,7 +38,6 @@ export default async function ClaimDetailPage({
       actions={
         <div className="tag-row">
           <Link className="btn" href={`/stock/claim/${id}/print`}>พิมพ์ใบเคลม</Link>
-          <Link className="btn" href={S.href}>← กลับรายการ</Link>
         </div>
       }
     >

@@ -61,6 +61,9 @@ export function ScanBox({ onScan }: {
       <input
         ref={ref}
         id="scan"
+        /* Enter ของปืนเป็นของช่องนี้ — EnterToNext (ชุดแก้ 13 ก.ย.) ย้ายโฟกัสไปช่องถัดไปทุกครั้งที่กด Enter
+           ถ้าไม่บอกว่าเป็นของเราเอง นัดแรกยิงติด แล้วนัดถัดไปถูกพิมพ์ลงช่องรหัสของบรรทัดแรกแทน */
+        data-enter="own"
         className="in mono"
         value={term}
         autoComplete="off"

@@ -41,7 +41,20 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
     return { error: 'เกณฑ์เตือนใกล้หมดอายุต้องอยู่ระหว่าง 1 ถึง 3650 วัน', field: 'expiryWarnDays' };
   }
 
+  /* บัญชีรับโอนหลายธนาคาร (JSON จากฟอร์ม) — ตัวแรกสำเนาลงช่อง bank_* เดิม */
+  let banks: { bank: string; no: string; name: string }[] = [];
+  try {
+    const arr = JSON.parse(str(fd, 'bankAccounts') || '[]');
+    banks = (Array.isArray(arr) ? arr : []).slice(0, 10)
+      .map((x) => ({ bank: String(x?.bank ?? '').slice(0, 60), no: String(x?.no ?? '').slice(0, 40), name: String(x?.name ?? '').slice(0, 120) }))
+      .filter((x) => x.no.trim() || x.bank.trim());
+  } catch { banks = []; }
+  fd.set('bankName', banks[0]?.bank ?? ''); fd.set('bankAccountNo', banks[0]?.no ?? ''); fd.set('bankAccountName', banks[0]?.name ?? '');
   const logoUrl = str(fd, 'logoUrl');
+  const signatureUrl = str(fd, 'signatureUrl');
+  if (signatureUrl && (signatureUrl.length > MAX_LOGO_BYTES || !/^data:image\/(png|jpeg|webp|svg\+xml);base64,/.test(signatureUrl))) {
+    return { error: 'รูปลายเซ็นต้องเป็น PNG/JPEG/WebP/SVG ขนาดไม่เกิน 200 KB', field: 'signature' };
+  }
   if (logoUrl && logoUrl.length > MAX_LOGO_BYTES) {
     return {
       error: `ไฟล์โลโก้ใหญ่เกินไป (จำกัด ${Math.round(MAX_LOGO_BYTES / 1024)} KB) — ย่อรูปก่อนอัปโหลด`,
@@ -61,6 +74,7 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
       priceTier: (['A', 'B', 'C'].includes(str(fd, 'priceTier')) ? str(fd, 'priceTier') : 'A') as 'A',
       proposerName: str(fd, 'proposerName'),
       warrantyText: str(fd, 'warrantyText'),
+      noteDefault: str(fd, 'noteDefault'),
       /* ไม่ตรวจรูปแบบเลขบัญชี — แต่ละธนาคารเขียนไม่เหมือนกัน
          บังคับผิดแล้วอู่กรอกเลขบัญชีจริงของตัวเองไม่ได้ */
       bankName: str(fd, 'bankName'),
@@ -68,6 +82,9 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
       bankAccountName: str(fd, 'bankAccountName'),
       expiryWarnDays: warnDays,
       logoUrl,
+      ownerName: str(fd, 'ownerName'),
+      bankAccounts: banks,
+      signatureUrl,
     });
   } catch (err) {
     return { error: describe(err, 'บันทึกไม่สำเร็จ') };

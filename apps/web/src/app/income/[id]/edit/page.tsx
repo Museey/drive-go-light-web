@@ -1,9 +1,9 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
-import { canEdit, loadDocForCopy, lotExpiryOf } from '@/lib/sales';
+import { canEdit, loadDocForCopy, lotExpiryOf, docNoOf } from '@/lib/sales';
 import { today } from '@drivegolight/core';
 import { KIND_LABEL } from '@/lib/format';
 import { DocEditor } from '../../doc-editor';
@@ -13,13 +13,15 @@ export const dynamic = 'force-dynamic';
 export default async function EditDocPage({ params }: { params: Promise<{ id: string }> }) {
   await requireTab('income', 'receipt');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
 
   const allowed = await canEdit(id);
   if (!allowed.ok) {
     redirect(`/income/${id}?error=${encodeURIComponent(allowed.reason ?? 'แก้ไขไม่ได้')}`);
   }
 
-  const [source, shop] = await Promise.all([loadDocForCopy(id), getShop()]);
+  const [source, shop, docNo] = await Promise.all([loadDocForCopy(id), getShop(), docNoOf(id)]);
   if (!source) notFound();
 
   const initial = { ...source, id };
@@ -29,10 +31,10 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
     <Shell doc
       current="/income"
       title={`แก้ไข${KIND_LABEL[source.kind]}`}
-      actions={<Link className="btn" href={`/income/${id}`}>← กลับหน้าเอกสาร</Link>}
     >
       <DocEditor initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="edit"
-                 lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()} />
+                 lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
+                 docNo={docNo ?? undefined} />
     </Shell>
   );
 }

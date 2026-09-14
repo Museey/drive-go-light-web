@@ -21,7 +21,7 @@ export function readVehicles(fd: FormData): Vehicle[] {
       id: g('id') || undefined,
       brand: g('brand'), model: g('model'), year: g('year'), color: g('color'),
       plateA: g('plateA'), plateB: g('plateB'), plateProvince: g('plateProvince'),
-      engineNo: g('engineNo'), chassisNo: g('chassisNo'), mileage: g('mileage'),
+      engineNo: g('engineNo'), chassisNo: g('chassisNo'), mileage: g('mileage'), other: g('other'),
     };
 
     /* คันที่บันทึกไว้แล้วเก็บเสมอ ถึงจะลบข้อมูลออกหมดก็ตาม — ผู้ใช้ต้องกด "เอาออก" เพื่อลบ
@@ -29,7 +29,7 @@ export function readVehicles(fd: FormData): Vehicle[] {
     if (v.id) { out.push(v); continue; }
 
     const hasAny = [v.brand, v.model, v.year, v.color, v.plateA, v.plateB,
-                    v.plateProvince, v.engineNo, v.chassisNo, v.mileage].some(Boolean);
+                    v.plateProvince, v.engineNo, v.chassisNo, v.mileage, v.other].some(Boolean);
     if (hasAny) out.push(v);
   }
   return out;

@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { query, requireTab } from '@/lib/auth';
 import { CLAIM_SIDE, getClaim, kindLabel } from '@/lib/claims';
 import { getShop } from '@/lib/queries';
@@ -11,6 +11,8 @@ export const dynamic = 'force-dynamic';
 export default async function ClaimPrintPage({ params }: { params: Promise<{ id: string }> }) {
   await requireTab('stock', 'claim');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (!isUuid(id)) notFound();
 
   const [claim, shop] = await Promise.all([
     query((c) => getClaim(c, id)),
@@ -27,7 +29,6 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href={`/stock/claim/${id}`}>← กลับใบเคลม</Link>
         <div className="spacer" />
         <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>
           เอกสารตัดสต๊อก ไม่ใช่ใบกำกับภาษี — ไม่มีการเรียกเก็บเงินตามใบนี้

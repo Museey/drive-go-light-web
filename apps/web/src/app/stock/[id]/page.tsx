@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { isUuid } from '@/lib/ids';
 import { today } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { canCost, canEdit, HIDDEN_COST } from '@/lib/perms';
 import { Shell } from '@/components/shell';
-import { getProduct, listCategories, listProductLots, listStockMoves } from '@/lib/products';
+import { getProduct, listCategories, listProductLots, listStockMoves, productSuppliers } from '@/lib/products';
 import { getShop } from '@/lib/queries';
 import { baht, thDate } from '@/lib/format';
 import { ProductForm } from '../product-form';
@@ -38,13 +39,16 @@ export default async function ProductPage({
   const seeCost = canCost(session);
   const mayEdit = canEdit(session, 'stock', 'list');
   const { id } = await params;
+  /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
+  if (id !== 'new' && !isUuid(id)) notFound();
   const sp = await searchParams;
   const isNew = id === 'new';
 
-  const [product, categories, shop] = await Promise.all([
+  const [product, categories, shop, suppliers] = await Promise.all([
     isNew ? Promise.resolve(null) : getProduct(id),
     listCategories(),
     getShop(),
+    isNew ? Promise.resolve([]) : productSuppliers(id),
   ]);
   if (!isNew && !product) notFound();
 
@@ -67,7 +71,6 @@ export default async function ProductPage({
       current="/stock"
       title={isNew ? 'เพิ่มสินค้าใหม่' : product!.name}
       sub={isNew ? undefined : `รหัส ${product!.code}`}
-      actions={<Link className="btn" href="/stock">← กลับทะเบียนสินค้า</Link>}
     >
       {sp.saved ? <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย</div> : null}
 
@@ -82,7 +85,7 @@ export default async function ProductPage({
         <div className="card">
           <header><h2>{isNew ? 'ข้อมูลสินค้า' : 'แก้ไขข้อมูลสินค้า'}</h2></header>
           <div className="body">
-            <ProductForm product={product} categories={categories}
+            <ProductForm product={product} categories={categories} suppliers={suppliers}
                          presetBarcode={isNew ? sp.barcode : undefined} />
           </div>
         </div>

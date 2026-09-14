@@ -30,6 +30,8 @@ export interface DocItem {
   price: Numeric;
   /** true = ค่าแรง/ค่าบริการ ใช้เป็นฐานภาษีหัก ณ ที่จ่าย */
   svc?: boolean;
+  /** ส่วนลดรายบรรทัด 0–100 (%) — ไม่มี = 0 เอกสารเก่าคำนวณเท่าเดิมทุกบาท */
+  discPct?: Numeric;
   /** เอกสารรุ่นก่อนไม่มี svc ใช้ code === 'LAB' แทน */
   code?: string;
   name?: string;
