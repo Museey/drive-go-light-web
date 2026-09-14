@@ -27,7 +27,7 @@ for (const m of MENU) {
 describe('เลขเมนูบนหน้าจอ', () => {
   it('ผังเมนูอ่านได้จริง ไม่ใช่เซ็ตว่าง', () => {
     expect(KNOWN.size).toBeGreaterThan(20);
-    expect(KNOWN.has('03.2.1')).toBe(true);
+    expect(KNOWN.has('03.3')).toBe(true);   /* ใบส่งมอบไม่มี VAT — เรียงเลขใหม่ไม่ให้ข้าม (ผู้ใช้กำหนด) */
   });
 
   it('ปุ่มเปิดเอกสารใหม่ทุกตัวใช้เลขที่มีอยู่ในผังเมนู', () => {
