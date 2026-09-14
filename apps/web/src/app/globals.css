@@ -1093,13 +1093,25 @@ table.hist .row-acts { display: inline-flex; gap: 4px; white-space: nowrap; }
 .btn.act-pay:hover { background: #17603A; } .btn.act-edit:hover { background: #F5CACA; } .btn.act-print:hover { background: #DDE2E6; } .btn.act-del:hover { background: #922A20; }
 
 /* ---------- ตารางประวัติพอดีหน้า ไม่ต้องเลื่อนซ้ายขวา ---------- */
-table.hist.fit { table-layout: fixed; width: 100%; min-width: 0; }
-table.hist.fit th, table.hist.fit td { white-space: normal; padding: 6px; font-size: 14px; word-break: break-word; overflow-wrap: anywhere; min-width: 0; overflow: hidden; }
+/* จอต่ำกว่า 1280: คอลัมน์ที่ตั้งความกว้างไว้รวมกันเกินกรอบ (ประวัติรายรับ 822px ในกรอบแท็บเล็ต 723px มือถือ 372px)
+   table-layout: fixed จึงบีบคอลัมน์เดียวที่ไม่ได้ตั้งความกว้าง (ลูกค้า/ชื่อ) เหลือ 0 ตัวหนังสือเรียงทีละตัว แถวสูง 531px
+   ใช้ auto + ช่องชื่อกว้างขั้นต่ำ แล้วเลื่อนซ้ายขวาในกรอบตาราง (.tablewrap overflow-x: auto) แทน
+   ≥ 1280 กลับเป็น fixed ตามเดิม — วัดแล้วพอดีกรอบ (ลูกค้ากว้าง 132px) */
+table.hist.fit { table-layout: auto; width: 100%; min-width: 0; }
+@media (min-width: 1280px) { table.hist.fit { table-layout: fixed; } }
+/* < 1280 ช่องทั่วไปอยู่บรรทัดเดียว — overflow-wrap: anywhere ทำให้ความกว้างขั้นต่ำของทุกช่องแทบเป็นศูนย์
+   table-layout: auto จึงบีบเลขที่เอกสารเหลือ 22px วันที่ 21px แถวสูง 345px · ตัดบรรทัดได้เฉพาะช่องชื่อ (td.wrap) */
+table.hist.fit th, table.hist.fit td { white-space: nowrap; padding: 6px; font-size: 14px; min-width: 0; overflow: hidden; }
+table.hist.fit td.wrap { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
+@media (min-width: 1280px) {
+  table.hist.fit th, table.hist.fit td { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
+}
 /* ปุ่มในแถวต้องอยู่ในคอลัมน์ของมัน ไม่ดันตารางให้กว้างจนต้องเลื่อน */
 table.hist.fit .row-acts.grid2 { width: 100%; max-width: 156px; }
 table.hist.fit .row-acts.grid2 .btn { white-space: normal; line-height: 1.2; font-size: 12.5px; padding: 4px 6px; min-height: 32px; }
 table.hist.fit th { font-size: 12.5px; }
-table.hist.fit td.wrap { min-width: 0; }
+table.hist.fit td.wrap { min-width: 160px; }
+@media (min-width: 1280px) { table.hist.fit td.wrap { min-width: 0; } }
 table.hist.fit td.mono, table.hist.fit .mono { font-size: 13px; letter-spacing: 0; }
 table.hist.fit td.num, table.hist.fit th.num { white-space: nowrap; padding-left: 2px; }
 table.hist.fit td.docno { font-size: 16px; font-weight: 700; letter-spacing: .02em; }
