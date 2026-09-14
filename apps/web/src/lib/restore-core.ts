@@ -37,6 +37,9 @@ export const WIPE_ORDER = [
   'product_suppliers',
   'doc_items',
   'documents',
+  /* ชุดอะไหล่ — หลังบรรทัดเอกสารที่อ้างชุด ก่อนสินค้าที่รายการในชุดอ้างถึง */
+  'kit_items',
+  'kits',
   'vehicles',
   'contacts',
   'products',

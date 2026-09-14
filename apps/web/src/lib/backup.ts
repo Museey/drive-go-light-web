@@ -52,6 +52,8 @@ export interface BackupFile {
    * ตัวนับของเดือนนี้จะหาย แล้วเลขที่ใบถัดไปเริ่มนับ 1 ใหม่กลางเดือน
    */
   _seqPeriods?: SeqPeriods;
+  /** ชุดอะไหล่ซ่อมบำรุง — รุ่น 6.4 ไม่มีและข้ามไป · บรรทัดเอกสารอ้างด้วย `_kitId` */
+  _kits?: unknown[];
 }
 
 export interface SeqPeriods {
@@ -125,6 +127,8 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
       `select period, last_no from stock_count_sequences order by period`);
     const suppliers = await c.query(
       `select product_id, vendor_id, name from product_suppliers order by product_id, sort_order`);
+    const kits = await c.query(`select * from kits order by code`);
+    const kitItems = await c.query(`select * from kit_items order by kit_id, sort_order`);
     const counts = await c.query(
       `select ct.*, ct.count_date::text as count_date, ct.status::text as status,
               coalesce(json_agg(json_build_object(
@@ -180,6 +184,8 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         price: n(i.disc_pct) > 0 ? n(i.unit_price) * (1 - n(i.disc_pct) / 100) : n(i.unit_price),
         ...(n(i.disc_pct) > 0 ? { _gross: n(i.unit_price), _discPct: n(i.disc_pct) } : {}),
         ...(i.is_service ? { svc: true } : {}),
+        /* บรรทัดชุดอะไหล่ — อ้าง id ของชุดใน _kits ของไฟล์นี้ */
+        ...(i.kit_id ? { _kitId: i.kit_id } : {}),
       }));
 
     /** ส่วนลดท้ายบิลแบบ % และการลบถาวร — คีย์เสริม ยอด discount (บาท) ยังเป็นค่าที่มีผลจริง */
@@ -403,6 +409,20 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         cl: claimSeq.rows.map((r) => ({ side: r.side, period: r.period, last: Number(r.last_no) })),
         ct: countSeq.rows.map((r) => ({ period: r.period, last: Number(r.last_no) })),
       },
+
+      /* ชุดอะไหล่ซ่อมบำรุง (029–030) — รุ่น 6.4 ไม่มี คีย์ขึ้นต้น _ จึงถูกข้ามไป
+         ชุดที่ปิดใช้งานก็ต้องไปด้วย เอกสารเก่าที่ขายชุดนั้นยังอ้างถึงอยู่
+         รายการในชุดอ้างสินค้าด้วย pid แบบเดียวกับบรรทัดเอกสาร */
+      ...(kits.rows.length ? {
+        _kits: kits.rows.map((k) => ({
+          id: k.id, code: k.code, name: k.name,
+          price: n(k.price), priceB: n(k.price_b), priceC: n(k.price_c), note: k.note ?? '',
+          ...(k.active ? {} : { active: false }),
+          items: kitItems.rows.filter((i) => i.kit_id === k.id).map((i) => ({
+            pid: i.product_id, name: i.name, unit: i.unit, qty: n(i.qty), cost: n(i.unit_cost),
+          })),
+        })),
+      } : {}),
 
       lic: sub.rows[0]
         ? { installedAt: sub.rows[0].started_on, key: '', expires: sub.rows[0].expires_on }

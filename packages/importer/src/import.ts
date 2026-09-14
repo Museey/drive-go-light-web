@@ -368,6 +368,39 @@ export async function importBackup(
        'cost_method', 'barcode_type'],
       productRows);
 
+    /* ---------- ชุดอะไหล่ซ่อมบำรุง (029–030) ----------
+       ต้องหลังสินค้า — kit_items.product_id อ้างสินค้า · ต้องก่อนเอกสาร — doc_items.kit_id อ้างชุด
+       ไฟล์ของรุ่น 6.4 ไม่มีคีย์นี้ · รหัสชุดซ้ำในไฟล์เดียวกันข้ามตัวหลัง (ตารางบังคับไม่ซ้ำ) */
+    const kitId = new Map<string, string>();
+    const kitRows: unknown[][] = [];
+    const kitItemRows: unknown[][] = [];
+    const seenKitCode = new Set<string>();
+    for (const k of Array.isArray((db as any)._kits) ? (db as any)._kits : []) {
+      const code = text(k?.code).trim();
+      if (!code || seenKitCode.has(code)) continue;
+      seenKitCode.add(code);
+      const id = randomUUID();
+      if (k.id) kitId.set(text(k.id), id);
+      kitRows.push([
+        id, tenantId, code, text(k.name) || code,
+        money(num(k.price)), money(num(k.priceB ?? k.price)), money(num(k.priceC ?? k.price)),
+        text(k.note), k.active !== false,
+      ]);
+      let order = 0;
+      for (const it of Array.isArray(k.items) ? k.items : []) {
+        const name = text(it?.name).trim();
+        if (!name) continue;
+        kitItemRows.push([
+          randomUUID(), tenantId, id, it.pid ? (productId.get(text(it.pid)) ?? null) : null,
+          name, text(it.unit), qty(num(it.qty)), money(num(it.cost)), order++,
+        ]);
+      }
+    }
+    await insertRows(client, 'kits',
+      ['id', 'tenant_id', 'code', 'name', 'price', 'price_b', 'price_c', 'note', 'active'], kitRows);
+    await insertRows(client, 'kit_items',
+      ['id', 'tenant_id', 'kit_id', 'product_id', 'name', 'unit', 'qty', 'unit_cost', 'sort_order'], kitItemRows);
+
     /* ---------- รูปสินค้า ---------- */
     const { rows: picRows, skipped: picSkipped } = picsFromBackup(db);
     const picValues: unknown[][] = [];
@@ -620,6 +653,7 @@ export async function importBackup(
           randomUUID(), tenantId, id, i + 1, pid,
           text(it.code), text(it.oem), text(it.name) || '(ไม่ระบุชื่อรายการ)', text(it.unit),
           qty(num(it.qty)), money(num(it.price)), isServiceItem(it), pctOf(it.discPct ?? 0),
+          it._kitId ? (kitId.get(text(it._kitId)) ?? null) : null,
         ]);
       });
 
@@ -792,7 +826,7 @@ export async function importBackup(
 
     await insertRows(client, 'doc_items',
       ['id', 'tenant_id', 'doc_id', 'line_no', 'product_id', 'code', 'oem', 'name', 'unit',
-       'qty', 'unit_price', 'is_service', 'disc_pct'],
+       'qty', 'unit_price', 'is_service', 'disc_pct', 'kit_id'],
       itemRows);
 
     await insertRows(client, 'payments',

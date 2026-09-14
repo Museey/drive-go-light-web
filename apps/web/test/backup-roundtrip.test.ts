@@ -235,6 +235,21 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
         { bank: 'ไทยพาณิชย์', no: '987-6-54321-0', name: 'อู่ทดสอบ' },
       ])]);
 
+    /* ชุดอะไหล่ซ่อมบำรุง (029–030) — ปิดใช้งานไว้ด้วย ชุดที่ปิดแล้วต้องตามมาเพราะเอกสารเก่ายังอ้างถึง
+       รายการหนึ่งผูกสินค้า อีกรายการพิมพ์เอง · บรรทัดท้ายของใบเสร็จข้างบนอ้างชุดนี้ */
+    const kit = (await admin.query(
+      `insert into kits (tenant_id, code, name, price, price_b, price_c, note, active)
+       values ($1, 'KIT-007', 'ชุดถ่ายน้ำมันเครื่อง', 900, 850, 800, 'รถเก๋ง', false) returning id`,
+      [firstTenant])).rows[0];
+    await admin.query(
+      `insert into kit_items (tenant_id, kit_id, product_id, name, unit, qty, unit_cost, sort_order)
+       values ($1, $2, $3, 'น้ำมันเครื่อง', 'ลิตร', 4, 120.5, 0), ($1, $2, null, 'ค่าแรง', 'ครั้ง', 1, 0, 1)`,
+      [firstTenant, kit.id, part.id]);
+    await admin.query(
+      `update doc_items set kit_id = $2
+        where id = (select id from doc_items where doc_id = $1 order by line_no desc limit 1)`,
+      [rc.rows[0].id, kit.id]);
+
     /* ช่อง "อื่นๆ" ของรถ */
     await admin.query(
       `update vehicles set other = 'คุณเอ 081-111-2222'
@@ -640,7 +655,35 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     expect(doc._discountPct).toBe(5);
   });
 
-  it('วิธีคิดต้นทุน ระบบบาร์โค้ด และผู้ขายของสินค้าตามมาครบ', async () => {
+  it('ชุดอะไหล่ซ่อมบำรุงตามมาครบ — รายการในชุด ราคา A/B/C ชุดที่ปิดใช้งาน และบรรทัดเอกสารที่อ้างชุด', async () => {
+    const read = async (tenantId: string) => {
+      const kits = (await admin.query(
+        `select k.code, k.name, k.price, k.price_b, k.price_c, k.note, k.active,
+                coalesce(json_agg(json_build_object('code', p.code, 'name', i.name, 'unit', i.unit,
+                                                    'qty', i.qty, 'cost', i.unit_cost) order by i.sort_order)
+                         filter (where i.id is not null), '[]') as items
+           from kits k left join kit_items i on i.kit_id = k.id left join products p on p.id = i.product_id
+          where k.tenant_id = $1 group by k.id order by k.code`, [tenantId])).rows;
+      const lines = (await admin.query(
+        `select d.doc_no, i.line_no, k.code as kit_code from doc_items i
+           join documents d on d.id = i.doc_id join kits k on k.id = i.kit_id
+          where i.tenant_id = $1 order by d.doc_no, i.line_no`, [tenantId])).rows;
+      return { kits, lines };
+    };
+    const a = await read(firstTenant);
+    expect(a.kits).toEqual([{
+      code: 'KIT-007', name: 'ชุดถ่ายน้ำมันเครื่อง', price: '900.00', price_b: '850.00', price_c: '800.00',
+      note: 'รถเก๋ง', active: false,
+      items: [
+        { code: supplierProductCode, name: 'น้ำมันเครื่อง', unit: 'ลิตร', qty: 4, cost: 120.5 },
+        { code: null, name: 'ค่าแรง', unit: 'ครั้ง', qty: 1, cost: 0 },
+      ],
+    }]);
+    expect(a.lines).toEqual([expect.objectContaining({ doc_no: discDocNo, kit_code: 'KIT-007' })]);
+    expect(await read(secondTenant)).toEqual(a);
+  });
+
+  it('วิธีคิดต้นทุน ระบบบาร์โค้ด และผู้ขายของสินค้าตามมาครบ', async() => {
     const read = async (tenantId: string) => {
       const p = (await admin.query(
         `select id, cost_method, barcode_type from products where tenant_id = $1 and code = $2`,
