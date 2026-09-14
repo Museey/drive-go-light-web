@@ -137,6 +137,10 @@ const PATHS: Record<string, Draw> = {
     <path d="M11 14h3.2M17 14h3.2M11 20h3.2M17 20h3.2M11 26h3.2M17 26h3.2"/>
     <circle cx="33" cy="28" r="7.5" fill="#fff"/><path d="M38.5 33.5 45 40" stroke-width="2.6"/>`,
   /* 07.5 ถังขยะ — เอกสารที่ลบ/ยกเลิก */
+  /* 05.10 ชุดอะไหล่ซ่อมบำรุง — กล่องมีชิ้นส่วนหลายชิ้น */
+  kit: (c: string) => `
+    <path d="M8 16l16-8 16 8v16l-16 8-16-8z"/><path d="M8 16l16 8 16-8M24 24v16"/>
+    <path d="M14 13l16 8" stroke="${c}"/><circle cx="24" cy="20" r="2" stroke="${c}"/>`,
   trash: (c: string) => `
     <path d="M9 13h30"/><path d="M19 13V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"/>
     <path d="M13 13l2 24a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3l2-24"/>
