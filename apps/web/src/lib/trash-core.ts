@@ -1,16 +1,19 @@
 /**
- * ถังขยะ — เอกสารที่ลบ/ยกเลิก (07.5)
+ * ถังขยะ — เอกสารที่ลบ/ยกเลิก (07.4)
  *
  * เก็บทุกเอกสารที่ status = 'void' (ขาย/ซื้อ/ค่าใช้จ่าย/ใบวางบิล) ค้นตามช่วงเวลาเท่านั้น
- * กู้คืน = เอา void ออกและคืนผลทางสต๊อกให้เหมือนก่อนยกเลิก
+ * กู้คืน = เอา void ออกและคืนผลทางสต๊อกให้เหมือนก่อนยกเลิก — ได้ทุกชนิด (ชุดแก้ 14 ก.ย. 2569 22:37
+ * เจ้าของกิจการเลือกตามต้นฉบับ แทนกติกา "กู้ได้เฉพาะ QT/BN/PO/EX" ที่ใช้ช่วงสั้น ๆ ก่อนหน้า)
  * ลบถาวร = ตั้ง purged_at แล้วหายจากทุกหน้ารวมถังขยะ กู้ไม่ได้ (แถวยังอยู่เพื่อรักษาบัญชีที่อ้างถึง)
  *
  * ไฟล์นี้รับ client ที่ตั้ง tenant แล้ว ไม่แตะ session — เทสต์เรียกได้ตรง ๆ
  * ตัวที่ผูกกับ session และสิทธิ์ของผู้ใช้อยู่ใน trash.ts
  */
 import type pg from 'pg';
-import { isRestorable } from './trash-rules';
+import { today } from '@drivegolight/core';
 import { unvoidBuyDocWith } from './buy-void';
+import { consumeStock } from './stock-cost';
+import { verifyPassword } from './password';
 
 type Client = pg.PoolClient | pg.Client;
 type Source = 'doc' | 'billnote';
@@ -51,7 +54,7 @@ export async function listTrashWith(c: Client, opts: { from?: string; to?: strin
   }));
 }
 
-/** กู้คืน — ใบเสนอราคา: คืนสถานะ · ใบซื้อ/ค่าใช้จ่าย: ใช้ unvoid ที่มีอยู่ · ใบวางบิล: ดูข้างใน · ที่เหลือดู trash-rules.ts */
+/** กู้คืน — ใบขาย: คืนสถานะ + ตัดสต๊อกที่การยกเลิกคืนไป · ใบซื้อ/ค่าใช้จ่าย: ใช้ unvoid ที่มีอยู่ · ใบวางบิล: ดูข้างใน */
 export async function restoreFromTrashWith(
   c: Client, source: Source, id: string, userId: string | null,
 ): Promise<void> {
@@ -90,18 +93,39 @@ export async function restoreFromTrashWith(
   }
 
   const { rows } = await c.query(
-    `select kind::text as kind, direction::text as direction from documents
+    `select direction::text as direction from documents
       where id = $1 and status = 'void' and purged_at is null for update`, [id]);
   const d = rows[0];
   if (!d) throw new Error('ไม่พบเอกสารในถังขยะ — อาจถูกกู้คืนหรือลบถาวรไปแล้ว');
-  if (!isRestorable(d.kind)) {
-    throw new Error('ใบนี้กู้คืนไม่ได้ — ใบส่งมอบ ใบกำกับภาษี และใบเสร็จที่ยกเลิกแล้ว ต้องคัดลอกเป็นใบใหม่ '
-      + 'เพราะอาจส่งให้ลูกค้าหรือยื่นภาษีไปแล้ว');
-  }
   if (d.direction === 'buy') { await unvoidBuyDocWith(c, id, userId); return; }
 
-  /* เหลือแค่ใบเสนอราคา — ไม่ตัดสต๊อกและไม่มีผลทางบัญชี คืนสถานะอย่างเดียวพอ */
   await c.query(`update documents set status = 'issued', voided_at = null, voided_reason = null where id = $1`, [id]);
+
+  /*
+   * ตัดสต๊อกกลับ **เท่ากับที่การยกเลิกครั้งล่าสุดคืนไป** ไม่ใช่อ่านจากบรรทัดเอกสาร
+   *
+   * ต้นฉบับอ่าน doc_items แล้วตัดเฉพาะบรรทัดสินค้า — ชิ้นส่วนของชุดอะไหล่ที่ใบเสร็จตัดไปตอนขาย
+   * ไม่ถูกตัดกลับ สต๊อกจึงเกินจริงทุกครั้งที่กู้ใบที่มีชุด และชุดอาจถูกแก้ส่วนประกอบไปแล้วหลังขาย
+   * ใบที่ไม่เคยตัดสต๊อก (ใบเสนอราคา ใบส่งมอบ ใบเสร็จที่นำเข้าจากรุ่นเดิม) การยกเลิกไม่ได้คืนอะไร
+   * ที่นี่ก็ไม่ตัดอะไร — ถ้าอ่านจากบรรทัดจะตัดของที่ไม่เคยออกจากร้าน
+   *
+   * แถวคืนของการยกเลิกครั้งเดียวกันมี created_at ตรงกัน (now() คงที่ในทรานแซกชัน) — วิธีเดียวกับ buy-void.ts
+   */
+  const back = await c.query(
+    `with last_void as (
+       select max(created_at) as at from stock_moves where doc_id = $1 and reason = 'return'
+     )
+     select m.product_id, sum(m.qty_delta) as qty
+       from stock_moves m join last_void lv on m.created_at = lv.at
+      where m.doc_id = $1 and m.reason = 'return'
+      group by m.product_id
+     having sum(m.qty_delta) > 0`, [id]);
+  for (const r of back.rows) {
+    await consumeStock(c, {
+      productId: r.product_id, qty: Number(r.qty), movedOn: today(), reason: 'sale',
+      docId: id, userId, note: 'กู้คืนเอกสารจากถังขยะ',
+    });
+  }
 }
 
 /** ลบถาวร — กู้ไม่ได้ · ใบที่ไม่ได้อยู่ในถังขยะ (ยังไม่ยกเลิก หรือลบไปแล้ว) ต้องไม่เงียบ */
@@ -114,3 +138,13 @@ export async function purgeFromTrashWith(c: Client, source: Source, id: string):
   if (!res.rowCount) throw new Error('ไม่พบเอกสารในถังขยะ — อาจถูกกู้คืนหรือลบถาวรไปแล้ว');
 }
 
+/** ลบถาวรได้เฉพาะเจ้าของกิจการ และต้องยืนยันรหัสผ่านของบัญชีที่ล็อกอินอยู่ซ้ำ (ผู้ใช้กำหนด) */
+export async function assertOwnerPasswordWith(
+  c: Client, who: { userId: string; role: string }, password: string,
+): Promise<void> {
+  if (who.role !== 'owner') throw new Error('ลบถาวรได้เฉพาะเจ้าของกิจการ');
+  const { rows } = await c.query(`select password_hash from users where id = $1`, [who.userId]);
+  if (!(await verifyPassword(password, rows[0]?.password_hash ?? null))) {
+    throw new Error('รหัสผ่านไม่ถูกต้อง — ยังไม่ได้ลบ');
+  }
+}
