@@ -78,7 +78,7 @@ export function IntakeForm({ shop }: { shop: Pick<ShopInfo, 'name' | 'addrText' 
             <li>ผู้ให้บริการจะไม่รับผิดชอบต่อความเสียหายที่เกิดจากการซ่อมนอกศูนย์บริการ หรือใช้อะไหล่ที่ไม่ได้ซื้อจากผู้ให้บริการ</li>
             <li>ลูกค้าตกลงยินยอมให้ผู้ให้บริการเก็บและใช้ข้อมูลส่วนบุคคลเพื่อการให้บริการ การตลาด และการแจ้งข่าวสาร</li>
           </ol>
-          <div className="frow" style={{ justifyContent: 'flex-end' }}><Line w={160} /> <span>ลูกค้าลงชื่อรับทราบ</span></div>
+          <div className="frow end"><Line w={160} /> <span>ลูกค้าลงชื่อรับทราบ</span></div>
         </div>
         <div className="icar">
           <CarViews />
@@ -155,11 +155,11 @@ export function IntakeForm({ shop }: { shop: Pick<ShopInfo, 'name' | 'addrText' 
             <Chk label="ฟลัชชิ่งระบบ" />
             <Chk label="แอร์ไม่เย็น" tail={<Line />} />
             <Chk label="อื่นๆ" tail={<Line />} />
-            <div className="frow" style={{ marginTop: 6 }}>ข้อเสนอแนะ <Line /></div>
+            <div className="frow mt-6">ข้อเสนอแนะ <Line /></div>
             {[0, 1].map((i) => <div key={i} className="frow"><Line /></div>)}
             <Sig />
           </section>
-          <div className="frow" style={{ marginTop: 8 }}>ลงชื่อลูกค้า <Line /></div>
+          <div className="frow mt-8">ลงชื่อลูกค้า <Line /></div>
           <div className="itotal"><span>รวมราคาประเมิน</span><span className="amt" /><span>บาท</span></div>
         </div>
       </div>
