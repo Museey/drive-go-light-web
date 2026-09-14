@@ -1211,7 +1211,8 @@ table.hist.fit.cust td, table.hist.fit.cust th { vertical-align: middle; }
 .paper.intake .itotal { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-weight: 700; font-size: 13px; }
 .paper.intake .itotal .amt { flex: 1; border: 1px solid #000; height: 26px; }
 .paper.intake .ifoot { text-align: center; font-size: 10px; color: #333; margin-top: 4px; }
-@media print { .paper.intake { page-break-after: always; } }
+/* ขึ้นหน้าใหม่เฉพาะระหว่างแผ่น — ใส่ page-break-after ทุกแผ่นแล้วใบรับรถแผ่นเดียวพิมพ์ออกมาพร้อมหน้าว่างต่อท้าย */
+@media print { .paper.intake + .paper { page-break-before: always; } }
 .paper.intake .fbox.wide { height: 18px; }
 .paper.intake .itop { grid-template-columns: 1fr 360px; }
 .paper.intake .icar .fuelrow { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: -6px; }
@@ -1220,6 +1221,81 @@ table.hist.fit.cust td, table.hist.fit.cust th { vertical-align: middle; }
 .paper.intake .fgrid.c5 { grid-template-columns: 1fr 1.3fr 1fr 0.8fr 1fr; }
 .paper.intake .fl { display: flex; align-items: flex-end; gap: 4px; white-space: nowrap; min-width: 0; }
 .paper.intake .fl .fline { flex: 1; min-width: 20px; }
+/* ลูกค้าลงชื่อรับทราบชิดขวา — ชุดแก้เปลี่ยน inline style เป็นคลาส end แต่ไม่มีกฎรองรับ ช่องจึงไปชิดซ้าย */
+.paper.intake .frow.end { justify-content: flex-end; }
+
+/* =====================================================================
+   หน้าพิมพ์ตามต้นแบบ 14 ก.ย. 2569 22:37 (.paper.doc2)
+   เอกสารขาย · ใบซื้อ/ค่าใช้จ่าย · ฟอร์มเปล่า — ค่าตาม pagePrint / pageForms ของต้นแบบ
+   หน้าพิมพ์อื่น (ใบวางบิล ใบเคลม ใบตรวจนับ) ยังใช้กฎเดิม
+
+   ฐาน (จอแคบกว่า 768): ต้นแบบเองยังล้นจอมือถือ — หัวเอกสาร min-width 228px, ผังรถในใบรับรถ 360px,
+   วันเดือนปีแบบกล่อง · ให้ส่วนพวกนี้ลงบรรทัดใหม่แทน
+   ≥ 768 และตอนพิมพ์ (หน้า A4 กว้างราว 794px จึงเข้าเงื่อนไข min-width: 768px ด้วย) = ค่าต้นแบบ
+   ===================================================================== */
+.paper.doc2 { max-width: 100%; }
+.paper.doc2 .doc-head { align-items: stretch; flex-wrap: wrap; }
+.paper.doc2 .doc-head .co { min-width: 0; }
+.paper.doc2 .doc-meta { min-width: 0; }
+.paper.doc2 .doc-meta .docno-big { font-size: 15px; font-weight: 700; margin-top: 4px; }
+.paper.doc2 .box h4 { margin: 0 0 4px; font-size: 12.5px; letter-spacing: .1em; border-bottom: 1px solid #999; padding-bottom: 2px; }
+/* ต้นแบบไม่มีเส้นประใต้ค่า และบรรทัดทั่วไปเป็นบล็อกธรรมดา */
+.paper.doc2 .kv { display: block; font-size: inherit; padding: 0; }
+.paper.doc2 .kv b { font-weight: 700; color: inherit; white-space: normal; }
+.paper.doc2 .kv span { border-bottom: 0; }
+.paper.doc2 .box.party2 > div, .paper.doc2 .box.veh3 .g3 > div { min-width: 0; }
+.paper.doc2 .box.party2 .kv, .paper.doc2 .box.veh3 .kv {
+  display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 13.5px; padding: 1px 0; align-items: normal;
+}
+.paper.doc2 .box.party2 .kv b, .paper.doc2 .box.veh3 .kv b { white-space: nowrap; font-weight: 600; color: #333; margin: 0; }
+.paper.doc2 .box.party2 .kv span, .paper.doc2 .box.veh3 .kv span { flex: 0 1 auto; margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.paper.doc2 .box.veh3 .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 14px; }
+/* ท้ายเอกสาร: หมายเหตุ/รับประกัน | ยอดรวม (ตารางไม่มีเส้น กว้าง 280px) */
+.paper.doc2 .tail2 { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+.paper.doc2 .tail2 > .notes { flex: 1 1 160px; min-width: 0; }
+.paper.doc2 table.totals2 { width: 280px; max-width: 100%; font-size: 14px; }
+.paper.doc2 table.totals2 td + td { text-align: right; }
+.paper.doc2 .bankline2 { margin-top: 8px; font-size: 13px; }
+/* ฟอร์มเปล่า: กล่องเงื่อนไข | ช่องยอด (250px) */
+.paper.doc2 .sumrow { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.paper.doc2 .sumrow > .box { flex: 1 1 200px; margin-top: 0; min-width: 0; }
+.paper.doc2 table.sum2 { width: 250px; max-width: 100%; font-size: 13px; }
+/* ต้นแบบตั้ง nowrap — บรรทัด "เครดิต … วัน ครบกำหนด …" ยาวกว่ากล่องแล้วเส้นประทะลุขอบกล่อง จึงให้ตัดบรรทัดได้ */
+.paper.doc2 .paylines { font-size: 12px; line-height: 2; }
+/* จอแคบ: สองคอลัมน์งานในใบรับรถลงคอลัมน์เดียว · ลายเซ็นสามช่องลงทีละช่อง
+   ("( ........ )" เป็นจุดต่อกันยาว 160px ตัดคำไม่ได้ สามช่องจึงดันกระดาษให้กว้างเกินจอ) */
+.paper.intake.doc2 .icols { grid-template-columns: minmax(0, 1fr); }
+.paper.doc2 .sign { flex-wrap: wrap; gap: 12px 26px; }
+.paper.doc2 .sign > div { flex: 1 1 160px; min-width: 0; }
+/* ฟอร์มเปล่าตามต้นแบบ: ตัวอักษร 14px (ใบรับรถ 11.5px) — กฎเดิม .blank-forms .paper 12.5px อยู่ท้ายไฟล์และทับทั้งคู่ */
+.blank-forms .paper.doc2 { font-size: 14px; }
+.blank-forms .paper.intake.doc2 { font-size: 11.5px; }
+/* ใบรับรถให้พอดี A4 แผ่นเดียว — แยกช่องติ๊กเป็นแถวของตัวเองตามต้นแบบแล้วสูง 1,336px (A4 = 1,123px)
+   ต้นแบบเองก็เกิน (1,235px ที่ตัวอักษร 9.2px) พิมพ์แล้วท้ายกระดาษถูกตัด · บีบระยะแถว/กล่องให้แน่นขึ้น
+   เหลือเกินราว 12px ให้ FitToPage ย่อตัวอักษรเล็กน้อย แทนการชนเพดานย่อ 80% แล้วยังล้น */
+.paper.intake.doc2 { line-height: 1.25; }
+.paper.intake.doc2 .frow { padding: 0; }
+.paper.intake.doc2 section { margin-bottom: 4px; padding: 3px 8px 4px; }
+.paper.intake.doc2 .terms { margin: 2px 0; }
+.paper.doc2 .wl { display: inline-block; border-bottom: 1px dotted #000; height: 14px; vertical-align: bottom; min-width: 60px; }
+.paper.doc2 .kv .wl { flex: 1; }
+.paper.intake.doc2 .ihead { grid-template-columns: minmax(0, 1fr); }
+.paper.intake.doc2 .ihead .date { text-align: left; white-space: normal; }
+.paper.intake.doc2 .itop { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 768px) {
+  .paper.doc2 .doc-head { flex-wrap: nowrap; }
+  .paper.doc2 .doc-meta { min-width: 228px; }
+  .paper.doc2 .tail2, .paper.doc2 .sumrow, .paper.doc2 .sign { flex-wrap: nowrap; }
+  .paper.intake.doc2 .icols { grid-template-columns: 1fr 1fr; }
+  .paper.intake.doc2 .ihead { grid-template-columns: 1fr auto 1fr; }
+  .paper.intake.doc2 .ihead .date { text-align: right; white-space: nowrap; }
+  .paper.intake.doc2 .itop { grid-template-columns: 1fr 360px; }
+}
+@media print {
+  /* กระดาษฟอร์มเปล่าสูง 297mm พอดี — ช่องว่างบนของ .wrap 14px ดันท้ายกระดาษไปหน้า 2 (ต้นแบบตั้ง .wrap padding 0 ตอนพิมพ์) */
+  .wrap:has(.blank-forms) { padding: 0 !important; }
+  .blank-forms .paper.intake.doc2 { padding: 8mm 9mm 6mm; }
+}
 
 /* =====================================================================
    การแบ่งหน้าเวลาพิมพ์ (ผู้ใช้กำหนด)
