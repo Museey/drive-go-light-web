@@ -11,6 +11,9 @@ export const DEFAULT_PAGE_SIZE = 20;
 /** ทะเบียนสินค้า: หน้าละ 10 เป็นค่าตั้งต้น เลือกได้ 10 / 20 (ผู้ใช้กำหนด) */
 export const STOCK_PAGE_SIZES = [10, 20] as const;
 export const STOCK_DEFAULT_PAGE_SIZE = 10;
+/** ประวัติเอกสาร: 10 / 20 / 30 (ผู้ใช้กำหนด) */
+export const HIST_PAGE_SIZES = [10, 20, 30] as const;
+export const HIST_DEFAULT_PAGE_SIZE = 10;
 
 /** อ่านค่าจาก query string — ค่านอกรายการถูกปัดกลับเป็นค่าตั้งต้น กัน ?size=100000 */
 export function pageSizeOf(v: string | undefined, sizes: readonly number[] = PAGE_SIZES, fallback = DEFAULT_PAGE_SIZE): number {
