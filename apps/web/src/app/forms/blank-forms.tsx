@@ -127,7 +127,7 @@ export const FORM_LABEL: Record<FormKind, string> = {
   invoice: 'ใบส่งมอบ / ใบกำกับภาษี',
   receipt: 'ใบเสร็จรับเงิน',
   billnote: 'ใบวางบิล',
-  jobcard: 'ใบรับรถ / ใบสั่งงานซ่อม',
+  jobcard: 'ใบสั่งงานซ่อม (แบบเดิม)',
   purchase: 'ใบบันทึกซื้อสินค้า',
   expense: 'ใบบันทึกค่าใช้จ่าย',
 };
