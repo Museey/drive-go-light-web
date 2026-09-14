@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
@@ -12,11 +13,14 @@ import { purgeTrashAction, restoreTrashAction, type TrashActionResult } from './
  * แผงแขวนที่ body ด้วย portal — ตารางอยู่ในกรอบที่เลื่อนแนวนอนได้ ซึ่ง Safari
  * ตัดภาพลูกที่เป็น position: fixed ตามกรอบนั้น (บั๊กเดียวกับแผงเมนูที่ menu-portal.test.ts กันไว้)
  */
-export function TrashActions({ source, id, docNo, kindName }: {
+export function TrashActions({ source, id, docNo, kindName, restorable, copyHref }: {
   source: 'doc' | 'billnote';
   id: string;
   docNo: string;
   kindName: string;
+  /** ใบส่งมอบ ใบกำกับภาษี ใบเสร็จ กู้คืนไม่ได้ — ดู lib/trash-rules.ts */
+  restorable: boolean;
+  copyHref: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -44,10 +48,17 @@ export function TrashActions({ source, id, docNo, kindName }: {
   return (
     <>
       <span className="row-acts">
-        <button className="btn sm act-pay" type="button" disabled={pending}
-                onClick={() => run(() => restoreTrashAction(source, id))}>
-          กู้คืน
-        </button>
+        {restorable ? (
+          <button className="btn sm act-pay" type="button" disabled={pending}
+                  onClick={() => run(() => restoreTrashAction(source, id))}>
+            กู้คืน
+          </button>
+        ) : copyHref ? (
+          <Link className="btn sm" href={copyHref}
+                title="เอกสารนี้อาจส่งให้ลูกค้าหรือยื่นภาษีไปแล้ว — ออกใบใหม่จากข้อมูลเดิมแทนการกู้คืน">
+            คัดลอกเป็นใบใหม่
+          </Link>
+        ) : null}
         <button className="btn sm act-del" type="button" disabled={pending}
                 onClick={() => { setError(''); setConfirming(true); }}>
           ลบถาวร

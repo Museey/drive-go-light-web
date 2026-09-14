@@ -9,8 +9,7 @@
  * ตัวที่ผูกกับ session และสิทธิ์ของผู้ใช้อยู่ใน trash.ts
  */
 import type pg from 'pg';
-import { today } from '@drivegolight/core';
-import { consumeStock } from './stock-cost';
+import { isRestorable } from './trash-rules';
 import { unvoidBuyDocWith } from './buy-void';
 
 type Client = pg.PoolClient | pg.Client;
@@ -52,7 +51,7 @@ export async function listTrashWith(c: Client, opts: { from?: string; to?: strin
   }));
 }
 
-/** กู้คืน — ใบขาย: ตั้ง issued แล้วตัดสต๊อกใหม่ (ใบเสร็จ) · ใบซื้อ: ใช้ unvoid ที่มีอยู่ · ใบวางบิล: ดูข้างใน */
+/** กู้คืน — ใบเสนอราคา: คืนสถานะ · ใบซื้อ/ค่าใช้จ่าย: ใช้ unvoid ที่มีอยู่ · ใบวางบิล: ดูข้างใน · ที่เหลือดู trash-rules.ts */
 export async function restoreFromTrashWith(
   c: Client, source: Source, id: string, userId: string | null,
 ): Promise<void> {
@@ -95,20 +94,14 @@ export async function restoreFromTrashWith(
       where id = $1 and status = 'void' and purged_at is null for update`, [id]);
   const d = rows[0];
   if (!d) throw new Error('ไม่พบเอกสารในถังขยะ — อาจถูกกู้คืนหรือลบถาวรไปแล้ว');
+  if (!isRestorable(d.kind)) {
+    throw new Error('ใบนี้กู้คืนไม่ได้ — ใบส่งมอบ ใบกำกับภาษี และใบเสร็จที่ยกเลิกแล้ว ต้องคัดลอกเป็นใบใหม่ '
+      + 'เพราะอาจส่งให้ลูกค้าหรือยื่นภาษีไปแล้ว');
+  }
   if (d.direction === 'buy') { await unvoidBuyDocWith(c, id, userId); return; }
 
+  /* เหลือแค่ใบเสนอราคา — ไม่ตัดสต๊อกและไม่มีผลทางบัญชี คืนสถานะอย่างเดียวพอ */
   await c.query(`update documents set status = 'issued', voided_at = null, voided_reason = null where id = $1`, [id]);
-  if (d.kind === 'RC') {
-    /* ยกเลิกไปแล้วของถูกคืนเข้าสต๊อก — กู้คืนจึงต้องตัดออกอีกครั้งให้บัญชีสมดุล */
-    const items = await c.query(
-      `select id, product_id, qty from doc_items where doc_id = $1 and product_id is not null`, [id]);
-    for (const it of items.rows) {
-      await consumeStock(c, {
-        productId: it.product_id, qty: Number(it.qty), movedOn: today(), reason: 'sale',
-        docId: id, docItemId: it.id, userId, note: 'กู้คืนเอกสารจากถังขยะ',
-      });
-    }
-  }
 }
 
 /** ลบถาวร — กู้ไม่ได้ · ใบที่ไม่ได้อยู่ในถังขยะ (ยังไม่ยกเลิก หรือลบไปแล้ว) ต้องไม่เงียบ */

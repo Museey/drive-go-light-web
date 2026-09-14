@@ -131,23 +131,46 @@ describe.skipIf(!DB_URL)('ถังขยะ', () => {
     await admin?.end();
   });
 
-  it('ใบเสร็จที่ยกเลิกขึ้นในถังขยะ กู้คืนแล้วกลับเป็นใบปกติ และสต๊อกถูกตัดกลับเท่าเดิม', async () => {
+  /**
+   * ใบเสร็จ ใบกำกับภาษี และใบส่งมอบที่ยกเลิกแล้ว กู้คืนไม่ได้ ต้องคัดลอกเป็นใบใหม่
+   * อาจส่งให้ลูกค้าหรือยื่นภาษีไปแล้ว — ตัดสินใจร่วมกับเจ้าของกิจการ 14 ก.ย. 2569
+   * (ถังขยะในชุดแก้เดิมให้กู้คืนใบเสร็จได้ ดู lib/trash-rules.ts)
+   */
+  it('ใบเสร็จที่ยกเลิกขึ้นในถังขยะ แต่กู้คืนไม่ได้ — สถานะและสต๊อกไม่ขยับ', async () => {
     await as(mine);
     const rc = await pickReceipt();
-    const before = await stockOf(rc.id);
-
     await voidSale(rc.id, 'ลูกค้าคืนของ');
     const afterVoid = await stockOf(rc.id);
-    expect(afterVoid, 'ยกเลิกแล้วของต้องกลับเข้าสต๊อก').not.toEqual(before);
 
     const listed = await listTrashWith(app, {});
     expect(listed.find((r) => r.id === rc.id)).toMatchObject({ source: 'doc', kind: 'RC', reason: 'ลูกค้าคืนของ' });
 
-    await restore('doc', rc.id, null);
-    const doc = (await app.query(`select status::text as s, voided_at from documents where id = $1`, [rc.id])).rows[0];
-    expect(doc).toEqual({ s: 'issued', voided_at: null });
-    expect(await stockOf(rc.id), 'กู้คืนแล้วสต๊อกต้องเท่ากับก่อนยกเลิก').toEqual(before);
-    expect((await listTrashWith(app, {})).some((r) => r.id === rc.id)).toBe(false);
+    await expect(restore('doc', rc.id, null)).rejects.toThrow('คัดลอกเป็นใบใหม่');
+    const doc = (await app.query(`select status::text as s from documents where id = $1`, [rc.id])).rows[0];
+    expect(doc.s, 'ถูกปฏิเสธแล้วต้องยังอยู่ในถังขยะ').toBe('void');
+    expect(await stockOf(rc.id), 'ต้องไม่ตัดสต๊อกซ้ำ').toEqual(afterVoid);
+  });
+
+  it('ใบเสนอราคาที่ยกเลิก กู้คืนได้', async () => {
+    await as(mine);
+    /* ใบเสนอราคาในไฟล์ชุดทดสอบออกใบต่อไปหมดแล้วจึงยกเลิกไม่ได้ — คัดลอกหัวเอกสารเป็นใบใหม่ที่ยังไม่มีใบต่อ
+       เลือกคอลัมน์จากสคีมาจริง (ข้ามคอลัมน์คำนวณ) จะได้ไม่พังเมื่อมีคอลัมน์เพิ่ม */
+    const cols = (await admin.query(
+      `select column_name from information_schema.columns
+        where table_schema = 'public' and table_name = 'documents' and is_generated = 'NEVER'
+          and column_name not in ('id', 'doc_no', 'status', 'parent_doc_id', 'legacy_id',
+                                  'voided_at', 'voided_reason', 'purged_at')
+        order by ordinal_position`)).rows.map((r) => r.column_name as string);
+    const list = cols.join(', ');
+    const src = (await app.query(`select id from documents where kind = 'QT' order by doc_no limit 1`)).rows[0];
+    const qt = (await app.query(
+      `insert into documents (${list}, doc_no, status)
+       select ${list}, 'QT-ทดสอบถังขยะ', 'issued' from documents where id = $1 returning id`, [src.id])).rows[0];
+
+    await voidSale(qt.id, 'ลูกค้าไม่เอาแล้ว');
+    await restore('doc', qt.id, null);
+    const d = (await app.query(`select status::text as s, voided_at from documents where id = $1`, [qt.id])).rows[0];
+    expect(d).toEqual({ s: 'issued', voided_at: null });
   });
 
   it('ใบซื้อที่ยกเลิก กู้คืนแล้วรับของกลับเข้าสต๊อก', async () => {

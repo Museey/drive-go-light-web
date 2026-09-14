@@ -4,6 +4,7 @@ import { SubNav } from '@/components/sub-nav';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { baht, thDate } from '@/lib/format';
 import { listTrash } from '@/lib/trash';
+import { copyHrefFor, isRestorable } from '@/lib/trash-rules';
 import { TrashActions } from './trash-actions';
 
 export const dynamic = 'force-dynamic';
@@ -71,7 +72,8 @@ export default async function TrashPage({
                       </td>
                       <td>
                         <TrashActions source={r.source} id={r.id} docNo={r.docNo}
-                                      kindName={KIND_NAME[r.kind] ?? r.kind} />
+                                      kindName={KIND_NAME[r.kind] ?? r.kind}
+                                      restorable={isRestorable(r.kind)} copyHref={copyHrefFor(r.kind, r.id)} />
                       </td>
                     </tr>
                   ))}
@@ -81,7 +83,8 @@ export default async function TrashPage({
           )}
 
           <p className="hint" style={{ padding: '8px 12px' }}>
-            กู้คืนใบเสร็จจะตัดสต๊อกอีกครั้ง · กู้คืนใบซื้อจะรับของกลับเข้าสต๊อก · ลบถาวรแล้วหายจากทุกหน้า กู้ไม่ได้
+            กู้คืนได้เฉพาะใบเสนอราคา ใบวางบิล ใบซื้อ และค่าใช้จ่าย (ใบซื้อรับของกลับเข้าสต๊อก) ·
+            ใบส่งมอบ ใบกำกับภาษี และใบเสร็จที่ยกเลิกแล้วคัดลอกเป็นใบใหม่ · ลบถาวรแล้วหายจากทุกหน้า กู้ไม่ได้
           </p>
         </div>
       </SubNav>
