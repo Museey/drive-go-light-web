@@ -1,3 +1,4 @@
+import { today } from '@drivegolight/core';
 import Link from 'next/link';
 import { RowLink } from '@/components/row-link';
 import { STOCK_FLAG_LABEL, STOCK_FLAG_SHORT, STOCK_FLAGS, toStockFlag } from '@drivegolight/core';
@@ -28,6 +29,7 @@ export default async function StockPage({
   const session = await requireTab('stock', 'list');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
+  const todayIso = today();
   const flag = toStockFlag(sp.flag);
   /* ทะเบียนสินค้า: หน้าละ 10 ตั้งต้น เลือก 10/20 */
   const pageSize = pageSizeOf(sp.size, STOCK_PAGE_SIZES, STOCK_DEFAULT_PAGE_SIZE);
@@ -69,59 +71,42 @@ export default async function StockPage({
   return (
     <Shell
       current="/stock"
-      title="ทะเบียนสินค้า"
-      sub={
-        `${total.toLocaleString('en-US')} รายการ` +
-        (show('cost') ? ` · มูลค่าสต๊อกตามบัญชี ${baht(stockValue)} บาท` : '')
-      }
-      actions={<>
-        <div className="tag-row">
-          <Link className="btn" href={`/stock/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายการ</Link>
-          <Link className="btn" href={`/stock/barcodes${printQuery ? `?${printQuery}` : ''}`}>
-            พิมพ์ฉลากบาร์โค้ด
-          </Link>
-          <ColPicker cols={STOCK_COLS} hidden={hidden} fixed={STOCK_COLS_FIXED} startOpen={sp.cols === '1'} />
-          <Link className="btn" href="/stock/pending">
-            <span className="mono" style={{ opacity: 0.55, marginRight: 5 }}>05.2</span>รายการค้างทำ
-          </Link>
-          <span className="tiles"><ActionTiles menu="stock" /></span>
-        </div>
-      </>}
+      title="สินค้า"
+      sub={`${total.toLocaleString('en-US')} รายการ` + (show('cost') ? ` · มูลค่าสต๊อก ${baht(stockValue)}` : '')}
     >
       <SubNav menu="stock" current="list" badges={{ pending: pending.length }}>
       <div className="card">
+        {/* แถบไทล์แบบเดียวกับต้นแบบ: ทั้งหมด · ถึงจุดสั่งซื้อ · ตัวกรองสต๊อก · การ์ดอำพันเพิ่มสินค้า · ค้นหา · ตั้งค่าการแสดงผล · พิมพ์รายงาน */}
         <div className="toolbar">
-          <form action="/stock" method="get" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
-                   placeholder="กรอกคำค้นหา — รหัส ชื่อ หรือรหัส OEM" style={{ width: 240 }} />
-            <select className="in" name="cat" defaultValue={sp.cat ?? ''}>
+          <div className="tiles">
+            <Link className="tile" aria-current={!flag && sp.reorder !== '1' ? 'true' : undefined} href="/stock">ทั้งหมด</Link>
+            <Link className="tile" aria-current={sp.reorder === '1' ? 'true' : undefined} href={{ pathname: '/stock', query: { reorder: '1' } }}>ถึงจุดสั่งซื้อ</Link>
+            {STOCK_FLAGS.map((f) => (
+              <Link key={f} className="tile" aria-current={flag === f ? 'true' : undefined}
+                    href={{ pathname: '/stock', query: flag === f ? {} : { flag: f } }}>
+                {STOCK_FLAG_LABEL[f]}
+              </Link>
+            ))}
+            <ActionTiles menu="stock" />
+          </div>
+          <span className="spacer" />
+          <form action="/stock" method="get" className="row-flex">
+            <input className="in search w-240" type="search" name="q" defaultValue={sp.q ?? ''}
+                   placeholder="กรอกคำค้นหา — รหัส ชื่อ หรือหมวด" />
+            <select className="in w-auto" name="cat" defaultValue={sp.cat ?? ''}>
               <option value="">ทุกหมวดหมู่</option>
               {cats.map((c) => (
                 <option key={c.id} value={c.id}>{c.name} ({c.productCount})</option>
               ))}
             </select>
-            <label className="tag-row" style={{ fontSize: 13 }}>
-              <input type="checkbox" name="reorder" value="1" defaultChecked={sp.reorder === '1'} />
-              เฉพาะที่ต้องสั่งซื้อ
-            </label>
-            <label className="tag-row" style={{ fontSize: 13 }}>
+            <label className="tag-row fs-13">
               <input type="checkbox" name="all" value="1" defaultChecked={sp.all === '1'} />
               รวมที่ปิดใช้งาน
             </label>
             <button className="btn" type="submit">ค้นหา</button>
           </form>
-
-          <div className="spacer" />
-
-          <div className="tag-row">
-            {STOCK_FLAGS.map((f) => (
-              <Link key={f} className={`chip flag-${f}`}
-                    href={{ pathname: '/stock', query: flag === f ? {} : { flag: f } }}
-                    style={flag === f ? { outline: '2px solid var(--ink-3)' } : undefined}>
-                {STOCK_FLAG_LABEL[f]}
-              </Link>
-            ))}
-          </div>
+          <ColPicker cols={STOCK_COLS} hidden={hidden} fixed={STOCK_COLS_FIXED} startOpen={sp.cols === '1'} />
+          <Link className="btn" href={`/stock/print${printQuery ? `?${printQuery}` : ''}`}>🖨 พิมพ์รายงาน</Link>
         </div>
 
         {rows.length === 0 ? (
@@ -162,6 +147,7 @@ export default async function StockPage({
                   {show('pB') ? <th className="num">ราคา B</th> : null}
                   {show('pC') ? <th className="num">ราคา C</th> : null}
                   {show('move') ? <th>เคลื่อนไหวล่าสุด</th> : null}
+                  {show('expiry') ? <th title="วันหมดอายุของล็อตที่จะถูกตัดก่อน">วันหมดอายุ</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -214,6 +200,7 @@ export default async function StockPage({
                     {show('pB') ? <td className="num">{baht(p.priceB)}</td> : null}
                     {show('pC') ? <td className="num">{baht(p.priceC)}</td> : null}
                     {show('move') ? <td>{thDate(p.lastMoveOn)}</td> : null}
+                    {show('expiry') ? <td className={p.nearestExpiry && p.nearestExpiry < todayIso ? 'due' : ''} style={p.nearestExpiry && p.nearestExpiry < todayIso ? { color: 'var(--due)', fontWeight: 600 } : undefined}>{p.nearestExpiry ? thDate(p.nearestExpiry) : '-'}</td> : null}
                   </RowLink>
                 ))}
               </tbody>
