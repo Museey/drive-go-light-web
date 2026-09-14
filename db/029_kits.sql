@@ -32,3 +32,11 @@ alter table kits enable row level security;       alter table kits force row lev
 alter table kit_items enable row level security;  alter table kit_items force row level security;
 create policy tenant_isolation on kits using (tenant_id = current_tenant_id()) with check (tenant_id = current_tenant_id());
 create policy tenant_isolation on kit_items using (tenant_id = current_tenant_id()) with check (tenant_id = current_tenant_id());
+
+-- ให้สิทธิ์ role ของแอปเฉพาะเมื่อมี role นั้นอยู่จริง (แบบเดียวกับ 004 005 010 025)
+-- ไม่มีบรรทัดนี้ เครื่องที่แอปต่อด้วย dgl_app อ่านชุดอะไหล่ไม่ได้เลย
+do $grant$ begin
+  if exists (select 1 from pg_roles where rolname = 'dgl_app') then
+    execute 'grant select, insert, update, delete on kits, kit_items to dgl_app';
+  end if;
+end $grant$;
