@@ -136,6 +136,11 @@ const PATHS: Record<string, Draw> = {
     <path d="M3 40h25"/><path d="M12 40v-7h7v7"/>
     <path d="M11 14h3.2M17 14h3.2M11 20h3.2M17 20h3.2M11 26h3.2M17 26h3.2"/>
     <circle cx="33" cy="28" r="7.5" fill="#fff"/><path d="M38.5 33.5 45 40" stroke-width="2.6"/>`,
+  /* 07.5 ถังขยะ — เอกสารที่ลบ/ยกเลิก */
+  trash: (c: string) => `
+    <path d="M9 13h30"/><path d="M19 13V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"/>
+    <path d="M13 13l2 24a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3l2-24"/>
+    <path d="M20 20v12M28 20v12" stroke="${c}"/>`,
   listp: (c: string) => `
     <path d="M8 10h32M8 20h32M8 30h22M8 38h22"/>
     <circle cx="35" cy="35" r="6.5"/><path d="M35 32v3.4l2.4 1.6" stroke-width="1.9"/>`,

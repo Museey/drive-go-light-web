@@ -14,7 +14,7 @@ export default async function BillnotePage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; void?: string; from?: string }>;
+  searchParams: Promise<{ saved?: string; void?: string; from?: string; vat?: string }>;
 }) {
   await requireTab('income', 'billing');
   const { id } = await params;
@@ -30,7 +30,10 @@ export default async function BillnotePage({
 
     const source = fromId ? await getBillnote(c, fromId) : null;
     const keep = note?.docs.map((d) => d.id) ?? [];
-    const open = await openInvoices(c, { includeDocIds: keep });
+    const openAll = await openInvoices(c, { includeDocIds: keep });
+    /* + ใบวางบิล (IVT) / (IV): เสนอเฉพาะใบส่งมอบชนิดนั้น */
+    const open = sp.vat === 'yes' ? openAll.filter((v) => v.vatMode !== 'none' || keep.includes(v.id))
+      : sp.vat === 'no' ? openAll.filter((v) => v.vatMode === 'none' || keep.includes(v.id)) : openAll;
     return { note, open, source };
   });
 
@@ -87,7 +90,6 @@ export default async function BillnotePage({
               ) : null}
             </>
           ) : null}
-          <Link className="btn" href="/income/billing">← กลับรายการ</Link>
         </div>
       }
     >

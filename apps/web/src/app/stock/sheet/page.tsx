@@ -52,7 +52,6 @@ export default async function CountSheetPage({
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href="/stock/count">← กลับตรวจนับ</Link>
 
         <form action="/stock/sheet" method="get" style={{ display: 'flex', gap: 6 }}>
           <select className="in" name="cat" defaultValue={sp.cat ?? ''} style={{ width: 190 }}>

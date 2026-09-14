@@ -4,8 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
   saveSalesDoc, scanForDoc, searchCustomers, searchProducts, voidSalesDoc,
-  type DocScan, type PickedContact, type PickedProduct, type SalesDocInput,
-} from '@/lib/sales';
+  type DocScan, type PickedContact, type PickedProduct, type SalesDocInput, openDocsFor, loadDocForCopy, type OpenDoc } from '@/lib/sales';
 import { friendlyDbError, type FormResult } from '@/lib/mutate';
 
 /**
@@ -50,6 +49,14 @@ export async function saveDocAction(_prev: FormResult, fd: FormData): Promise<Fo
 
   revalidatePath('/income');
   revalidatePath('/stock');
+  /* บันทึกแล้วกลับไปหน้าเดิม (ที่ผู้ใช้ส่ง returnTo มา) พร้อมเลขที่และ id ไว้ทำปุ่มพิมพ์ — ไม่ส่ง = ไปหน้าเอกสาร */
+  /* กด "พิมพ์เอกสาร" ในฟอร์ม → บันทึกแล้วไปหน้าพิมพ์ทันที */
+  if (fd.get('printAfter') === '1') redirect(`/income/${saved.id}/print?saved=${encodeURIComponent(saved.docNo)}`);
+  const back = String(fd.get('returnTo') ?? '');
+  if (back.startsWith('/income')) {
+    const sep = back.includes('?') ? '&' : '?';
+    redirect(`${back}${sep}saved=${encodeURIComponent(saved.docNo)}&savedId=${saved.id}`);
+  }
   redirect(`/income/${saved.id}?saved=${encodeURIComponent(saved.docNo)}`);
 }
 
@@ -85,6 +92,16 @@ export async function searchProductsAction(q: string): Promise<PickedProduct[]> 
  */
 export async function scanPartAction(term: string): Promise<DocScan> {
   return scanForDoc(term);
+}
+
+/** ค้นใบเสนอราคา/ใบส่งมอบที่เปิดค้างอยู่ เพื่อดึงมาออกใบต่อจากในฟอร์ม (ช่อง "อ้างอิงใบเสนอราคา") */
+export async function searchOpenSourcesAction(target: 'invoice' | 'receipt', q: string): Promise<OpenDoc[]> {
+  return openDocsFor(target, q);
+}
+
+/** โหลดเอกสารต้นทางทั้งใบ (ลูกค้า รถ รายการ) มาใส่ฟอร์มใบต่อ */
+export async function loadSourceAction(id: string): Promise<SalesDocInput | null> {
+  return loadDocForCopy(id);
 }
 
 export async function searchCustomersAction(q: string): Promise<PickedContact[]> {

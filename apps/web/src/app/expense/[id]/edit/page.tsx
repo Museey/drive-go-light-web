@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
@@ -24,9 +23,8 @@ export default async function EditBuyPage({ params }: { params: Promise<{ id: st
       current="/expense"
       title={doc.kind === 'PO' ? 'แก้ไขใบซื้อ' : 'แก้ไขค่าใช้จ่าย'}
       sub={`เลขที่ ${meta.docNo}`}
-      actions={<Link className="btn" href={`/expense/${id}`}>← กลับหน้าเอกสาร</Link>}
     >
-      <BuyEditor initial={doc} vatRate={shop.vatRate} mode="edit" />
+      <BuyEditor initial={doc} vatRate={shop.vatRate} mode="edit" docNo={meta.docNo} />
     </Shell>
   );
 }

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireOperator } from '@/lib/ops-auth';
 import { getShop, suggestRenewal } from '@/lib/ops-console';
@@ -28,7 +27,6 @@ export default async function OpsShopPage({
       email={session.email}
       title={shop.name}
       sub={`เปิดเมื่อ ${thDate(shop.createdOn)}`}
-      actions={<Link className="btn" href="/ops">← กลับรายชื่ออู่</Link>}
     >
       <div className="grid g2">
         <div className="card">

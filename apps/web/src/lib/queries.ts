@@ -25,6 +25,8 @@ export interface ShopInfo {
   bankName: string;
   bankAccountNo: string;
   bankAccountName: string;
+  /** บัญชีรับโอนหลายธนาคาร (026) — ว่าง = ใช้ bank_* เดิม */
+  bankAccounts: { bank: string; no: string; name: string }[];
   /** เตือนล่วงหน้ากี่วันก่อนของหมดอายุ ตั้งได้ที่หน้าตั้งค่าร้าน */
   expiryWarnDays: number;
 }
@@ -33,7 +35,7 @@ export async function getShop(): Promise<ShopInfo> {
   return query(async (c) => {
     const { rows } = await c.query(
       `select id, name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
-              bank_name, bank_account_no, bank_account_name, expiry_warn_days
+              bank_name, bank_account_no, bank_account_name, expiry_warn_days, bank_accounts
        from tenants where id = current_tenant_id()`,
     );
     const r = rows[0];
@@ -42,6 +44,7 @@ export async function getShop(): Promise<ShopInfo> {
       tel: r.tel, tel2: r.tel2,
       vatRate: money(r.vat_rate), whtRate: money(r.wht_rate),
       bankName: r.bank_name ?? '',
+      bankAccounts: Array.isArray(r.bank_accounts) ? r.bank_accounts.filter((x: { no?: string; bank?: string }) => x && (x.no || x.bank)) : [],
       bankAccountNo: r.bank_account_no ?? '',
       bankAccountName: r.bank_account_name ?? '',
       expiryWarnDays: money(r.expiry_warn_days) || EXPIRY_WARN_DAYS,
@@ -77,6 +80,11 @@ export interface HomeSummary {
   arOutstanding: number;
   apOutstanding: number;
   reorderCount: number;
+  /** งานค้างส่งมอบ = ใบเสนอราคาที่ออกแล้วแต่ยังไม่มีใบส่งมอบ/ใบเสร็จอ้างอิงต่อ (สถานะยัง issued) */
+  openQuoteCount: number;
+  openQuoteAmount: number;
+  /** อายุใบที่ค้างนานสุด (วัน) — 0 ถ้าไม่มี */
+  openQuoteOldestDays: number;
   /** เงินที่ต้องใช้ถ้าสั่งของที่ถึงจุดสั่งซื้อทั้งหมดให้เต็ม Max */
   reorderCost: number;
   /** รายการที่ควรสั่งก่อน เรียงจากที่ขาดมือหนักที่สุด */
@@ -124,6 +132,13 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
 
     /* เงื่อนไขเดียวกับป้าย min ใน core — คงเหลือเท่ากับจุดสั่งซื้อพอดีก็นับแล้ว
        และข้ามสินค้าที่ยังไม่ได้ตั้งจุดสั่งซื้อ ไม่งั้นของหมดสต๊อกทุกตัวจะขึ้นมาเตือน */
+    /* งานค้างส่งมอบ — ใบเสนอราคาที่ยังไม่ถูกออกใบต่อ (ตอนออกใบต่อ ต้นทางถูกตั้งเป็น billed) */
+    const openQt = await c.query(
+      `select count(*)::int as c, coalesce(sum(grand_total), 0) as amt,
+              coalesce(max(current_date - doc_date), 0)::int as oldest
+       from documents where tenant_id = current_tenant_id() and kind = 'QT' and status = 'issued'`,
+    );
+
     const reorder = await c.query(
       `select count(*) as c
        from products p join product_stock s on s.product_id = p.id
@@ -207,6 +222,9 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
       arOutstanding: owing.ar.total,
       apOutstanding: owing.ap.total,
       reorderCount: Number(reorder.rows[0].c),
+      openQuoteCount: Number(openQt.rows[0].c),
+      openQuoteAmount: Math.round(Number(openQt.rows[0].amt) * 100) / 100,
+      openQuoteOldestDays: Number(openQt.rows[0].oldest),
       reorderCost: Math.round(reorderTop.reduce((s, r) => s + r.cost, 0) * 100) / 100,
       reorderTop: reorderTop.slice(0, 5),
       productCount: stockStats.rows[0].total,
@@ -231,6 +249,10 @@ export interface IncomeRow {
   partyName: string;
   vehiclePlate: string;
   grandTotal: number;
+  /** มูลค่าก่อนภาษี / ภาษี — คอลัมน์ในประวัติแบบใหม่ */
+  netAmount: number;
+  vatAmount: number;
+  creditDays: number;
   payable: number;
   paid: number;
   outstanding: number;
@@ -274,6 +296,12 @@ export async function listIncomeDocs(opts: {
   pageSize?: number;
   /** รวมใบที่ยกเลิกแล้วในรายการด้วย */
   includeVoid?: boolean;
+  /** เฉพาะใบที่ยัง 'issued' — ใบเสนอราคาที่ยังไม่มีใบใดออกต่อ = งานค้างส่งมอบ */
+  openOnly?: boolean;
+  /** ใบเสร็จ: 'yes' = มี VAT (ต่อจาก IVT) · 'no' = ไม่มี VAT (ต่อจาก IV) */
+  vat?: 'yes' | 'no';
+  /** ขายหน้าร้าน = ใบเสร็จที่ไม่มีใบอ้างอิง */
+  walkinOnly?: boolean;
 }): Promise<IncomeListResult> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -281,7 +309,7 @@ export async function listIncomeDocs(opts: {
 
   return query(async (c) => {
     // ค้นจากเลขที่เอกสาร ชื่อลูกค้า หรือทะเบียนรถ — สามอย่างที่หน้าเคาน์เตอร์ใช้จริง
-    const where: string[] = [`d.kind in ('QT','IV','IVT','RC')`];
+    const where: string[] = [`d.kind in ('QT','IV','IVT','RC')`, `d.purged_at is null`];
     const params: unknown[] = [];
 
     /*
@@ -308,6 +336,10 @@ export async function listIncomeDocs(opts: {
       params.push(kind);
       where.push(`d.kind = $${params.length}`);
     }
+    if (opts.openOnly) where.push(`d.status = 'issued'`);
+    if (opts.vat === 'yes') where.push(`d.vat_mode <> 'none'`);
+    if (opts.vat === 'no') where.push(`d.vat_mode = 'none'`);
+    if (opts.walkinOnly) where.push(`d.parent_doc_id is null`);
     if (sIdx) {
       where.push(`(d.doc_no ilike $${sIdx} or d.party_name ilike $${sIdx}
                    or d.vehicle_plate ilike $${sIdx})`);
@@ -336,7 +368,7 @@ export async function listIncomeDocs(opts: {
 
     const { rows } = await c.query(
       `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.party_name, d.vehicle_plate,
-              d.grand_total, d.payable, d.due_date,
+              d.grand_total, d.payable, d.due_date, d.net_amount, d.vat_amount, d.credit_days,
               d.status::text as status, coalesce(d.voided_reason, '') as voided_reason,
               d.party_id, d.party_type::text as party_type, d.party_tax_id,
               d.party_addr_text, d.party_addr,
@@ -382,6 +414,9 @@ export async function listIncomeDocs(opts: {
         partyName: r.party_name,
         vehiclePlate: r.vehicle_plate,
         grandTotal: money(r.grand_total),
+        netAmount: money(r.net_amount),
+        vatAmount: money(r.vat_amount),
+        creditDays: Number(r.credit_days ?? 0),
         payable: money(r.payable),
         paid: money(r.paid),
         outstanding: Math.round((money(r.payable) - money(r.paid)) * 100) / 100,
@@ -416,6 +451,7 @@ export interface DocItemRow {
   unitPrice: number;
   lineTotal: number;
   isService: boolean;
+  discPct: number;
 }
 
 export interface PaymentRow {
@@ -442,6 +478,9 @@ export interface DocDetail {
   vehicle: Record<string, string> | null;
   vehiclePlate: string;
   discount: number;
+  /** 'baht' | 'pct' — วิธีที่กรอกส่วนลดท้ายบิล; discount ยังเป็นบาทที่มีผลจริง */
+  discountMode: string;
+  discountPct: number;
   vatMode: string;
   vatRate: number;
   whtRate: number;
@@ -483,7 +522,7 @@ export async function getDocDetail(id: string): Promise<DocDetail | null> {
     if (!d) return null;
 
     const items = await c.query(
-      `select line_no, code, oem, name, unit, qty, unit_price, line_total, is_service
+      `select line_no, code, oem, name, unit, qty, unit_price, line_total, is_service, disc_pct
        from doc_items where doc_id = $1 order by line_no`,
       [id],
     );
@@ -519,6 +558,8 @@ export async function getDocDetail(id: string): Promise<DocDetail | null> {
       vehicle: d.vehicle,
       vehiclePlate: d.vehicle_plate,
       discount: money(d.discount),
+      discountMode: d.discount_mode ?? 'baht',
+      discountPct: money(d.discount_pct),
       vatMode: d.vat_mode_text,
       vatRate: money(d.vat_rate),
       whtRate: money(d.wht_rate),
@@ -545,6 +586,7 @@ export async function getDocDetail(id: string): Promise<DocDetail | null> {
         unitPrice: money(r.unit_price),
         lineTotal: money(r.line_total),
         isService: r.is_service,
+        discPct: money(r.disc_pct),
       })),
       payments: payments.rows.map((r) => ({
         paidOn: r.paid_on,

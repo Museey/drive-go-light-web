@@ -131,7 +131,7 @@ describe.skipIf(!DB_URL)('ใบเคลมสินค้า', () => {
     /* 10 ชิ้นแรกที่ 100 + อีก 5 ที่ 150 = 1,750 — ต้นทุนล่าสุดจะได้ 15 × 250 = 3,750 */
     expect(r.cost).toBe(1750);
     expect(r.cutQty).toBe(15);
-    expect(r.no).toMatch(/^CL-202603-001$/);
+    expect(r.no).toBe('CL6903010001');
     expect(await onHand()).toBe(5);
   });
 
@@ -211,9 +211,9 @@ describe.skipIf(!DB_URL)('ใบเคลมสินค้า', () => {
     }), null);
     const c2 = await saveClaim(app, base(), null);
 
-    expect(a.no).toBe('CL-202603-001');
-    expect(b.no).toBe('VC-202603-001');
-    expect(c2.no).toBe('CL-202603-002');
+    expect(a.no).toBe('CL6903010001');
+    expect(b.no).toBe('VC6903010001');
+    expect(c2.no).toBe('CL6903010002');
   });
 
   it('ประเภทของอีกทิศทางใส่ไม่ได้ ฐานข้อมูลกันไว้อีกชั้น', async () => {

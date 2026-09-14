@@ -1,3 +1,4 @@
+import { barcodeAliases } from '@drivegolight/core';
 import type pg from 'pg';
 
 /**
@@ -30,9 +31,11 @@ export async function findByScanWith(c: Client, term: string): Promise<ScanHit> 
   const v = term.trim();
   if (!v) return { kind: 'none' };
 
+  /* รูปแบบเทียบเท่าที่ปืนต่างรุ่นส่งมา — UPC-A 12 หลัก ↔ EAN-13 นำ 0 · GTIN-14 นำ 0 */
+  const aliases = barcodeAliases(v).map((a) => a.toUpperCase());
   const exact = await c.query(
     `select id, active, code, name from products
-      where upper(barcode) = upper($1)
+      where upper(barcode) = any($2)
          or upper(code) = upper($1)
          or upper(oem) = upper($1)
       /* **ตัวที่ยังเปิดใช้งานมาก่อนเสมอ** แล้วค่อยเรียงตามชนิดที่ตรง —
@@ -40,10 +43,10 @@ export async function findByScanWith(c: Client, term: string): Promise<ScanHit> 
          ผลคือจะตอบว่า "ปิดใช้งานอยู่" ก็ต่อเมื่อไม่มีตัวที่เปิดใช้งานตรงเลย
          ซึ่งเป็นตอนที่คนยิงต้องรู้จริง ๆ */
       order by active desc,
-               case when upper(barcode) = upper($1) then 0
+               case when upper(barcode) = any($2) then 0
                     when upper(code) = upper($1) then 1 else 2 end
       limit 1`,
-    [v],
+    [v, aliases],
   );
 
   if (exact.rows[0]) {

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext, EXPENSE_CATS } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
@@ -25,7 +24,11 @@ export default async function BuyPrintPage({ params }: { params: Promise<{ id: s
   const cat = meta.expenseCat ? CAT[meta.expenseCat] : null;
   const paid = payments.reduce((s, p) => s + p.amount, 0);
   const remain = Math.round((doc.payable - paid) * 100) / 100;
-  const blankRows = Math.max(0, 8 - doc.items.length);
+  /* แบ่งหน้า A4 อัตโนมัติ: หน้าแรก 12 บรรทัด หน้าต่อไป 26 · ยอดรวม/ลายเซ็นอยู่หน้าสุดท้าย (ผู้ใช้กำหนด) */
+  const CAP1 = 12; const CAPN = 26;
+  const pages: typeof doc.items[] = [];
+  if (doc.items.length <= CAP1) pages.push(doc.items);
+  else { pages.push(doc.items.slice(0, CAP1)); for (let k = CAP1; k < doc.items.length; k += CAPN) pages.push(doc.items.slice(k, k + CAPN)); }
 
   const title = isPurchase ? 'ใบบันทึกซื้อสินค้า' : 'ใบบันทึกค่าใช้จ่าย';
   const en = isPurchase ? 'PURCHASE RECORD' : 'EXPENSE RECORD';
@@ -33,7 +36,6 @@ export default async function BuyPrintPage({ params }: { params: Promise<{ id: s
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href={`/expense/${id}`}>← กลับหน้าเอกสาร</Link>
         <div className="spacer" />
         <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>
           เอกสารภายในของอู่ ใช้แนบกับใบกำกับภาษีของผู้ขายเก็บเข้าแฟ้ม
@@ -42,7 +44,8 @@ export default async function BuyPrintPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div className="printview">
-        <div className="paper">
+        {pages.map((chunk, pi) => (
+        <div className="paper" key={pi}>
           <div className="doc-head">
             <div className="co">
               <b>{shop.name}</b>
@@ -104,7 +107,7 @@ export default async function BuyPrintPage({ params }: { params: Promise<{ id: s
               </tr>
             </thead>
             <tbody>
-              {doc.items.map((it) => (
+              {chunk.map((it) => (
                 <tr key={it.lineNo}>
                   <td style={{ textAlign: 'center' }}>{it.lineNo}</td>
                   {isPurchase ? <td>{it.code}</td> : null}
@@ -115,7 +118,7 @@ export default async function BuyPrintPage({ params }: { params: Promise<{ id: s
                   <td style={{ textAlign: 'right' }}>{baht(it.lineTotal)}</td>
                 </tr>
               ))}
-              {Array.from({ length: blankRows }).map((_, i) => (
+              {Array.from({ length: pi === pages.length - 1 ? Math.max(0, (pi === 0 ? 8 : CAPN) - chunk.length) : 0 }).map((_, i) => (
                 <tr key={`b-${i}`}>
                   <td className="blank">&nbsp;</td>
                   {isPurchase ? <td /> : null}
@@ -125,6 +128,7 @@ export default async function BuyPrintPage({ params }: { params: Promise<{ id: s
             </tbody>
           </table>
 
+          {pi === pages.length - 1 ? (<>
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
             <div className="box" style={{ flex: 1, marginTop: 0 }}>
               <h4>การจ่ายเงิน</h4>
@@ -214,7 +218,11 @@ export default async function BuyPrintPage({ params }: { params: Promise<{ id: s
             <span>จัดทำด้วยโปรแกรม DriveGoLight!</span>
             <span>www.drivebizbegin.com</span>
           </div>
+          </>) : (
+            <div style={{ fontSize: 10.5, marginTop: 10, color: '#555', textAlign: 'right' }}>ต่อหน้าถัดไป → (หน้า {pi + 1}/{pages.length})</div>
+          )}
         </div>
+        ))}
       </div>
     </>
   );

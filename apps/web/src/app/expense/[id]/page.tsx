@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext, EXPENSE_CATS } from '@drivegolight/core';
 import { can, requireTab } from '@/lib/auth';
@@ -40,7 +39,6 @@ export default async function BuyDocPage({
       current="/expense"
       title={isPurchase ? 'ใบซื้อสินค้า' : `ค่าใช้จ่าย — ${cat?.label ?? ''}`}
       sub={`เลขที่ ${doc.docNo} · ${thDateLong(doc.docDate)}`}
-      actions={<Link className="btn" href="/expense">← กลับรายการ</Link>}
     >
       {sp.saved ? (
         <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย — เลขที่ {sp.saved}</div>

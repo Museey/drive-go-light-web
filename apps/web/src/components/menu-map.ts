@@ -31,6 +31,20 @@ export interface SubItem {
   parent?: string;
 }
 
+/**
+ * การ์ด "สร้าง…" ในเมนูย่อย — สีอำพัน แยกจากเมนูย่อยปกติ
+ * ผู้ใช้ขอให้ทางเข้าสร้างเอกสารทุกชนิดอยู่ในคอลัมน์เมนูย่อย (ต่อท้ายเมนูย่อย
+ * หรือขึ้นก่อนสำหรับผู้ติดต่อ) ไม่ใช่ปุ่มที่หัวหน้าซึ่งมองข้ามง่าย
+ */
+export interface MenuAction {
+  no: string;
+  label: string;
+  href: string;
+  icon: IconName;
+  /** 'amber' (ค่าเริ่มต้น) = สร้างเอกสาร · 'neutral' = การ์ดตั้งค่า/เครื่องมือ */
+  tone?: 'amber' | 'neutral';
+}
+
 export interface MenuItem {
   key: string;
   no: string;
@@ -42,6 +56,10 @@ export interface MenuItem {
   /** null = ทุกคนเข้าได้ */
   perm: Perm | null;
   subs?: SubItem[];
+  /** การ์ดสร้างเอกสาร (สีอำพัน) */
+  actions?: MenuAction[];
+  /** วางการ์ดสร้างก่อนเมนูย่อย (ผู้ติดต่อ) หรือต่อท้าย (ค่าเริ่มต้น) */
+  actionsFirst?: boolean;
 }
 
 export const MENU: MenuItem[] = [
@@ -52,6 +70,11 @@ export const MENU: MenuItem[] = [
   {
     key: 'customer', no: '02', label: 'ข้อมูลลูกค้า / ผู้ขาย', desc: 'ทะเบียนลูกค้าและผู้ขาย',
     icon: 'people', color: '#5B3FBF', href: '/customers', perm: 'customer',
+    actions: [
+      { no: '02.0', label: '+ เพิ่มผู้ติดต่อ', href: '/customers/new?kind=customer', icon: 'addUser' },
+      { no: '02.3', label: 'นำเข้า / ส่งออก CSV', href: '/settings/import#contacts', icon: 'folder', tone: 'neutral' },
+    ],
+    actionsFirst: true,
     subs: [
       {
         key: 'customer', no: '02.1', label: 'ทะเบียนลูกค้า', desc: 'ผู้นำรถเข้าซ่อม',
@@ -91,11 +114,21 @@ export const MENU: MenuItem[] = [
         key: 'billing', no: '03.4', label: 'ใบวางบิล', desc: 'รวมใบค้างชำระแจ้งเก็บเงิน',
         icon: 'bill', color: '#B4720B', href: '/income/billing',
       },
+      {
+        /* ผู้ใช้ขอเป็นเมนูย่อยของตัวเอง: หน้าเดียวจบ — สร้างใบเสร็จขายหน้าร้าน + ประวัติขายหน้าร้านด้านบน
+           (ขายหน้าร้าน = ใบเสร็จที่ไม่มีใบเสนอราคา/ใบส่งมอบอ้างอิง) */
+        key: 'walkin', no: '03.5', label: 'ขายหน้าร้าน', desc: 'ลูกค้าเดินเข้ามาซื้อของจ่ายสด — ออกใบเสร็จทันที',
+        icon: 'receipt', color: '#B4720B', href: '/income/walkin',
+      },
     ],
   },
   {
     key: 'expense', no: '04', label: 'รายจ่าย', desc: 'ซื้อสินค้าและค่าใช้จ่าย',
     icon: 'cart', color: '#C25A18', href: '/expense', perm: 'expense',
+    actions: [
+      { no: '04.3', label: '+ ใบซื้อสินค้า', href: '/expense?kind=PO', icon: 'buy' },
+      { no: '04.4', label: '+ บันทึกค่าใช้จ่าย', href: '/expense?kind=EX', icon: 'bill' },
+    ],
     subs: [
       {
         key: 'purchase', no: '04.1', label: 'ซื้อสินค้า', desc: 'ซื้อของเข้าร้าน รับเข้าสต๊อก',
@@ -110,6 +143,11 @@ export const MENU: MenuItem[] = [
   {
     key: 'stock', no: '05', label: 'สินค้า', desc: 'สต๊อกและเตือนจุดสั่งซื้อ',
     icon: 'box', color: '#2E8B3D', href: '/stock', perm: 'stock',
+    actions: [
+      { no: '05.6', label: '+ เพิ่มรายการสินค้าใหม่', href: '/stock/new', icon: 'addBox' },
+      { no: '05.7', label: 'ตั้งค่าการแสดงผลรายการ', href: '/stock?cols=1', icon: 'gear', tone: 'neutral' },
+      { no: '05.9', label: 'นำเข้า / ส่งออก CSV', href: '/settings/import#products', icon: 'folder', tone: 'neutral' },
+    ],
     subs: [
       {
         key: 'list', no: '05.1', label: 'ทะเบียนสินค้า', desc: 'ทะเบียนสินค้าและสต๊อก',
@@ -169,6 +207,9 @@ export const MENU: MenuItem[] = [
   {
     key: 'settings', no: '07', label: 'ตั้งค่าร้าน', desc: 'ข้อมูลร้านและผู้ใช้งาน',
     icon: 'gear', color: '#5A6B76', href: '/settings', perm: 'settings',
+    actions: [
+      { no: '07.4', label: '+ เพิ่มพนักงาน', href: '/settings/users?new=1', icon: 'addUser' },
+    ],
     subs: [
       {
         key: 'shop', no: '07.1', label: 'ตั้งค่าร้าน', desc: 'ข้อมูลร้านบนหัวเอกสาร',
@@ -181,6 +222,11 @@ export const MENU: MenuItem[] = [
       {
         key: 'import', no: '07.3', label: 'นำข้อมูลเข้าระบบ', desc: 'นำเข้าและสำรองข้อมูล',
         icon: 'folder', color: '#1D8A5F', href: '/settings/import',
+      },
+      {
+        /* ถังขยะ: เอกสารที่ลบ/ยกเลิกทุกชนิด ค้นตามช่วงเวลาเท่านั้น กู้คืนได้ · ลบถาวรจากที่นี่กู้ไม่ได้ (ผู้ใช้กำหนด) */
+        key: 'trash', no: '07.5', label: 'เอกสารที่ลบ/ยกเลิก', desc: 'สำรองไว้ กู้คืนหรือลบถาวร',
+        icon: 'trash', color: '#B3382C', href: '/settings/trash',
       },
     ],
   },
@@ -195,7 +241,7 @@ export const MENU: MenuItem[] = [
  * แต่ในเว็บเราเป็นหน้าเดี่ยวที่ไม่มีแท็บย่อย เลยแยกออกมาไว้ท้ายแถบ
  */
 export const BLANK_FORM: MenuItem = {
-  key: 'blankform', no: '', label: 'แบบฟอร์มเปล่า', desc: 'แบบฟอร์มเขียนมือทุกชนิด',
+  key: 'blankform', no: '09', label: 'พิมพ์ฟอร์มเปล่า', desc: 'แบบฟอร์มเขียนมือทุกชนิด',
   icon: 'blank', color: '#B4720B', href: '/forms', perm: null,
 };
 

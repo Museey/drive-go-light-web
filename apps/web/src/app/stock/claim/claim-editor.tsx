@@ -1,7 +1,8 @@
 'use client';
 
-import { useActionState, useState, useTransition } from 'react';
-import { useFormStatus } from 'react-dom';
+import { useActionState, useState, useEffect } from 'react';
+import { useLiveSearch } from '@/components/use-live-search';
+import { ConfirmSave } from '@/components/confirm-save';
 import { saveClaimAction, searchClaimPartiesAction, searchClaimPartsAction } from './actions';
 import { VehicleFields } from '../../income/vehicle-fields';
 import { CLAIM_KINDS, CLAIM_SIDE, type ClaimSide } from '@/lib/claims';
@@ -39,14 +40,6 @@ const emptyLine = (): Line => ({
   productId: null, code: '', oem: '', name: '', unit: '', qty: 1, unitCost: 0, onHand: null,
 });
 
-function Submit() {
-  const { pending } = useFormStatus();
-  return (
-    <button className="btn primary" type="submit" disabled={pending}>
-      {pending ? 'กำลังบันทึกและตัดสต๊อก…' : 'บันทึกใบเคลม'}
-    </button>
-  );
-}
 
 export function ClaimEditor({ side, today }: { side: ClaimSide; today: string }) {
   const S = CLAIM_SIDE[side];
@@ -56,16 +49,20 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
   const [kind, setKind] = useState(kinds[0]!.key);
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [party, setParty] = useState<Party | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  useEffect(() => { if (state.error) setConfirm(false); }, [state]);
   /** -1 = ไม่ใช่รถในทะเบียน กรอกเอง */
   const [vehicleIdx, setVehicleIdx] = useState(-1);
   /** ภาพนิ่งของรถบนใบเคลมใบนี้ — แก้ได้ทุกช่อง ไม่กระทบทะเบียนรถ ยกเว้นเลขไมล์ */
   const [vehData, setVehData] = useState<Record<string, string>>({});
 
   const [partyQuery, setPartyQuery] = useState('');
-  const [partyHits, setPartyHits] = useState<Party[] | null>(null);
   const [partQuery, setPartQuery] = useState('');
-  const [partHits, setPartHits] = useState<Awaited<ReturnType<typeof searchClaimPartsAction>> | null>(null);
-  const [busy, start] = useTransition();
+  /* ค้นหาสด — พิมพ์แล้วขึ้นทันที ไม่ต้องกดปุ่ม (ข้อ 1) */
+  const { results: partyHits, busy: partyBusy, clear: clearParty } =
+    useLiveSearch(partyQuery, (q) => searchClaimPartiesAction(side, q) as Promise<Party[]>);
+  const { results: partHits, busy: partBusy, clear: clearParts } =
+    useLiveSearch(partQuery, searchClaimPartsAction);
 
   const setLine = (i: number, patch: Partial<Line>) =>
     setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -83,7 +80,7 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
   };
 
   const addPart = (p: NonNullable<typeof partHits>[number]) => {
-    setPartHits(null);
+    setPartQuery(''); clearParts();          /* เลือกแล้วล้างช่องค้น (ข้อ 2) */
     setPartQuery('');
     setLines((ls) => {
       const next = [...ls];
@@ -98,7 +95,8 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
   };
 
   return (
-    <form className="form" action={action}>
+    <form className="form" action={action}
+          onKeyDown={(e) => { const el = e.target as HTMLElement; if (e.key === 'Enter' && el.tagName === 'INPUT') e.preventDefault(); }}>
       <input type="hidden" name="side" value={side} />
       <input type="hidden" name="partyId" value={party?.id ?? ''} />
       <input type="hidden" name="vehicleId" value={side === 'customer' ? veh?.id ?? '' : ''} />
@@ -147,13 +145,10 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
                    onChange={(e) => setPartyQuery(e.target.value)}
                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                    placeholder={`ชื่อ${S.party} หรือรหัส`} />
-            <button className="btn" type="button" disabled={busy}
-                    onClick={() => start(async () => {
-                      setPartyHits(await searchClaimPartiesAction(side, partyQuery) as Party[]);
-                    })}>ค้นหา</button>
+            {partyBusy ? <span className="subtle">กำลังค้น…</span> : null}
           </div>
           {partyHits ? (
-            <div className="tablewrap" style={{ marginTop: 8, maxHeight: 200, overflowY: 'auto' }}>
+            <div className="tablewrap hits5" style={{ marginTop: 8 }}>
               <table className="tbl">
                 <tbody>
                   {partyHits.length === 0 ? (
@@ -161,13 +156,12 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
                       ไม่พบ{S.party} — พิมพ์ชื่อในช่องด้านล่างได้เลย
                     </td></tr>
                   ) : partyHits.map((p) => (
-                    <tr key={p.id}>
+                    /* กดได้ทั้งแถว (ข้อ 13) */
+                    <tr key={p.id} className="pick" role="button" tabIndex={0}
+                        onClick={() => { setParty(p); setVehicleIdx(0); setPartyQuery(''); clearParty(); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setParty(p); setVehicleIdx(0); setPartyQuery(''); clearParty(); } }}>
                       <td className="wrap">{p.name}</td>
                       <td className="mono">{p.tel || '-'}</td>
-                      <td><button className="btn" type="button"
-                                  onClick={() => { setParty(p); setVehicleIdx(0); setPartyHits(null); }}>
-                        เลือก
-                      </button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -228,23 +222,20 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
                    onChange={(e) => setPartQuery(e.target.value)}
                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                    placeholder="รหัส ชื่อ หรือรหัส OEM" />
-            <button className="btn" type="button" disabled={busy}
-                    onClick={() => start(async () => {
-                      setPartHits(await searchClaimPartsAction(partQuery));
-                    })}>ค้นหา</button>
+            {partBusy ? <span className="subtle">กำลังค้น…</span> : null}
           </div>
           {partHits ? (
-            <div className="tablewrap" style={{ marginTop: 8, maxHeight: 220, overflowY: 'auto' }}>
+            <div className="tablewrap hits5" style={{ marginTop: 8 }}>
               <table className="tbl">
                 <tbody>
                   {partHits.length === 0 ? (
                     <tr><td className="subtle">ไม่พบสินค้า</td></tr>
                   ) : partHits.map((p) => (
-                    <tr key={p.id}>
+                    <tr key={p.id} className="pick" role="button" tabIndex={0} onClick={() => addPart(p)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addPart(p); } }}>
                       <td className="mono">{p.code}</td>
                       <td className="wrap">{p.name}</td>
                       <td className="num">คงเหลือ {p.qtyOnHand}</td>
-                      <td><button className="btn" type="button" onClick={() => addPart(p)}>เลือก</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -356,9 +347,16 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
       </div>
 
       <div className="formbar">
-        <Submit />
+        <button className="btn primary" type="button" onClick={() => setConfirm(true)}>บันทึกใบเคลม</button>
         <span className="subtle">ตัดสต๊อก {lines.filter((l) => l.productId).length} รายการ</span>
       </div>
+
+      <ConfirmSave open={confirm} title={S.title} submitLabel="บันทึกและตัดสต๊อก" onEdit={() => setConfirm(false)}
+                   lines={[
+                     { label: S.party, value: party?.name ?? '(ไม่ระบุ)' },
+                     { label: 'รายการ', value: `${lines.filter((l) => l.productId || l.name).length} บรรทัด` },
+                     { label: 'ตัดสต๊อก', value: `${lines.filter((l) => l.productId).length} รายการ` },
+                   ]} />
     </form>
   );
 }

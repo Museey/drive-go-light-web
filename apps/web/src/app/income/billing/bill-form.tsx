@@ -1,7 +1,9 @@
 'use client';
 
-import { useActionState, useMemo, useState } from 'react';
-import { useFormStatus } from 'react-dom';
+import Link from 'next/link';
+
+import { useActionState, useMemo, useState, useEffect } from 'react';
+import { ConfirmSave } from '@/components/confirm-save';
 import { saveBillnoteAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 import type { OpenInvoice } from '@/lib/billnotes';
@@ -22,12 +24,6 @@ const thDate = (iso: string | null) => {
   return `${Number(d)}/${Number(m)}/${Number(y) + 543}`;
 };
 
-function Submit() {
-  const { pending } = useFormStatus();
-  return <button className="btn primary" type="submit" disabled={pending}>
-    {pending ? 'กำลังบันทึก…' : 'บันทึกใบวางบิล'}
-  </button>;
-}
 
 export interface Party {
   key: string;
@@ -40,8 +36,10 @@ export interface Party {
 }
 
 export function BillForm({
-  id, no, billDate, dueDate, byWhom, note, parties, invoices, selected, initialPartyKey, readOnly,
+  id, no, billDate, dueDate, byWhom, note, parties, invoices, selected, initialPartyKey, readOnly, returnTo,
 }: {
+  /** บันทึกแล้วกลับหน้าเดิมพร้อมปุ่มพิมพ์ */
+  returnTo?: string;
   id?: string;
   no?: string;
   billDate: string;
@@ -59,6 +57,9 @@ export function BillForm({
   const [state, action] = useActionState<FormResult, FormData>(saveBillnoteAction, {});
   const [partyKey, setPartyKey] = useState(initialPartyKey);
   const [picked, setPicked] = useState<string[]>(selected);
+  const [confirm, setConfirm] = useState(false);
+  const [printAfter, setPrintAfter] = useState(false);
+  useEffect(() => { if (state.error) setConfirm(false); }, [state]);
 
   const party = parties.find((p) => p.key === partyKey) ?? null;
 
@@ -81,8 +82,10 @@ export function BillForm({
   if (readOnly) return null;
 
   return (
-    <form className="form" action={action}>
+    <form className="form" action={action}
+          onKeyDown={(e) => { const el = e.target as HTMLElement; if (e.key === 'Enter' && el.tagName === 'INPUT') e.preventDefault(); }}>
       {id ? <input type="hidden" name="id" value={id} /> : null}
+      {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
       <input type="hidden" name="partyId" value={party?.partyId ?? ''} />
       <input type="hidden" name="partyName" value={party?.name ?? ''} />
       <input type="hidden" name="partyTaxId" value={party?.taxId ?? ''} />
@@ -192,9 +195,18 @@ export function BillForm({
       )}
 
       <div className="formbar">
-        <Submit />
+        <button className="btn primary" type="button" onClick={() => { setPrintAfter(false); setConfirm(true); }}>บันทึกใบวางบิล</button>
+        {id ? <Link className="btn amber" href={`/income/billing/${id}/print`} target="_blank" rel="noreferrer">🖨 พิมพ์เอกสาร</Link>
+          : <button className="btn amber" type="button" onClick={() => { setPrintAfter(true); setConfirm(true); }}>🖨 พิมพ์เอกสาร</button>}
+        {printAfter ? <input type="hidden" name="printAfter" value="1" /> : null}
         {no ? <span className="subtle">เลขที่ {no}</span> : null}
       </div>
+
+      <ConfirmSave open={confirm} title="ใบวางบิล" onEdit={() => setConfirm(false)}
+                   lines={[
+                     { label: 'ใบที่เลือก', value: `${picked.length} ใบ` },
+                     { label: 'ยอดรวม', value: baht(total) },
+                   ]} />
     </form>
   );
 }

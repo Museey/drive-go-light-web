@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { docNoPeriod, formatDocNo } from './doc-no';
 
 /**
  * ใบวางบิล — รวมใบแจ้งหนี้ที่ยังค้างของลูกค้ารายเดียวเป็นใบเดียวส่งไปแผนกการเงิน
@@ -21,6 +22,8 @@ export interface OpenInvoice {
   id: string;
   docNo: string;
   kind: string;
+  /** ใบเสร็จขายหน้าร้านแบบเครดิตก็วางบิลได้ — ใช้แยก IVT/IV ตามภาษี */
+  vatMode: string;
   docDate: string;
   dueDate: string | null;
   partyId: string | null;
@@ -66,7 +69,7 @@ export async function openInvoices(
   }
 
   const { rows } = await c.query(
-    `select d.id, d.doc_no, d.kind::text as kind, d.doc_date::text as doc_date,
+    `select d.id, d.doc_no, d.kind::text as kind, d.vat_mode::text as vat_mode, d.doc_date::text as doc_date,
             d.due_date::text as due_date, d.party_id, d.party_name,
             d.payable, coalesce(p.paid, 0) as paid,
             (select b.no from billnote_docs bd
@@ -86,6 +89,7 @@ export async function openInvoices(
     id: r.id,
     docNo: r.doc_no,
     kind: r.kind,
+    vatMode: r.vat_mode,
     docDate: r.doc_date,
     dueDate: r.due_date,
     partyId: r.party_id,
@@ -169,12 +173,17 @@ export async function listBillnotes(
   c: Client,
   opts: {
     search?: string; from?: string; to?: string;
+    vat?: 'yes' | 'no';
     page?: number; pageSize?: number;
   } = {},
 ): Promise<BillnoteListResult> {
   const params: unknown[] = [];
-  const where: string[] = [];
+  const where: string[] = [`b.purged_at is null`];
 
+  /* ใบวางบิล IVT = รวมใบส่งมอบที่มี VAT อย่างน้อยหนึ่งใบ · IV = ไม่มีใบที่มี VAT เลย */
+  /* IVT = มีใบที่คิด VAT อย่างน้อยหนึ่งใบ (ใบส่งมอบ หรือใบเสร็จขายหน้าร้านแบบเครดิตที่คิด VAT) · IV = ไม่มีใบที่คิด VAT เลย */
+  if (opts.vat === 'yes') where.push(`exists (select 1 from billnote_docs bd join documents d on d.id = bd.doc_id where bd.billnote_id = b.id and d.vat_mode <> 'none')`);
+  if (opts.vat === 'no') where.push(`not exists (select 1 from billnote_docs bd join documents d on d.id = bd.doc_id where bd.billnote_id = b.id and d.vat_mode <> 'none')`);
   if (opts.search?.trim()) {
     params.push(`%${opts.search.trim()}%`);
     where.push(`(b.no ilike $${params.length} or b.party_name ilike $${params.length})`);
@@ -308,11 +317,10 @@ export async function saveBillnote(
     );
     await c.query(`delete from billnote_docs where billnote_id = $1`, [id]);
   } else {
-    const ym = input.billDate.slice(0, 4) + input.billDate.slice(5, 7);
     const seq = await c.query(
-      `select next_billnote_no(current_tenant_id(), '') as n`,
+      `select next_billnote_no(current_tenant_id(), $1) as n`, [docNoPeriod(input.billDate)],
     );
-    no = `BN-${ym}-${String(seq.rows[0].n).padStart(3, '0')}`;
+    no = formatDocNo('BN', input.billDate, Number(seq.rows[0].n));
 
     const made = await c.query(
       `insert into billnotes (tenant_id, no, bill_date, due_date, party_id, party_name,

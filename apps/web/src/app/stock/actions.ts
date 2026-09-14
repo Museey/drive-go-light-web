@@ -1,5 +1,7 @@
 'use server';
 
+import { validateBarcode, type BarcodeType } from '@drivegolight/core';
+
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
@@ -14,6 +16,17 @@ import {
 } from '@/lib/mutate';
 import { setStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
 
+/** รายชื่อผู้ขายจากฟอร์ม (JSON) — กรองของเสีย ไม่ให้ค่าพัง ๆ ลงฐาน */
+function parseSuppliers(raw: string): { vendorId: string | null; name: string }[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return undefined;
+    return arr.slice(0, 20).map((x) => ({ vendorId: typeof x?.vendorId === 'string' && x.vendorId ? x.vendorId : null, name: String(x?.name ?? '').slice(0, 120) }))
+      .filter((x) => x.name.trim());
+  } catch { return undefined; }
+}
+
 export async function saveProductAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
   const id = str(fd, 'id') || undefined;
 
@@ -25,6 +38,26 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
   const name = str(fd, 'name');
   if (!name) return { error: 'ต้องกรอกชื่อสินค้า', field: 'name', values: kept };
 
+  /* เลือก "+ เพิ่มหมวดหมู่…" → สร้างหมวดจากชื่อที่พิมพ์ก่อน แล้วผูกสินค้าเข้าหมวดนั้น */
+  let categoryId: string | null = str(fd, 'categoryId') || null;
+  if (categoryId === '__new__') {
+    const newName = str(fd, 'newCategory').trim();
+    if (!newName) return { error: 'พิมพ์ชื่อหมวดหมู่ใหม่ก่อน', field: 'categoryId', values: kept };
+    categoryId = await createCategory(newName);
+  }
+
+  /* บาร์โค้ด: ตรวจตามระบบที่เลือก (หรือเดา) — เลขตรวจสอบผิดต้องรู้ตั้งแต่ตอนบันทึก ไม่ใช่ตอนยิงไม่ติดหน้าร้าน */
+  const rawBarcode = str(fd, 'barcode').trim();
+  const typeChoice = str(fd, 'barcodeType') || 'AUTO';
+  let barcode = rawBarcode;
+  let barcodeType: BarcodeType = 'CODE39';
+  if (rawBarcode) {
+    const chk = validateBarcode(rawBarcode, typeChoice as BarcodeType | 'AUTO');
+    if (!chk.ok) return { error: `บาร์โค้ดไม่ถูกต้อง — ${chk.error}`, field: 'barcode', values: kept };
+    barcode = chk.value;
+    barcodeType = chk.type!;
+  }
+
   let savedId: string;
   try {
     savedId = await saveProduct({
@@ -32,10 +65,13 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
       code,
       name,
       oem: str(fd, 'oem'),
-      barcode: str(fd, 'barcode'),
+      barcode,
+      barcodeType,
+      suppliers: parseSuppliers(str(fd, 'suppliers')),
       unit: str(fd, 'unit'),
-      categoryId: str(fd, 'categoryId') || null,
+      categoryId,
       lastCost: money(fd, 'lastCost'),
+      costMethod: (['FIFO', 'AVG', 'FEFO'].includes(str(fd, 'costMethod')) ? str(fd, 'costMethod') : 'FEFO') as 'FIFO' | 'AVG' | 'FEFO',
       priceA: money(fd, 'priceA'),
       priceB: money(fd, 'priceB'),
       priceC: money(fd, 'priceC'),

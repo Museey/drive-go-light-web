@@ -48,6 +48,12 @@ export async function saveBuyDocAction(_prev: FormResult, fd: FormData): Promise
   revalidatePath('/expense');
   revalidatePath('/stock');
   revalidatePath('/finance/ap');
+  if (fd.get('printAfter') === '1') redirect(`/expense/${saved.id}/print?saved=${encodeURIComponent(saved.docNo)}`);
+  const back = String(fd.get('returnTo') ?? '');
+  if (back.startsWith('/expense')) {
+    const sep = back.includes('?') ? '&' : '?';
+    redirect(`${back}${sep}saved=${encodeURIComponent(saved.docNo)}&savedId=${saved.id}`);
+  }
   redirect(`/expense/${saved.id}?saved=${encodeURIComponent(saved.docNo)}`);
 }
 

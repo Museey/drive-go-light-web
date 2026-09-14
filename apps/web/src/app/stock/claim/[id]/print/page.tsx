@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { query, requireTab } from '@/lib/auth';
 import { CLAIM_SIDE, getClaim, kindLabel } from '@/lib/claims';
@@ -27,7 +26,6 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href={`/stock/claim/${id}`}>← กลับใบเคลม</Link>
         <div className="spacer" />
         <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>
           เอกสารตัดสต๊อก ไม่ใช่ใบกำกับภาษี — ไม่มีการเรียกเก็บเงินตามใบนี้

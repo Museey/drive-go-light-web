@@ -17,6 +17,8 @@ export interface Vehicle {
   engineNo: string;
   chassisNo: string;
   mileage: string;
+  /** อื่นๆ — ชื่อผู้ขับ + เบอร์ (027) */
+  other?: string;
 }
 
 export interface ContactAddr {
@@ -184,7 +186,7 @@ export async function getContact(id: string): Promise<Contact | null> {
         id: v.id,
         brand: v.brand, model: v.model, year: v.year, color: v.color,
         plateA: v.plate_a, plateB: v.plate_b, plateProvince: v.plate_province,
-        engineNo: v.engine_no, chassisNo: v.chassis_no, mileage: v.mileage,
+        engineNo: v.engine_no, chassisNo: v.chassis_no, mileage: v.mileage, other: v.other ?? '',
       })),
     };
   });
@@ -316,18 +318,18 @@ export async function saveContact(input: ContactInput): Promise<string> {
       if (v.id) {
         await c.query(
           `update vehicles set brand=$2, model=$3, year=$4, color=$5, plate_a=$6, plate_b=$7,
-                  plate_province=$8, engine_no=$9, chassis_no=$10, mileage=$11
+                  plate_province=$8, engine_no=$9, chassis_no=$10, mileage=$11, other=$12
            where id=$1`,
           [v.id, v.brand, v.model, v.year, v.color, v.plateA, v.plateB,
-           v.plateProvince, v.engineNo, v.chassisNo, v.mileage],
+           v.plateProvince, v.engineNo, v.chassisNo, v.mileage, v.other ?? ''],
         );
       } else {
         await c.query(
           `insert into vehicles (tenant_id, contact_id, brand, model, year, color,
-                                 plate_a, plate_b, plate_province, engine_no, chassis_no, mileage)
-           values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                                 plate_a, plate_b, plate_province, engine_no, chassis_no, mileage, other)
+           values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
           [id, v.brand, v.model, v.year, v.color, v.plateA, v.plateB,
-           v.plateProvince, v.engineNo, v.chassisNo, v.mileage],
+           v.plateProvince, v.engineNo, v.chassisNo, v.mileage, v.other ?? ''],
         );
       }
     }

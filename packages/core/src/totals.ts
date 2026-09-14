@@ -21,8 +21,17 @@ export function isServiceItem(it: DocItem): boolean {
  * หมายเหตุ: sub / disc / base จงใจไม่ปัดทศนิยม เพื่อให้ผลตรงกับโปรแกรมเดิมทุกบาท
  * ค่าที่ปัดแล้วมีเฉพาะ net / vat / grand
  */
+/**
+ * มูลค่าบรรทัดหลังส่วนลดรายบรรทัด (ไม่ปัด — ปัดที่ยอดรวมเหมือนเดิม)
+ * discPct เกินช่วง 0–100 ถูกบีบเข้าช่วง ไม่ให้บรรทัดติดลบหรือเพิ่มมูลค่า
+ */
+export function lineAmount(it: DocItem): number {
+  const pct = Math.min(100, Math.max(0, num(it.discPct)));
+  return num(it.qty) * num(it.price) * (1 - pct / 100);
+}
+
 export function totalsOf(doc: TotalsInput, ctx: ShopContext): Totals {
-  const sub = doc.items.reduce((s, it) => s + num(it.qty) * num(it.price), 0);
+  const sub = doc.items.reduce((s, it) => s + lineAmount(it), 0);
   const disc = num(doc.discount);
   const base = Math.max(0, sub - disc);
   const rate = num(ctx.vatRate) / 100;
@@ -47,8 +56,8 @@ export function totalsOf(doc: TotalsInput, ctx: ShopContext): Totals {
  * ฐานภาษีหัก ณ ที่จ่าย = มูลค่าค่าแรงก่อน VAT หลังเฉลี่ยส่วนลดตามสัดส่วนแล้ว
  */
 export function whtBaseOf(doc: TotalsInput, ctx: ShopContext): number {
-  const sub = doc.items.reduce((s, it) => s + num(it.qty) * num(it.price), 0);
-  const svc = doc.items.filter(isServiceItem).reduce((s, it) => s + num(it.qty) * num(it.price), 0);
+  const sub = doc.items.reduce((s, it) => s + lineAmount(it), 0);
+  const svc = doc.items.filter(isServiceItem).reduce((s, it) => s + lineAmount(it), 0);
   if (svc <= 0 || sub <= 0) return 0;
 
   const share = svc / sub;

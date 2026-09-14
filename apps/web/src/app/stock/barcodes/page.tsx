@@ -1,5 +1,4 @@
-import Link from 'next/link';
-import { barcodeSVG, STOCK_FLAG_LABEL, toStockFlag } from '@drivegolight/core';
+import { barcodeSVGFor, STOCK_FLAG_LABEL, toStockFlag } from '@drivegolight/core';
 import { requireExport } from '@/lib/auth';
 import { listCategories, listProducts } from '@/lib/products';
 import { PrintButton } from '../../income/[id]/print/print-button';
@@ -78,7 +77,6 @@ export default async function BarcodeSheetPage({
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href={back}>← กลับหน้าสินค้า</Link>
 
         <form action="/stock/barcodes" method="get"
               style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -143,7 +141,7 @@ export default async function BarcodeSheetPage({
                     whiteSpace: 'nowrap', textOverflow: 'ellipsis',
                   }}>{p.name.slice(0, 30)}</div>
                   <div style={{ margin: '4px 2px 1px' }}
-                       dangerouslySetInnerHTML={{ __html: barcodeSVG(p.barcode!, 180, 44) }} />
+                       dangerouslySetInnerHTML={{ __html: barcodeSVGFor(p.barcode!, p.barcodeType, 180, 44) }} />
                   <div style={{ fontSize: 9.5, letterSpacing: '.12em' }}>{p.barcode}</div>
                   {p.priceA > 0 ? (
                     <div style={{ fontSize: 10.5 }}>{baht(p.priceA)} ฿</div>

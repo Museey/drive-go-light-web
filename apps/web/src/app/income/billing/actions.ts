@@ -18,7 +18,7 @@ export async function saveBillnoteAction(_prev: FormResult, fd: FormData): Promi
   const id = str(fd, 'id') || undefined;
   const docIds = fd.getAll('doc').map(String);
 
-  let saved: { id: string };
+  let saved: { id: string; no?: string };
   try {
     saved = await mutate('income', (c, userId) => saveBillnote(c, {
       id,
@@ -37,6 +37,12 @@ export async function saveBillnoteAction(_prev: FormResult, fd: FormData): Promi
   }
 
   revalidatePath('/income/billing');
+  if (fd.get('printAfter') === '1') redirect(`/income/billing/${saved.id}/print`);
+  const back = String(fd.get('returnTo') ?? '');
+  if (back.startsWith('/income/billing')) {
+    const sep = back.includes('?') ? '&' : '?';
+    redirect(`${back}${sep}saved=${encodeURIComponent(saved.no ?? saved.id)}&savedId=${saved.id}`);
+  }
   redirect(`/income/billing/${saved.id}?saved=1`);
 }
 

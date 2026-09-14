@@ -54,6 +54,9 @@ create table tenants (
   wht_rate        numeric(6,3) not null default 3,         -- % ค่าตั้งต้นของเอกสารขาย
   price_tier      char(1)      not null default 'A' check (price_tier in ('A','B','C')),
   logo_url        text,                                    -- ย้ายจาก base64 ไป object storage
+  owner_name      text        not null default '',           -- ชื่อเจ้าของกิจการ (023)
+  signature_url   text,                                    -- รูปลายเซ็นบนเอกสาร data URI (023)
+  bank_accounts   jsonb       not null default '[]'::jsonb,   -- บัญชีรับโอนหลายธนาคาร [{bank,no,name}] (026)
   -- บัญชีธนาคารของอู่ พิมพ์ลงบนใบเสร็จและใบวางบิล (ดู 014_shop_bank.sql)
   -- ไม่บังคับรูปแบบ เพราะแต่ละธนาคารเขียนเลขบัญชีไม่เหมือนกัน
   bank_name         text        not null default '',
@@ -65,6 +68,7 @@ create table tenants (
                     check (expiry_warn_days between 1 and 3650),
   proposer_name   text,
   warranty_text   text,
+  note_default    text        not null default '',   -- หมายเหตุมาตรฐาน ขึ้นในทุกเอกสารตอนสร้างใหม่ (021)
   ui_prefs        jsonb        not null default '{}'::jsonb,  -- DB.ui (เช่น stockHide)
   created_at      timestamptz  not null default now(),
   updated_at      timestamptz  not null default now(),
@@ -181,6 +185,7 @@ create table vehicles (
   engine_no       text        not null default '',
   chassis_no      text        not null default '',
   mileage         text        not null default '',
+  other           text        not null default '',           -- อื่นๆ ชื่อผู้ขับ+เบอร์ (027)
   last_service_on date,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
@@ -204,6 +209,8 @@ create table products (
   id              uuid primary key default gen_random_uuid(),
   tenant_id       uuid        not null references tenants(id) on delete cascade,
   code            text        not null,                    -- รหัสร้าน
+  cost_method     text        not null default 'FEFO' check (cost_method in ('FIFO', 'AVG', 'FEFO')),  -- วิธีคิดต้นทุนรายสินค้า (022)
+  barcode_type    text        not null default 'CODE39' check (barcode_type in ('EAN13', 'EAN8', 'UPCA', 'CODE39', 'CODE128')),  -- ระบบบาร์โค้ด (024)
   oem             text        not null default '',         -- รหัสผู้ผลิต
   -- บาร์โค้ด Code 39 สำหรับยิงเข้าใบตรวจนับ — ว่างได้หลายตัว แต่ห้ามซ้ำกัน
   barcode         text,
@@ -277,6 +284,9 @@ create table documents (
   -- แม้ vat_rate ของร้านจะถูกแก้ทีหลัง
   price_tier      char(1)     check (price_tier in ('A','B','C')),
   discount        numeric(14,2) not null default 0 check (discount >= 0),
+  -- ส่วนลดท้ายบิล: discount = บาทที่มีผลจริงเสมอ · mode/pct เก็บไว้ให้เปิดแก้แล้วเห็นเหมือนที่กรอก (020)
+  discount_mode   text        not null default 'baht' check (discount_mode in ('baht', 'pct')),
+  discount_pct    numeric(5,2) not null default 0 check (discount_pct >= 0 and discount_pct <= 100),
   vat_mode        vat_mode    not null default 'ex',
   vat_rate        numeric(6,3) not null default 0,
   wht_rate        numeric(6,3) not null default 0,
@@ -312,6 +322,7 @@ create table documents (
   note            text        not null default '',
   voided_at       timestamptz,
   voided_reason   text,
+  purged_at       timestamptz,                             -- ลบถาวรจากถังขยะ (028)
   created_by      uuid        references users(id) on delete set null,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
@@ -362,7 +373,8 @@ create table doc_items (
   -- วันหมดอายุที่คีย์บนบรรทัดใบซื้อ — ต้นทางของ stock_moves.expires_on (ดู 015_expiry.sql)
   expires_on      date,
   is_service      boolean     not null default false,      -- ค่าแรง = ฐานคำนวณภาษีหัก ณ ที่จ่าย
-  line_total      numeric(14,2) generated always as (round(qty * unit_price, 2)) stored,
+  disc_pct        numeric(5,2) not null default 0 check (disc_pct >= 0 and disc_pct <= 100),  -- ส่วนลดรายบรรทัด (020)
+  line_total      numeric(14,2) generated always as (round(qty * unit_price * (1 - disc_pct / 100), 2)) stored,
   unique (doc_id, line_no)
 );
 
@@ -559,6 +571,7 @@ create table billnotes (
   status          doc_status  not null default 'issued',
   voided_at       timestamptz,
   voided_reason   text,
+  purged_at       timestamptz,                             -- ลบถาวรจากถังขยะ (028)
   created_by      uuid        references users(id) on delete set null,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
@@ -1003,3 +1016,17 @@ begin
   end loop;
 end;
 $$;
+
+-- ---------- ผู้ขายของสินค้า (025) ----------
+create table product_suppliers (
+  id          uuid primary key default gen_random_uuid(),
+  tenant_id   uuid not null references tenants(id) on delete cascade,
+  product_id  uuid not null references products(id) on delete cascade,
+  vendor_id   uuid references contacts(id) on delete set null,
+  name        text not null,
+  sort_order  int  not null default 0
+);
+create index product_suppliers_product_idx on product_suppliers (tenant_id, product_id, sort_order);
+alter table product_suppliers enable row level security;
+create policy product_suppliers_tenant on product_suppliers
+  using (tenant_id = current_tenant_id()) with check (tenant_id = current_tenant_id());

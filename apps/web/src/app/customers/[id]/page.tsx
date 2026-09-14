@@ -34,7 +34,6 @@ export default async function ContactPage({
       current="/customers"
       title={isNew ? 'เพิ่มผู้ติดต่อใหม่' : contact!.displayName || contact!.code}
       sub={isNew ? undefined : `${contact!.code} · ${contact!.kind === 'vendor' ? 'ผู้ขาย' : 'ลูกค้า'}`}
-      actions={<Link className="btn" href="/customers">← กลับทะเบียน</Link>}
     >
       {sp.saved ? <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย</div> : null}
       {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}

@@ -17,13 +17,15 @@ import type { BLANK_FORM } from './nav-data';
  * เลื่อนตามต่อ ซึ่งทำให้ปิดลิ้นชักแล้วอยู่คนละที่กับตอนเปิด
  */
 export function NavDrawer({
-  items, blank, current, name, role, open, onClose,
+  items, blank, current, name, role, note, open, onClose,
 }: {
   items: NavItem[];
   blank: typeof BLANK_FORM;
   current: string;
   name: string;
   role: string;
+  /** บรรทัดสองใต้ชื่อ เช่น นับถอยหลังวันหมดอายุ */
+  note?: React.ReactNode;
   open: boolean;
   onClose: () => void;
 }) {
@@ -96,6 +98,7 @@ export function NavDrawer({
 
           <div className="foot">
             <span className="who">{name} · {role}</span>
+            {note}
             <form action="/logout" method="post">
               <button type="submit" className="signout" style={{ width: '100%' }}>
                 ออกจากระบบ

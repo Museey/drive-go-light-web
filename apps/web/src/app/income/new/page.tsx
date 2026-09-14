@@ -5,10 +5,9 @@ import { today } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
-import {
-  getDefaultWarranty, loadDocForCopy, lotExpiryOf, openDocsFor, pickContactById, resolveSourceForNew,
-  WALK_IN_CUSTOMER, type SalesDocInput, type SalesKind,
-} from '@/lib/sales';
+import { blankSalesDoc,
+  getDefaultNote, getDefaultWarranty, loadDocForCopy, lotExpiryOf, openDocsFor, pickContactById, resolveSourceForNew,
+  WALK_IN_CUSTOMER, type SalesDocInput, type SalesKind, peekDocSeq } from '@/lib/sales';
 import { PickSource } from './pick-source';
 import { pickSourceTarget } from '@/lib/doc-flow';
 import { KIND_LABEL } from '@/lib/format';
@@ -19,26 +18,6 @@ export const dynamic = 'force-dynamic';
 const KINDS: SalesKind[] = ['QT', 'IVT', 'IV', 'RC'];
 
 
-function blank(kind: SalesKind, warranty: string, whtRate: number): SalesDocInput {
-  return {
-    kind,
-    docDate: today(),
-    parentDocId: null,
-    partyId: null, partyType: 'person', partyName: '', partyTaxId: '',
-    partyTel: '', partyEmail: '', partyAddr: {}, partyAddrText: '',
-    vehicleId: null, vehicle: null,
-    priceTier: 'A',
-    discount: 0,
-    vatMode: kind === 'IVT' ? 'ex' : kind === 'IV' ? 'none' : 'ex',
-    whtRate: kind === 'QT' ? 0 : whtRate,
-    creditDays: 0,
-    complaints: ['', '', ''], findings: ['', '', ''],
-    approver: '', proposer: '',
-    warrantyText: kind === 'RC' ? warranty : '',
-    receivedBy: '', note: '',
-    items: [], payments: [],
-  };
-}
 
 export default async function NewDocPage({
   searchParams,
@@ -79,8 +58,7 @@ export default async function NewDocPage({
     const search = sp.q ?? '';
     const rows = await openDocsFor(pickTarget, search);
     return (
-      <Shell doc current="/income" title={`ออก${KIND_LABEL[kind]}`}
-             actions={<Link className="btn" href="/income">← กลับรายการ</Link>}>
+      <Shell doc current="/income" title={`ออก${KIND_LABEL[kind]}`}>
         <PickSource target={pickTarget} kind={kind} rows={rows} search={search} />
       </Shell>
     );
@@ -91,15 +69,18 @@ export default async function NewDocPage({
     ? await resolveSourceForNew(sp.from, kind)
     : { sourceId: sp.from ?? '', movedTo: null };
 
-  const [shop, warranty, source, party] = await Promise.all([
+  const [shop, warranty, noteDefault, source, party] = await Promise.all([
     getShop(),
     getDefaultWarranty(),
+    getDefaultNote(),
     sp.from ? loadDocForCopy(resolved.sourceId || sp.from, copying) : Promise.resolve(null),
     /* เปิดใบจากแถวทะเบียนลูกค้า — ต้องได้ผลเหมือนกดเลือกจากช่องค้นหาทุกช่อง */
     sp.party && !sp.from ? pickContactById(sp.party) : Promise.resolve(null),
   ]);
 
-  let initial = blank(kind, warranty, shop.whtRate);
+  let initial = blankSalesDoc(kind, warranty, shop.whtRate);
+  /* หมายเหตุมาตรฐานของร้าน — เฉพาะใบใหม่ที่ยังว่าง ใบที่ออกต่อจากใบอื่นเอาหมายเหตุของต้นทางมา */
+  initial = { ...initial, note: initial.note || noteDefault };
 
   if (walkin) initial = { ...initial, partyName: WALK_IN_CUSTOMER };
 
@@ -171,8 +152,9 @@ export default async function NewDocPage({
       ) : null}
 
       <DocEditor initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="new"
+                 docNoPreview={{ seq: await peekDocSeq(kind, initial.docDate), month: initial.docDate.slice(0, 7) }}
                  lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
-                 cashOnOpen={walkin} />
+                 cashOnOpen={walkin} banks={shop.bankAccounts} />
     </Shell>
   );
 }

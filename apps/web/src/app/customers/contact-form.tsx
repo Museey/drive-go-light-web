@@ -28,7 +28,7 @@ const BRANDS = [
 
 const emptyVehicle = (): Vehicle => ({
   brand: '', model: '', year: '', color: '',
-  plateA: '', plateB: '', plateProvince: '',
+  plateA: '', plateB: '', plateProvince: '', other: '',
   engineNo: '', chassisNo: '', mileage: '',
 });
 
@@ -80,9 +80,8 @@ export function ContactForm({
           <label>บันทึกเป็น</label>
           <div className="tag-row">
             {(['customer', 'vendor'] as const).map((k) => (
-              <button key={k} type="button" className="btn"
-                      onClick={() => setKind(k)}
-                      style={kind === k ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
+              <button key={k} type="button" className="tile" aria-current={kind === k}
+                      onClick={() => setKind(k)}>
                 {k === 'customer' ? 'ลูกค้า' : 'ผู้ขาย'}
               </button>
             ))}
@@ -92,9 +91,8 @@ export function ContactForm({
           <label>ประเภท</label>
           <div className="tag-row">
             {(['person', 'company'] as const).map((t) => (
-              <button key={t} type="button" className="btn"
-                      onClick={() => setType(t)}
-                      style={type === t ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
+              <button key={t} type="button" className="tile" aria-current={type === t}
+                      onClick={() => setType(t)}>
                 {t === 'person' ? 'บุคคลธรรมดา' : 'นิติบุคคล'}
               </button>
             ))}
@@ -283,7 +281,7 @@ export function ContactForm({
             </div>
           </div>
 
-          <div className="row-fields f2">
+          <div className="row-fields f3">
             <div className="field">
               <label>เลขเครื่องยนต์</label>
               <input className="in mono" name={`veh[${i}][engineNo]`} defaultValue={val(`veh[${i}][engineNo]`, v.engineNo)} />
@@ -291,6 +289,10 @@ export function ContactForm({
             <div className="field">
               <label>เลขตัวถัง</label>
               <input className="in mono" name={`veh[${i}][chassisNo]`} defaultValue={val(`veh[${i}][chassisNo]`, v.chassisNo)} />
+            </div>
+            <div className="field">
+              <label>อื่นๆ (ชื่อผู้ขับ + เบอร์)</label>
+              <input className="in" name={`veh[${i}][other]`} defaultValue={val(`veh[${i}][other]`, v.other ?? '')} placeholder="เช่น คุณเอก 08x-xxx-xxxx" />
             </div>
           </div>
         </div>

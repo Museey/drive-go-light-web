@@ -1,9 +1,9 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext, whtBaseOf } from '@drivegolight/core';
 import { BankLine } from '@/components/bank-line';
 import { requireTab } from '@/lib/auth';
 import { getDocDetail, getShop } from '@/lib/queries';
+import { getShopSettings } from '@/lib/settings';
 import { payAtIssue } from '@/lib/print';
 import { baht, thDate, thDateLong } from '@/lib/format';
 import { PrintButton } from './print-button';
@@ -44,7 +44,7 @@ const Slot = ({ value }: { value: number }) => (
 export default async function PrintPage({ params }: { params: Promise<{ id: string }> }) {
   await requireTab('income', 'receipt');
   const { id } = await params;
-  const [doc, shop] = await Promise.all([getDocDetail(id), getShop()]);
+  const [doc, shop, brand] = await Promise.all([getDocDetail(id), getShop(), getShopSettings()]);
   if (!doc) notFound();
 
   const K = KINDS[doc.kind] ?? KINDS.RC!;
@@ -54,7 +54,7 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
      ตารางเอกสารไม่ได้เก็บค่านี้ไว้ จึงคำนวณใหม่จากบรรทัดรายการด้วยสูตรเดียวกับที่ออกเอกสาร */
   const whtBase = whtBaseOf(
     {
-      items: doc.items.map((it) => ({ qty: it.qty, price: it.unitPrice, svc: it.isService })),
+      items: doc.items.map((it) => ({ qty: it.qty, price: it.unitPrice, svc: it.isService, discPct: it.discPct })),
       discount: doc.discount,
       vatMode: doc.vatMode as 'none' | 'ex' | 'in',
     },
@@ -63,12 +63,22 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
   const v = doc.vehicle ?? {};
 
   /* เติมแถวว่างให้ตารางสูงพอดีหน้ากระดาษ ไม่ให้ดูโหรงเหรง */
-  const blankRows = Math.max(0, 7 - doc.items.length);
+  /* ความจุบรรทัดต่อหน้า: หน้าแรกมีกรอบลูกค้า/รถ (+อาการ สำหรับใบเสนอราคา) จึงจุน้อยกว่า หน้าต่อไปจุ 26 */
+  const CAP1 = doc.kind === 'QT' ? 8 : 12;
+  const CAPN = 26;
+  const pages: typeof doc.items[] = [];
+  if (doc.items.length <= CAP1) pages.push(doc.items);
+  else {
+    pages.push(doc.items.slice(0, CAP1));
+    for (let k = CAP1; k < doc.items.length; k += CAPN) pages.push(doc.items.slice(k, k + CAPN));
+  }
+
+  /* คอลัมน์ส่วนลดรายบรรทัดขึ้นเฉพาะใบที่มีจริง — ใบทั่วไปหน้ากระดาษไม่เปลี่ยน */
+  const hasLineDisc = doc.items.some((it) => it.discPct > 0);
 
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href={`/income/${doc.id}`}>← กลับหน้าเอกสาร</Link>
         <div className="spacer" />
         <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>
           กระดาษ A4 · ตั้งค่าเครื่องพิมพ์ให้ขอบกระดาษเป็น &quot;ไม่มี&quot; หรือ &quot;ต่ำสุด&quot;
@@ -77,9 +87,15 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <div className="printview">
-        <div className="paper">
+        {/* แบ่งหน้า A4 อัตโนมัติ: รายการเกินหน้าแรกขึ้นหน้าใหม่ (หัวเอกสารซ้ำทุกหน้า กรอบลูกค้า/รถ/อาการเฉพาะหน้าแรก ยอดรวม/ลายเซ็นหน้าสุดท้าย) */}
+        {pages.map((chunk, pi) => (
+        <div className="paper" key={pi}>
           {/* ---------- หัวเอกสาร ---------- */}
           <div className="doc-head">
+            {brand.logoUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img className="lg" src={brand.logoUrl} alt="" />
+            ) : null}
             <div className="co">
               <b>{shop.name}</b>
               <div>{shop.addrText || ''}</div>
@@ -91,46 +107,49 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
             <div className="doc-meta">
               <h1>{K.title}</h1>
               <div style={{ fontSize: 11, letterSpacing: '.08em' }}>{K.en}</div>
-              <table style={{ marginTop: 4 }}>
-                <tbody>
-                  <tr><td>เลขที่</td><td style={{ textAlign: 'right' }}><b>{doc.docNo}</b></td></tr>
-                  <tr><td>วันที่</td><td style={{ textAlign: 'right' }}>{thDateLong(doc.docDate)}</td></tr>
-                  <tr>
-                    <td>อ้างอิง</td>
-                    <td style={{ textAlign: 'right' }}>{doc.refDocNo || doc.parent?.docNo || '-'}</td>
-                  </tr>
-                  {isInvoice(doc.kind) ? (
-                    <tr><td>ครบกำหนด</td><td style={{ textAlign: 'right' }}>{thDateLong(doc.dueDate)}</td></tr>
-                  ) : null}
-                </tbody>
-              </table>
+              <div className="docno-big">{doc.docNo}</div>
+              {pages.length > 1 ? <div style={{ fontSize: 11 }}>หน้า {pi + 1} / {pages.length}</div> : null}
             </div>
           </div>
 
-          {/* ---------- คู่ค้า ---------- */}
-          <div className="box">
-            <h4>{K.party}</h4>
-            <div className="kv">
-              <b>ชื่อ:</b><span>{doc.partyName || '-'}</span>
-              <b>ประเภท:</b><span>{doc.partyType === 'company' ? 'นิติบุคคล' : 'บุคคลธรรมดา'}</span>
+          {pi === 0 ? (
+            <>
+          {/* ---------- กรอบ 1: ลูกค้า | ข้อมูลเอกสาร (ผู้ใช้กำหนด) ---------- */}
+          <div className="box party2">
+            <div>
+              <h4>{K.party}</h4>
+              <div className="kv"><b>ชื่อ:</b><span>{doc.partyName || '-'}</span></div>
+              <div className="kv"><b>ที่อยู่:</b><span>{doc.partyAddrText || '-'}</span></div>
+              <div className="kv"><b>เลขประจำตัวผู้เสียภาษี:</b><span className="mono">{doc.partyTaxId || '-'}</span></div>
+              <div className="kv"><b>โทร:</b><span className="mono">{doc.partyTel || '-'}</span>{doc.partyEmail ? <><b>อีเมล:</b><span>{doc.partyEmail}</span></> : null}</div>
             </div>
-            <div className="kv"><b>ที่อยู่:</b><span>{doc.partyAddrText || '-'}</span></div>
-            <div className="kv">
-              <b>เลขประจำตัวผู้เสียภาษี:</b><span>{doc.partyTaxId || '-'}</span>
-              <b>โทร:</b><span>{doc.partyTel || '-'}</span>
-              <b>อีเมล:</b><span>{doc.partyEmail || '-'}</span>
+            <div>
+              <h4>ข้อมูลเอกสาร</h4>
+              <div className="kv"><b>เลขที่:</b><span className="mono" style={{ fontWeight: 700 }}>{doc.docNo}</span></div>
+              <div className="kv"><b>วันที่:</b><span>{thDateLong(doc.docDate)}</span></div>
+              <div className="kv"><b>อ้างอิง:</b><span className="mono">{doc.refDocNo || doc.parent?.docNo || '-'}</span></div>
+              {doc.kind !== 'QT' ? (
+                <>
+                  <div className="kv"><b>เงื่อนไขชำระเงิน:</b><span>{doc.creditDays > 0 ? `เครดิต ${doc.creditDays} วัน` : 'เงินสด'}</span></div>
+                  <div className="kv"><b>วันครบกำหนดชำระ:</b><span>{doc.creditDays > 0 ? thDateLong(doc.dueDate) : '-'}</span></div>
+                </>
+              ) : (
+                <div className="kv"><b>ยืนราคา:</b><span>30 วัน</span></div>
+              )}
             </div>
-            <div className="kv">
-              <b>รถยนต์:</b>
-              <span>
-                {[v.brand, v.model, v.color].filter(Boolean).join(' ')} ทะเบียน{' '}
-                {[v.plateA, v.plateB, v.plateProv].filter(Boolean).join(' ') || '-'}
-                {v.mileage ? ` · เลขไมล์ ${v.mileage}` : ''}
-              </span>
-            </div>
-            <div className="kv">
-              <b>เลขเครื่องยนต์:</b><span>{v.engineNo || '-'}</span>
-              <b>เลขตัวถัง:</b><span>{v.chassisNo || '-'}</span>
+          </div>
+
+          {/* ---------- กรอบ 2: รถยนต์ที่เข้ารับบริการ (เต็มความกว้าง 3 คอลัมน์) ---------- */}
+          <div className="box veh3">
+            <h4>รถยนต์ที่เข้ารับบริการ</h4>
+            <div className="g3">
+              <div className="kv"><b>ยี่ห้อ / รุ่น:</b><span>{[v.brand, v.model].filter(Boolean).join(' ') || '-'}</span></div>
+              <div className="kv"><b>ปี / สี:</b><span>{[v.year, v.color].filter(Boolean).join(' / ') || '-'}</span></div>
+              <div className="kv"><b>ทะเบียน:</b><span className="mono" style={{ fontWeight: 700 }}>{[v.plateA, v.plateB].filter(Boolean).join(' ') || '-'}{(v.plateProv || v.plateProvince) ? ` ${v.plateProv || v.plateProvince}` : ''}</span></div>
+              <div className="kv"><b>เลขไมล์:</b><span className="mono">{v.mileage ? `${Number(v.mileage).toLocaleString('en-US')} กม.` : '-'}</span></div>
+              <div className="kv"><b>เลขเครื่องยนต์:</b><span className="mono">{v.engineNo || '-'}</span></div>
+              <div className="kv"><b>เลขตัวถัง:</b><span className="mono">{v.chassisNo || '-'}</span></div>
+              {v.other ? <div className="kv"><b>อื่นๆ:</b><span>{v.other}</span></div> : null}
             </div>
           </div>
 
@@ -138,17 +157,20 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
           {doc.kind === 'QT' ? (
             <>
               <div className="box">
-                <h4>ปัญหาที่ลูกค้าแจ้ง</h4>
-                {(doc.complaints.length ? doc.complaints : ['', '', '']).map((c, i) => (
+                <h4>อาการที่แจ้ง</h4>
+                {[0, 1, 2].map((i) => doc.complaints[i] ?? '').map((c, i) => (
                   <div className="kv" key={i}><b>{i + 1}.</b><span>{c || ' '}</span></div>
                 ))}
               </div>
               <div className="box">
-                <h4>ปัญหาที่อู่ตรวจพบ</h4>
-                {(doc.findings.length ? doc.findings : ['', '', '']).map((f, i) => (
+                <h4>อาการที่ตรวจพบ</h4>
+                {[0, 1, 2].map((i) => doc.findings[i] ?? '').map((f, i) => (
                   <div className="kv" key={i}><b>{i + 1}.</b><span>{f || ' '}</span></div>
                 ))}
               </div>
+            </>
+          ) : null}
+
             </>
           ) : null}
 
@@ -161,21 +183,23 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
                 <th>รายการ</th>
                 <th style={{ width: 50 }}>จำนวน</th>
                 <th style={{ width: 80 }}>ราคา/หน่วย</th>
+                {hasLineDisc ? <th style={{ width: 54 }}>ส่วนลด</th> : null}
                 <th style={{ width: 90 }}>จำนวนเงิน</th>
               </tr>
             </thead>
             <tbody>
-              {doc.items.map((it) => (
+              {chunk.map((it) => (
                 <tr key={it.lineNo}>
                   <td style={{ textAlign: 'center' }}>{it.lineNo}</td>
                   <td>{it.code}</td>
                   <td>{it.name}</td>
                   <td style={{ textAlign: 'right' }}>{it.qty.toLocaleString('en-US')}</td>
                   <td style={{ textAlign: 'right' }}>{baht(it.unitPrice)}</td>
+                  {hasLineDisc ? <td style={{ textAlign: 'right' }}>{it.discPct > 0 ? `${it.discPct}%` : ''}</td> : null}
                   <td style={{ textAlign: 'right' }}>{baht(it.lineTotal)}</td>
                 </tr>
               ))}
-              {Array.from({ length: blankRows }).map((_, i) => (
+              {Array.from({ length: pi === pages.length - 1 ? Math.max(0, (pi === 0 ? CAP1 : CAPN) - chunk.length) : 0 }).map((_, i) => (
                 <tr key={`blank-${i}`}>
                   <td className="blank">&nbsp;</td><td /><td /><td /><td /><td />
                 </tr>
@@ -183,6 +207,8 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
             </tbody>
           </table>
 
+          {pi === pages.length - 1 ? (
+            <>
           {/* ---------- การชำระเงิน + ยอดรวม ---------- */}
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
             <div className="box" style={{ flex: 1, marginTop: 0 }}>
@@ -250,7 +276,7 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
             <table className="doc" style={{ width: '46%', marginTop: 0 }}>
               <tbody>
                 <tr><td>รวมเป็นเงิน</td><td style={{ textAlign: 'right', width: 96 }}>{baht(doc.subtotal)}</td></tr>
-                <tr><td>ส่วนลด</td><td style={{ textAlign: 'right' }}>{baht(doc.discount)}</td></tr>
+                <tr><td>ส่วนลด{doc.discountMode === 'pct' && doc.discountPct > 0 ? ` ${doc.discountPct}%` : ''}</td><td style={{ textAlign: 'right' }}>{baht(doc.discount)}</td></tr>
                 {doc.vatMode !== 'none' ? (
                   <>
                     <tr><td>มูลค่าก่อนภาษี</td><td style={{ textAlign: 'right' }}>{baht(doc.netAmount)}</td></tr>
@@ -299,10 +325,15 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
           {/* ---------- ลายเซ็น ---------- */}
           <div className="sign">
             <div>
+              {/* ลายเซ็นที่ตั้งไว้ในข้อมูลร้าน — มีก็พิมพ์ทับเส้น ไม่มีก็เว้นให้เซ็นมือ */}
+              {brand.signatureUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={brand.signatureUrl} alt="" style={{ height: 26, objectFit: 'contain', display: 'block', margin: '0 auto -26px' }} />
+              ) : null}
               <div className="line" />{K.signer}
               <br />
               <span style={{ fontSize: 11 }}>
-                ( {(doc.kind === 'QT' ? doc.proposer : doc.receivedBy) || '.'.repeat(24)} )
+                ( {(doc.kind === 'QT' ? doc.proposer : doc.receivedBy) || brand.ownerName || '.'.repeat(24)} )
               </span>
             </div>
             <div>
@@ -325,7 +356,12 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
             <span>จัดทำด้วยโปรแกรม DriveGoLight!</span>
             <span>www.drivebizbegin.com</span>
           </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 10.5, marginTop: 10, color: '#555', textAlign: 'right' }}>ต่อหน้าถัดไป →</div>
+          )}
         </div>
+        ))}
       </div>
     </>
   );

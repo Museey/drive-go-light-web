@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { requireOperator } from '@/lib/ops-auth';
 import { OpsShell } from '../ops-shell';
 import { NewShopForm } from './form';
@@ -13,7 +12,6 @@ export default async function NewShopPage() {
       current="/ops"
       email={session.email}
       title="เปิดอู่ใหม่"
-      actions={<Link className="btn" href="/ops">← กลับรายชื่ออู่</Link>}
     >
       <div className="card">
         <header><h2>ข้อมูลอู่และเจ้าของ</h2></header>

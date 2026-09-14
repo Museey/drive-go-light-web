@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext } from '@drivegolight/core';
 import { BankLine } from '@/components/bank-line';
@@ -21,12 +20,16 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
   if (!data) notFound();
 
   const { note, docs } = data;
-  const blankRows = Math.max(0, 8 - docs.length);
+  /* แบ่งหน้า A4: หน้าแรก 14 ใบ หน้าต่อไป 28 ใบ · ยอดรวม/ลายเซ็นหน้าสุดท้าย */
+  const CAP1 = 14; const CAPN = 28;
+  const pages: typeof docs[] = [];
+  if (docs.length <= CAP1) pages.push(docs);
+  else { pages.push(docs.slice(0, CAP1)); for (let k = CAP1; k < docs.length; k += CAPN) pages.push(docs.slice(k, k + CAPN)); }
+  let runningIndex = 0;
 
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href={`/income/billing/${id}`}>← กลับใบวางบิล</Link>
         <div className="spacer" />
         <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>
           เอกสารแจ้งเก็บเงิน ไม่ใช่ใบกำกับภาษี — ยอดคิดจากที่ค้างอยู่ ณ วันที่พิมพ์
@@ -35,7 +38,8 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
       </div>
 
       <div className="printview">
-        <div className="paper">
+        {pages.map((chunk, pi) => { const start = runningIndex; runningIndex += chunk.length; return (
+        <div className="paper" key={pi}>
           <div className="doc-head">
             <div className="co">
               <b>{shop.name}</b>
@@ -88,9 +92,9 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
               </tr>
             </thead>
             <tbody>
-              {docs.map((d, i) => (
+              {chunk.map((d, i) => (
                 <tr key={d.id}>
-                  <td style={{ textAlign: 'center' }}>{i + 1}</td>
+                  <td style={{ textAlign: 'center' }}>{start + i + 1}</td>
                   <td>{d.docNo}</td>
                   <td>{thDate(d.docDate)}</td>
                   <td>{thDate(d.dueDate)}</td>
@@ -98,12 +102,13 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
                   <td style={{ textAlign: 'right' }}>{baht(d.outstanding)}</td>
                 </tr>
               ))}
-              {Array.from({ length: blankRows }).map((_, i) => (
+              {Array.from({ length: pi === pages.length - 1 ? Math.max(0, (pi === 0 ? 8 : CAPN) - chunk.length) : 0 }).map((_, i) => (
                 <tr key={`b-${i}`}>
                   <td className="blank">&nbsp;</td><td /><td /><td /><td /><td />
                 </tr>
               ))}
             </tbody>
+            {pi === pages.length - 1 ? (
             <tfoot>
               <tr>
                 <td colSpan={5} style={{ textAlign: 'right', background: '#EDEFF1' }}>
@@ -114,7 +119,9 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
                 </td>
               </tr>
             </tfoot>
+            ) : null}
           </table>
+          {pi === pages.length - 1 ? (<>
 
           <div style={{ fontSize: 11.5, marginTop: 6 }}>
             จำนวนเงิน (ตัวอักษร) <b>{bahttext(note.total)}</b>
@@ -153,7 +160,11 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
             <span>จัดทำด้วยโปรแกรม DriveGoLight!</span>
             <span>www.drivebizbegin.com</span>
           </div>
+          </>) : (
+            <div style={{ fontSize: 10.5, marginTop: 10, color: '#555', textAlign: 'right' }}>ต่อหน้าถัดไป → (หน้า {pi + 1}/{pages.length})</div>
+          )}
         </div>
+        ); })}
       </div>
     </>
   );

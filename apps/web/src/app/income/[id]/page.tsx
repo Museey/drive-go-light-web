@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { bahttext } from '@drivegolight/core';
-import { requireTab } from '@/lib/auth';
+import { can, requireTab } from '@/lib/auth';
+import { DocSteps } from '@/components/doc-steps';
 import { Shell } from '@/components/shell';
 import { getDocDetail, getShop } from '@/lib/queries';
-import { canEdit } from '@/lib/sales';
+import { canEdit, childOf } from '@/lib/sales';
 import { listPayments } from '@/lib/receivables';
-import { can } from '@/lib/auth';
 import { PaymentsPanel } from '../../finance/payments-panel';
 import { DocActions } from '../doc-actions';
 import { baht, KIND_LABEL, payLabel, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
@@ -23,8 +23,9 @@ export default async function DocPage({
   const session = await requireTab('income', 'receipt');
   const { id } = await params;
   const sp = await searchParams;
-  const [doc, shop, editable, payments] = await Promise.all([
+  const [doc, shop, editable, payments, child] = await Promise.all([
     getDocDetail(id), getShop(), canEdit(id), listPayments(id),
+    childOf(id),
   ]);
   if (!doc) notFound();
 
@@ -37,7 +38,6 @@ export default async function DocPage({
       current="/income"
       title={KIND_LABEL[doc.kind] ?? doc.kind}
       sub={`เลขที่ ${doc.docNo} · ${thDateLong(doc.docDate)}`}
-      actions={<Link className="btn" href="/income">← กลับรายการ</Link>}
     >
       {sp.saved ? (
         <div className="ok-msg" style={{ marginBottom: 16 }}>
@@ -45,6 +45,11 @@ export default async function DocPage({
         </div>
       ) : null}
       {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}
+      {/* ขั้นตอน A→B→C — ขั้นปัจจุบันสีเข้ม ขั้นถัดไปอำพันกดออกใบต่อได้ (เจ๊ก ข้อ 4, 5, 7) */}
+      <DocSteps kind={doc.kind} id={id} voided={doc.status === 'void'}
+                parent={doc.parent ? { id: doc.parent.id, docNo: doc.parent.docNo, kind: doc.parent.kind } : null}
+                child={child}
+                canContinue={can(session, 'income')} />
       {doc.status === 'void' ? (
         <>
           <div className="err" style={{ marginBottom: 16 }}>
@@ -187,6 +192,7 @@ export default async function DocPage({
         </div>
       </div>
 
+      <div id="pay" />
       {doc.kind === 'QT' ? null : (
         <PaymentsPanel
           docId={doc.id}

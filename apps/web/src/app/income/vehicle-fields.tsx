@@ -17,17 +17,12 @@
  */
 export type Vehicle = Record<string, string>;
 
-const FIELDS: { key: string; label: string; wide?: boolean; mono?: boolean; hint?: string }[] = [
-  { key: 'brand', label: 'ยี่ห้อรถ' },
-  { key: 'model', label: 'รุ่นรถ' },
-  { key: 'year', label: 'ปีที่จดทะเบียน', mono: true },
-  { key: 'color', label: 'สีรถ' },
-  { key: 'plateA', label: 'ทะเบียน — หมวดอักษร', mono: true, hint: 'เช่น 1กก' },
-  { key: 'plateB', label: 'ทะเบียน — หมวดตัวเลข', mono: true, hint: 'เช่น 1234' },
-  { key: 'plateProv', label: 'จังหวัดที่จดทะเบียน' },
-  { key: 'mileage', label: 'เลขไมล์ (กม.)', mono: true, hint: 'ของการเข้าซ่อมครั้งนี้' },
-  { key: 'engineNo', label: 'หมายเลขเครื่องยนต์', mono: true, wide: true },
-  { key: 'chassisNo', label: 'หมายเลขตัวถัง', mono: true, wide: true },
+/* บรรทัด 1: ยี่ห้อ รุ่น ปี สี · บรรทัด 2: หมวด เลขทะเบียน จังหวัด เลขไมล์ · บรรทัด 3: เลขเครื่องยนต์ เลขตัวถัง อื่นๆ (ผู้ใช้กำหนด) */
+const ROWS: { key: string; label: string; mono?: boolean; hint?: string }[][] = [
+  [{ key: 'brand', label: 'ยี่ห้อ' }, { key: 'model', label: 'รุ่น' }, { key: 'year', label: 'ปี', mono: true }, { key: 'color', label: 'สี' }],
+  [{ key: 'plateA', label: 'ทะเบียน (หมวด)', mono: true, hint: 'เช่น 1กก' }, { key: 'plateB', label: 'ทะเบียน (เลข)', mono: true, hint: 'เช่น 1234' },
+   { key: 'plateProv', label: 'จังหวัด' }, { key: 'mileage', label: 'เลขไมล์ (กม.)', mono: true, hint: 'ของครั้งนี้' }],
+  [{ key: 'engineNo', label: 'เลขเครื่องยนต์', mono: true }, { key: 'chassisNo', label: 'เลขตัวถัง', mono: true }, { key: 'other', label: 'อื่นๆ (ชื่อผู้ขับ + เบอร์)' }],
 ];
 
 export function VehicleFields({
@@ -40,26 +35,18 @@ export function VehicleFields({
 
   return (
     <>
-      <div className="row-fields f4">
-        {FIELDS.filter((f) => !f.wide).map((f) => (
-          <div className="field" key={f.key}>
-            <label htmlFor={`veh-${f.key}`}>{f.label}</label>
-            <input id={`veh-${f.key}`} className={f.mono ? 'in mono' : 'in'}
-                   value={veh[f.key] ?? ''} placeholder={f.hint}
-                   onChange={(e) => set(f.key, e.target.value)} />
-          </div>
-        ))}
-      </div>
-      <div className="row-fields f2" style={{ marginTop: 12 }}>
-        {FIELDS.filter((f) => f.wide).map((f) => (
-          <div className="field" key={f.key}>
-            <label htmlFor={`veh-${f.key}`}>{f.label}</label>
-            <input id={`veh-${f.key}`} className="in mono"
-                   value={veh[f.key] ?? ''}
-                   onChange={(e) => set(f.key, e.target.value)} />
-          </div>
-        ))}
-      </div>
+      {ROWS.map((row, r) => (
+        <div key={r} className={row.length === 4 ? 'row-fields f4' : 'row-fields f3'} style={{ marginTop: r ? 8 : 0 }}>
+          {row.map((f) => (
+            <div className="field" key={f.key}>
+              <label htmlFor={`veh-${f.key}`}>{f.label}</label>
+              <input id={`veh-${f.key}`} className={f.mono ? 'in mono' : 'in'}
+                     value={veh[f.key] ?? ''} placeholder={f.hint}
+                     onChange={(e) => set(f.key, e.target.value)} />
+            </div>
+          ))}
+        </div>
+      ))}
     </>
   );
 }

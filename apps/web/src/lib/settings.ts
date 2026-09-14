@@ -11,6 +11,17 @@ import { seatsLeft, type PermKey, type Perms, type StaffUser } from './perms';
    ข้อมูลร้าน
    ===================================================================== */
 
+export interface BankAccount { bank: string; no: string; name: string }
+
+/** อ่านรายการบัญชี — ถ้ายังไม่เคยตั้งแบบหลายบัญชี ใช้ bank_* เดิมเป็นตัวแรก */
+function normalizeBanks(raw: unknown, r: { bank_name?: string; bank_account_no?: string; bank_account_name?: string }): BankAccount[] {
+  const list = Array.isArray(raw)
+    ? raw.map((x) => ({ bank: String(x?.bank ?? ''), no: String(x?.no ?? ''), name: String(x?.name ?? '') })).filter((x) => x.no || x.bank)
+    : [];
+  if (list.length) return list;
+  return r.bank_account_no ? [{ bank: r.bank_name ?? '', no: r.bank_account_no, name: r.bank_account_name ?? '' }] : [];
+}
+
 export interface ShopSettings {
   name: string;
   taxId: string;
@@ -22,6 +33,8 @@ export interface ShopSettings {
   priceTier: 'A' | 'B' | 'C';
   proposerName: string;
   warrantyText: string;
+  /** หมายเหตุมาตรฐาน — ขึ้นในช่องหมายเหตุของทุกเอกสารตอนสร้างใหม่ แก้รายใบได้ */
+  noteDefault: string;
   /** บัญชีธนาคารของอู่ — พิมพ์ลงบนใบเสร็จและใบวางบิล ว่างได้ */
   bankName: string;
   bankAccountNo: string;
@@ -29,13 +42,20 @@ export interface ShopSettings {
   /** กี่วันก่อนหมดอายุถึงเริ่มเตือน */
   expiryWarnDays: number;
   logoUrl: string;
+  /** ชื่อเจ้าของกิจการ — พิมพ์ใต้ช่องลงนาม */
+  ownerName: string;
+  /** บัญชีรับโอนหลายธนาคาร — ตัวแรก = บัญชีหลัก (สำเนาลง bank_* เดิม) */
+  bankAccounts: BankAccount[];
+  /** รูปลายเซ็น data URI — ว่าง = ไม่มี */
+  signatureUrl: string;
 }
 
 export async function getShopSettings(): Promise<ShopSettings> {
   return query(async (c) => {
     const { rows } = await c.query(
       `select name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
-              price_tier, proposer_name, warranty_text, logo_url,
+              price_tier, proposer_name, warranty_text, logo_url, note_default,
+              owner_name, signature_url, bank_accounts,
               bank_name, bank_account_no, bank_account_name, expiry_warn_days
        from tenants where id = current_tenant_id()`,
     );
@@ -46,6 +66,9 @@ export async function getShopSettings(): Promise<ShopSettings> {
       vatRate: n(r.vat_rate), whtRate: n(r.wht_rate),
       priceTier: r.price_tier, proposerName: r.proposer_name ?? '',
       warrantyText: r.warranty_text ?? '', logoUrl: r.logo_url ?? '',
+      noteDefault: r.note_default ?? '',
+      ownerName: r.owner_name ?? '', signatureUrl: r.signature_url ?? '',
+      bankAccounts: normalizeBanks(r.bank_accounts, r),
       bankName: r.bank_name ?? '',
       bankAccountNo: r.bank_account_no ?? '',
       bankAccountName: r.bank_account_name ?? '',
@@ -67,7 +90,8 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
               vat_rate=$6, wht_rate=$7, price_tier=$8, proposer_name=$9,
               warranty_text=$10, logo_url=$11,
               bank_name=$12, bank_account_no=$13, bank_account_name=$14,
-              expiry_warn_days=$15
+              expiry_warn_days=$15, note_default=$16, owner_name=$17, signature_url=$18,
+              bank_accounts=$19
        where id = current_tenant_id()`,
       [
         input.name, input.taxId || null, input.addrText, input.tel, input.tel2,
@@ -75,6 +99,9 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
         input.warrantyText || null, input.logoUrl || null,
         input.bankName, input.bankAccountNo, input.bankAccountName,
         input.expiryWarnDays,
+        input.noteDefault ?? '',
+        input.ownerName ?? '', input.signatureUrl || null,
+        JSON.stringify(input.bankAccounts ?? []),
       ],
     );
   }, { sub: 'shop', allowExpired: true });

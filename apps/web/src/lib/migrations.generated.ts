@@ -22,4 +22,13 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '017_view_security.sql',
   '018_unvoid.sql',
   '019_owner_perms.sql',
+  '020_discounts.sql',
+  '021_note_default.sql',
+  '022_cost_method.sql',
+  '023_owner_signature.sql',
+  '024_barcode_type.sql',
+  '025_product_suppliers.sql',
+  '026_bank_accounts.sql',
+  '027_vehicle_other.sql',
+  '028_purged.sql',
 ];

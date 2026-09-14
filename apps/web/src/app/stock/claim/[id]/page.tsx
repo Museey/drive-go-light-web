@@ -35,7 +35,6 @@ export default async function ClaimDetailPage({
       actions={
         <div className="tag-row">
           <Link className="btn" href={`/stock/claim/${id}/print`}>พิมพ์ใบเคลม</Link>
-          <Link className="btn" href={S.href}>← กลับรายการ</Link>
         </div>
       }
     >

@@ -6,6 +6,7 @@ import { DateRange } from '@/components/date-range';
 import { Icon } from '@/components/icon';
 import { getHomeSummary, getShop } from '@/lib/queries';
 import { getTaxSummary } from '@/lib/reports';
+import { listPendingItems } from '@/lib/pending';
 import { baht, KIND_SHORT, monthLabel } from '@/lib/format';
 import { OwingList, SalesBars } from '@/components/sales-bars';
 
@@ -28,11 +29,14 @@ export default async function HomePage({
   const seesStock = can(session, 'stock');
   const seesReport = canHomeReport(session);
 
-  const [shop, summary, tax] = await Promise.all([
+  const [shop, summary, tax, pendingNames] = await Promise.all([
     getShop(),
     getHomeSummary(sp.from, sp.to),
     seesFinance ? getTaxSummary() : Promise.resolve(null),
+    /* รายการค้างทำ = ชื่อที่ขายไปแล้วแต่ยังไม่มีรหัสในทะเบียน (05.2) */
+    seesStock ? listPendingItems() : Promise.resolve([]),
   ]);
+  const pendingLines = pendingNames.reduce((n, p) => n + p.lineCount, 0);
 
   const ranged = Boolean(sp.from || sp.to);
 
@@ -157,6 +161,49 @@ export default async function HomePage({
             <div className="row"><span>สินค้าทั้งหมด</span><b>{summary.productCount.toLocaleString('en-US')}</b></div>
           </div>
         </div>
+
+        {/* งานค้างส่งมอบ — ใบเสนอราคาที่ออกแล้วแต่ยังไม่มีใบส่งมอบ/ใบเสร็จออกต่อ
+            = รถที่ยังซ่อมไม่เสร็จ (อาจข้ามวัน) กดแล้วไปหน้ารายการที่กรองไว้ให้ */}
+        {seesIncome ? (
+        <div className="hcard">
+          <header>
+            <Icon name="truck" size={22} color="#0F5C3E" />
+            <h2>งานค้างส่งมอบ</h2>
+            <Link className="go" href="/income?kind=QT&open=1">ดูรายการ<span className="ar">→</span></Link>
+          </header>
+          <div className="body">
+            <div className="big" style={{ color: summary.openQuoteCount > 0 ? 'var(--warn)' : undefined }}>
+              {summary.openQuoteCount} <small>ใบ</small>
+            </div>
+            <div className="row"><span>มูลค่าที่เสนอไว้</span><b>{baht(summary.openQuoteAmount)}</b></div>
+            <div className="row">
+              <span>ค้างนานสุด</span>
+              <b style={{ color: summary.openQuoteOldestDays > 7 ? 'var(--due)' : undefined }}>
+                {summary.openQuoteCount > 0 ? `${summary.openQuoteOldestDays} วัน` : '-'}
+              </b>
+            </div>
+          </div>
+        </div>
+        ) : null}
+
+        {/* รายการค้างทำ — ชื่อสินค้าที่พิมพ์เองบนเอกสารแล้วยังไม่ผูกทะเบียน
+            ค้างไว้ = ไม่ตัดสต๊อก ไม่คิดต้นทุน จึงต้องเห็นตั้งแต่หน้าแรกและกดไปเคลียร์ได้เลย */}
+        {seesStock ? (
+        <div className="hcard">
+          <header>
+            <Icon name="pending" size={22} color="#B4720B" />
+            <h2>รายการค้างทำ</h2>
+            <Link className="go" href="/stock/pending">ไปจัดการ<span className="ar">→</span></Link>
+          </header>
+          <div className="body">
+            <div className="big" style={{ color: pendingNames.length > 0 ? 'var(--warn)' : undefined }}>
+              {pendingNames.length} <small>ชื่อ</small>
+            </div>
+            <div className="row"><span>บรรทัดในเอกสารที่ยังไม่ผูกทะเบียน</span><b>{pendingLines.toLocaleString('en-US')}</b></div>
+            <div className="row"><span>ผลกระทบ</span><b>ยังไม่ตัดสต๊อก · ยังไม่คิดต้นทุน</b></div>
+          </div>
+        </div>
+        ) : null}
 
         {/* การ์ดของใกล้หมดอายุขึ้นเฉพาะตอนมีของจริง —
             อู่ที่ขายแต่อะไหล่ซึ่งไม่มีวันหมดอายุจะไม่มีการ์ดศูนย์ค้างอยู่ตลอดกาล

@@ -25,10 +25,6 @@ test.beforeEach(async ({ context }) => {
   }]);
 });
 
-/** กรอบสองอันซ้อนกันไหม */
-const overlaps = (a: DOMRect, b: DOMRect) =>
-  !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
-
 const boxOf = (page: Page, sel: string) =>
   page.locator(sel).first().evaluate((el) => el.getBoundingClientRect().toJSON());
 
@@ -62,15 +58,13 @@ test.describe('การนำทาง', () => {
 
   test('เข้าถึงทุกเมนูได้โดยไม่ต้องเดาว่าปัดแถบได้', async ({ page }, info) => {
     await page.goto('/');
-    if (info.project.name === 'เดสก์ท็อป') {
-      /* เดสก์ท็อปเห็นครบในแถบซ้ายอยู่แล้ว */
+    if (info.project.name !== 'มือถือ') {
+      /* แท็บเล็ตและเดสก์ท็อป — เมนูหลักครบทุกตัวในแถบบน ไม่ต้องเปิดลิ้นชัก */
       expect(await page.locator('.rail .railnav .navbtn').count()).toBeGreaterThan(5);
       return;
     }
-    /* มือถือและแท็บเล็ตต้องมีทางเปิดลิ้นชักที่เห็นได้ทันที */
-    const opener = info.project.name === 'มือถือ'
-      ? page.locator('.tabbar .tab', { hasText: 'เพิ่มเติม' })
-      : page.locator('.rail .drawer-open');
+    /* มือถือ — เปิดลิ้นชักจากแถบล่างช่อง "เพิ่มเติม" */
+    const opener = page.locator('.tabbar .tab', { hasText: 'เพิ่มเติม' });
     await expect(opener).toBeVisible();
     await opener.click();
     await expect(page.locator('.drawer')).toBeVisible();
@@ -84,12 +78,9 @@ test.describe('ของที่ลอยทับต้องไม่บั�
       await page.goto(p.path);
 
       const มือถือ = info.project.name === 'มือถือ';
-      const แท็บเล็ต = info.project.name === 'แท็บเล็ต';
 
-      if (มือถือ || แท็บเล็ต) {
-        const opener = มือถือ
-          ? page.locator('.tabbar .tab', { hasText: 'เพิ่มเติม' })
-          : page.locator('.rail .drawer-open');
+      if (มือถือ) {
+        const opener = page.locator('.tabbar .tab', { hasText: 'เพิ่มเติม' });
         await opener.click();
         const panel = page.locator('.drawer');
         await expect(panel).toBeVisible();
@@ -102,14 +93,10 @@ test.describe('ของที่ลอยทับต้องไม่บั�
 
         /* ลิ้นชักบังเนื้อหาโดยตั้งใจ — แต่ต้องมีทางออกที่เห็นได้สองทาง
            ฉากหลังที่โผล่ข้างลิ้นชัก และปุ่มปิดในตัวลิ้นชักเอง
-
-           กดฉากหลังตรง**ช่องที่โผล่จริง** ไม่ใช่จุดกึ่งกลางของมัน —
-           ลิ้นชักกว้าง 88vw ตรงกลางฉากหลังจึงอยู่ใต้ลิ้นชัก
-           (ถ้ากดตรงกลางแล้วผ่าน แปลว่าฉากหลังทับลิ้นชักอยู่ ซึ่งผิด) */
+           กดฉากหลังตรงช่องที่โผล่จริง (ขอบขวา) ไม่ใช่จุดกึ่งกลางซึ่งอยู่ใต้ลิ้นชัก */
         await expect(page.locator('.scrim')).toBeVisible();
-        const vw2 = page.viewportSize()!;
-        expect(box.right, 'ลิ้นชักต้องเหลือช่องให้กดปิดข้าง ๆ').toBeLessThan(vw2.width - 20);
-        await page.mouse.click(vw2.width - 10, Math.round(vw2.height / 2));
+        expect(box.right, 'ลิ้นชักต้องเหลือช่องให้กดปิดข้าง ๆ').toBeLessThan(vw.width - 20);
+        await page.mouse.click(vw.width - 10, Math.round(vw.height / 2));
         await expect(panel).toHaveCount(0);
 
         /* ปุ่มปิดในลิ้นชักก็ต้องใช้ได้เหมือนกัน */
@@ -120,29 +107,17 @@ test.describe('ของที่ลอยทับต้องไม่บั�
         return;
       }
 
-      /* เดสก์ท็อป — แผงเมนูย่อยต้องไม่ทับปุ่มหลักของหน้า */
+      /* แท็บเล็ต/เดสก์ท็อป — เมนูหลักอยู่บนเป็น "ลิงก์" กดแล้วนำทาง ไม่มีแผงลอย
+         ที่จะไปทับปุ่มหลักของหน้าได้อีก จึงตรวจว่า (1) ไม่มี .mmenu หลงเหลือ
+         (2) เมนูหลักเป็นลิงก์ครบ (3) ปุ่มหลักของหน้ายังกดได้จริง */
+      expect(await page.locator('.mmenu').count(), 'ไม่ควรมีแผงเมนูหล่นแล้ว').toBe(0);
+
+      const links = page.locator('.rail .railnav a.navbtn[href]');
+      expect(await links.count(), 'เมนูหลักต้องเป็นลิงก์ที่นำทางได้').toBeGreaterThan(5);
+
       const cta = page.locator('.topbar .btn').first();
-      const มีปุ่มหลัก = await cta.count() > 0;
-
-      for (const btn of await page.locator('.rail .navbtn[aria-haspopup="true"]').all()) {
-        await btn.click();
-        const panel = page.locator('.mmenu');
-        await expect(panel).toBeVisible();
-
-        const box = await boxOf(page, '.mmenu');
-        const vw = page.viewportSize()!;
-        expect(box.right, 'แผงล้นขอบขวา').toBeLessThanOrEqual(vw.width + 1);
-        expect(box.left, 'แผงล้นขอบซ้าย').toBeGreaterThanOrEqual(-1);
-        expect(box.bottom, 'แผงล้นขอบล่าง').toBeLessThanOrEqual(vw.height + 1);
-        expect(box.top, 'แผงล้นขอบบน').toBeGreaterThanOrEqual(-1);
-
-        if (มีปุ่มหลัก) {
-          const c = await cta.evaluate((el) => el.getBoundingClientRect().toJSON());
-          expect(overlaps(box as DOMRect, c as DOMRect), 'แผงทับปุ่มหลักของหน้า').toBe(false);
-        }
-
-        await page.keyboard.press('Escape');
-        await expect(panel).toHaveCount(0);
+      if (await cta.count() > 0) {
+        await expect(cta, 'ปุ่มหลักของหน้าต้องกดได้ ไม่มีของลอยทับ').toBeInViewport();
       }
     });
   }
@@ -157,7 +132,9 @@ test.describe('ของที่ลอยทับต้องไม่บั�
       for (const el of Array.from(document.querySelectorAll<HTMLElement>('body *'))) {
         const cs = getComputedStyle(el);
         if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') continue;
-        if (el.classList.contains('scrim') || el.classList.contains('drawer')) continue;
+        /* ปุ่มย้อนกลับลอยมุมขวาล่างเป็นของที่ตั้งใจให้ลอย (โปร่งแสง) — มีเทสต์ของตัวเองข้างล่าง */
+        if (el.classList.contains('scrim') || el.classList.contains('drawer')
+          || el.classList.contains('backfab')) continue;
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) continue;
         /* แถบนำทางกินพื้นที่ของตัวเองโดยตั้งใจ และเนื้อหาเว้นที่ให้แล้ว */
@@ -172,6 +149,40 @@ test.describe('ของที่ลอยทับต้องไม่บั�
     });
 
     expect(ชน).toEqual([]);
+  });
+});
+
+test.describe('ปุ่มย้อนกลับลอย', () => {
+  test('ทุกจอแสดงมุมขวาล่าง (มือถือลอยเหนือแถบล่าง) โปร่งแสง และไม่ทับปุ่มหลักของหน้า — เป็นปุ่มย้อนกลับเดียวของระบบ', async ({ page }, info) => {
+    await page.goto('/income?kind=RC');
+    const fab = page.locator('.backfab');
+    await expect(fab).toBeVisible();
+    /* ต้องไม่มีปุ่ม "← กลับ…" ซ้ำที่หัวหน้าอีก */
+    await expect(page.locator('.topbar').getByText(/^← /)).toHaveCount(0);
+    if (info.project.name === 'มือถือ') {
+      const vw = page.viewportSize()!;
+      const box = await boxOf(page, '.backfab');
+      const tab = await boxOf(page, '.tabbar');
+      expect(box.bottom, 'ต้องอยู่เหนือแถบล่าง').toBeLessThanOrEqual(tab.top + 1);
+      expect(box.right, 'ต้องชิดขวา').toBeGreaterThan(vw.width - 120);
+      return;
+    }
+    const vw = page.viewportSize()!;
+    const box = await boxOf(page, '.backfab');
+    expect(box.right, 'ต้องชิดขวา').toBeGreaterThan(vw.width - 120);
+    expect(box.bottom, 'ต้องชิดล่าง').toBeGreaterThan(vw.height - 120);
+
+    /* โปร่งแสงจริง — alpha ของพื้นหลังต้องน้อยกว่า 1 */
+    const bg = await fab.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const alpha = Number((bg.match(/rgba?\([^)]*,\s*([\d.]+)\)/) ?? [])[1] ?? '1');
+    expect(alpha, `พื้นหลัง ${bg} ต้องโปร่งแสง`).toBeLessThan(1);
+
+    const cta = page.locator('.topbar .btn').first();
+    if (await cta.count() > 0) {
+      const c = await cta.evaluate((el) => el.getBoundingClientRect().toJSON());
+      const hit = !(box.right <= c.left || box.left >= c.right || box.bottom <= c.top || box.top >= c.bottom);
+      expect(hit, 'ปุ่มย้อนกลับทับปุ่มหลักของหน้า').toBe(false);
+    }
   });
 });
 

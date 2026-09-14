@@ -1,5 +1,5 @@
 import type pg from 'pg';
-import { fifoAdd, fifoConsume, fifoReturn, fifoValue, type Lot } from '@drivegolight/core';
+import { fifoAdd, fifoConsume, fifoReturn, fifoValue, type Lot, lotAddBy, averageOut, type CostMethod } from '@drivegolight/core';
 
 /**
  * ต้นทุนสต๊อกแบบเข้าก่อนออกก่อน คิดจากบัญชี stock_moves
@@ -97,6 +97,13 @@ interface MoveRow {
  * ต่อการตัดหนึ่งครั้งจึงถูกมาก และใช้ index (tenant_id, product_id, moved_on) ที่มีอยู่แล้ว
  * ถ้าวันหนึ่งช้า ให้ลงแถว opening สรุปยอดเป็นงวดแล้วเล่นซ้ำจากจุดนั้น
  */
+/** วิธีคิดต้นทุนของสินค้านี้ (ตั้งในทะเบียนสินค้า) — ไม่มี = FEFO แบบเดิม */
+async function costMethodOf(c: Client, productId: string): Promise<CostMethod> {
+  const { rows } = await c.query(`select cost_method from products where id = $1`, [productId]);
+  const m = rows[0]?.cost_method as string | undefined;
+  return (m === 'FIFO' || m === 'AVG' || m === 'FEFO') ? m : 'FEFO';
+}
+
 export async function lotsOfProduct(c: Client, productId: string): Promise<Lot[]> {
   const { rows } = await c.query<MoveRow>(
     /*
@@ -116,6 +123,8 @@ export async function lotsOfProduct(c: Client, productId: string): Promise<Lot[]
   );
 
   const fallback = await lastCostOf(c, productId);
+  /* วิธีคิดต้นทุนรายสินค้า — FEFO = แบบเดิม · FIFO ล้วน · AVG ถัวเฉลี่ย (ตั้งในทะเบียนสินค้า) */
+  const method = await costMethodOf(c, productId);
   let lots: Lot[] = [];
 
   for (const m of rows) {
@@ -127,7 +136,8 @@ export async function lotsOfProduct(c: Client, productId: string): Promise<Lot[]
       const cost = m.cost_amount !== null ? n(m.cost_amount) : qty * n(m.unit_cost);
       lots = m.reason === 'return'
         ? fifoReturn(lots, qty, cost, m.moved_on, fallback, m.expires_on)
-        : fifoAdd(lots, qty, qty === 0 ? 0 : round2(cost / qty), m.moved_on, m.expires_on);
+        : lotAddBy(method, lots, qty, qty === 0 ? 0 : round2(cost / qty), m.moved_on, m.expires_on);
+      if (method === 'AVG') lots = averageOut(lots);   /* ของคืนก็ต้องเข้าค่าเฉลี่ยด้วย */
     } else {
       lots = fifoConsume(lots, -qty, fallback).lots;
     }

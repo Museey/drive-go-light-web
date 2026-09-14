@@ -1,3 +1,4 @@
+import { PrintReport } from '@/components/print-report';
 import { requireTab } from '@/lib/auth';
 import { ClaimListView, type ClaimListParams } from '../claim/list-view';
 

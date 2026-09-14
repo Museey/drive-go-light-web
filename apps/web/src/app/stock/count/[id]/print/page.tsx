@@ -31,7 +31,6 @@ export default async function CountPrintPage({
   return (
     <>
       <div className="printbar">
-        <Link className="btn" href={`/stock/count/${id}`}>← กลับใบตรวจนับ</Link>
         {!count.applied ? (
           <Link className="btn" href={`/stock/count/${id}/print?sys=${showSys ? '0' : '1'}`}>
             {showSys ? 'ซ่อนยอดที่ระบบมี' : 'แสดงยอดที่ระบบมี'}

@@ -1,13 +1,17 @@
 import Link from 'next/link';
+import { PrintReport } from '@/components/print-report';
 import { canEdit as mayEditOf, canExport as mayExportOf } from '@/lib/perms';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { query } from '@/lib/auth';
-import { listBillnotes, unbilledSummary } from '@/lib/billnotes';
+import { listBillnotes, openInvoices, unbilledSummary } from '@/lib/billnotes';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, thDate } from '@/lib/format';
+import { today } from '@drivegolight/core';
+import { BillForm, type Party } from './bill-form';
+import { SavedBanner } from '@/components/saved-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +20,7 @@ export default async function BillingPage({
 }: {
   searchParams: Promise<{
     q?: string; from?: string; to?: string; month?: string; year?: string;
-    page?: string; size?: string;
+    page?: string; size?: string; vat?: string; hist?: string; saved?: string; savedId?: string;
   }>;
 }) {
   const session = await requireTab('income', 'billing');
@@ -26,17 +30,38 @@ export default async function BillingPage({
   const { from, to } = rangeFromParams(sp);
   const page = Math.max(1, Number(sp.page ?? '1') || 1);
   const pageSize = pageSizeOf(sp.size);
+  const vat = sp.vat === 'yes' || sp.vat === 'no' ? sp.vat : undefined;
+  const histFirst = sp.hist === '1';
 
-  const { list, unbilled } = await query(async (c) => ({
-    list: await listBillnotes(c, { search: sp.q, from, to, page, pageSize }),
+  const { list, unbilled, open } = await query(async (c) => ({
+    list: await listBillnotes(c, { search: sp.q, from, to, page, pageSize, vat }),
     unbilled: await unbilledSummary(c),
+    /* ฟอร์มสร้างใบวางบิลฝังในหน้า — ใบส่งมอบที่ยังไม่รับเงิน กรองตาม IVT/IV ที่เลือก */
+    /* รวมใบเสร็จขายหน้าร้านแบบเครดิตที่ยังค้าง (RC ค้างชำระ) ด้วย — แยก IVT/IV ตามภาษีของใบ ไม่ใช่ตามชนิด */
+    open: (await openInvoices(c, { includeDocIds: [] })).filter((v) => !v.inBillnoteNo && (vat === 'yes' ? v.vatMode !== 'none' : vat === 'no' ? v.vatMode === 'none' : true)),
   }));
+  const byKey = new Map<string, Party>();
+  for (const v of open) {
+    const key = v.partyId ?? `name:${v.partyName}`;
+    const cur = byKey.get(key) ?? { key, partyId: v.partyId, name: v.partyName || 'ไม่ระบุชื่อ', taxId: '', addrText: '', count: 0, owed: 0 };
+    cur.count += 1; cur.owed += v.outstanding; byKey.set(key, cur);
+  }
+  const parties = [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name, 'th'));
+  const formBlock = mayEdit ? (
+    <div className="card" id="new-bill">
+      <header><h2>สร้างใบวางบิล{vat === 'yes' ? ' (IVT)' : vat === 'no' ? ' (IV)' : ''}</h2><div className="spacer" /><span className="subtle">{open.length} ใบส่งมอบที่ยังไม่รับเงิน</span></header>
+      <div className="body">
+        <BillForm billDate={today()} dueDate="" byWhom="" note="" parties={parties} invoices={open} selected={[]} initialPartyKey="" returnTo={`/income/billing${vat ? `?vat=${vat}` : ''}`} />
+      </div>
+    </div>
+  ) : null;
   const { rows, total, live } = list;
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
   const keep: Record<string, string> = {
     ...(sp.q ? { q: sp.q } : {}),
     ...(from ? { from } : {}),
+    ...(vat ? { vat } : {}),
     ...(to ? { to } : {}),
   };
   const paged = { ...keep, ...(sp.size ? { size: sp.size } : {}) };
@@ -46,7 +71,7 @@ export default async function BillingPage({
       current="/income"
       title="ใบวางบิล"
       sub={`${live} ใบที่ยังไม่ยกเลิก จากทั้งหมด ${total} ใบ`}
-      actions={<Link className="btn primary" href="/income/billing/new">+ ออกใบวางบิล</Link>}
+      actions={<PrintReport />}
     >
       <SubNav menu="income" current="billing">
         {/* ตัวเลขที่ตอบว่า "ยังต้องทำอะไรต่อ" ไม่ใช่ยอดลูกหนี้ทั้งหมด
@@ -75,14 +100,27 @@ export default async function BillingPage({
           เมื่อได้รับเงินแล้วให้ออกใบเสร็จรับเงินตามปกติ
         </div>
 
+        {sp.saved && sp.savedId ? <SavedBanner docNo={sp.saved} printHref={`/income/billing/${sp.savedId}/print`} openHref={`/income/billing/${sp.savedId}`} label="พิมพ์ใบวางบิล" /> : null}
         <div className="card">
           <div className="toolbar">
+            {/* แถบไทล์ตามเมนูย่อย "ใบวางบิล": ประวัติทั้งหมด · ประวัติ IVT · ประวัติ IV · [+ IVT] [+ IV] */}
+            <div className="tiles">
+              <Link className="tile" href="/income">ประวัติทั้งหมด</Link>
+              <Link className="tile" aria-current={vat === 'yes' && histFirst ? 'true' : undefined} href={{ pathname: '/income/billing', query: { ...keep, vat: 'yes', hist: '1' } }}>ประวัติใบวางบิล (IVT)</Link>
+              <Link className="tile" aria-current={vat === 'no' && histFirst ? 'true' : undefined} href={{ pathname: '/income/billing', query: { ...keep, vat: 'no', hist: '1' } }}>ประวัติใบวางบิล (IV)</Link>
+              {mayEdit ? <Link className="tile act" href="/income/billing?vat=yes">+ ใบวางบิล (IVT)</Link> : null}
+              {mayEdit ? <Link className="tile act" href="/income/billing?vat=no">+ ใบวางบิล (IV)</Link> : null}
+            </div>
             <form action="/income/billing" method="get" style={{ display: 'flex', gap: 6 }}>
-              <input className="in" type="search" name="q" defaultValue={sp.q ?? ''}
-                     placeholder="เลขที่ใบวางบิล หรือชื่อลูกค้า" style={{ width: 260 }} />
+            <input type="hidden" name="hist" value="1" />
+              <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
+                     placeholder="กรอกคำค้นหา — เลขที่ใบวางบิล หรือชื่อลูกค้า" style={{ width: 260 }} />
               <button className="btn" type="submit">ค้นหา</button>
             </form>
           </div>
+        </div>
+        {!histFirst ? formBlock : null}
+        {histFirst ? (<div className="card">
 
           <DocDateFilter base="/income/billing" from={from} to={to}
                          keep={sp.q ? { q: sp.q } : {}} />
@@ -91,7 +129,7 @@ export default async function BillingPage({
             <div className="empty">ยังไม่มีใบวางบิล</div>
           ) : (
             <div className="tablewrap">
-              <table className="tbl">
+              <table className="tbl hist fit">
                 <thead>
                   <tr>
                     <th>เลขที่</th><th>วันที่วางบิล</th><th>ลูกค้า</th>
@@ -170,7 +208,8 @@ export default async function BillingPage({
               </Link>
             ) : null}
           </div>
-        </div>
+        </div>) : null}
+
       </SubNav>
     </Shell>
   );

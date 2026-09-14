@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { docNoPeriod, formatDocNo } from './doc-no';
 import { consumeStock, returnClaimStock } from './stock-cost';
 import { syncVehicleFromDocWith } from './doc-chain';
 
@@ -318,10 +319,10 @@ export async function saveClaim(
   if (items.length === 0) throw new Error('เพิ่มรายการสินค้าอย่างน้อยหนึ่งรายการ');
 
   const seq = await c.query(
-    `select next_claim_no(current_tenant_id(), $1::claim_side, '') as no`, [side],
+    `select next_claim_no(current_tenant_id(), $1::claim_side, $2) as no`,
+    [side, docNoPeriod(input.claimDate)],
   );
-  const ym = input.claimDate.slice(0, 4) + input.claimDate.slice(5, 7);
-  const no = `${CLAIM_SIDE[side].prefix}-${ym}-${String(n(seq.rows[0].no)).padStart(3, '0')}`;
+  const no = formatDocNo(CLAIM_SIDE[side].prefix, input.claimDate, n(seq.rows[0].no));
 
   /* ฝั่งผู้ขายไม่ผูกรถ — ฐานบังคับอยู่แล้ว ตัดทิ้งที่นี่ให้ข้อความผิดพลาดไม่ต้องไปโผล่จาก SQL */
   const vehicleId = side === 'customer' ? input.vehicleId : null;

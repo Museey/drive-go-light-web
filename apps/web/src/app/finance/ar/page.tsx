@@ -1,5 +1,6 @@
 import { requireTab } from '@/lib/auth';
 import { canExport as mayExportOf } from '@/lib/perms';
+import { PrintReport } from '@/components/print-report';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { PrintHeader } from '@/components/print-header';
@@ -30,7 +31,7 @@ export default async function ArPage({
     await listReceivables({ search: sp.q, onlyOverdue });
 
   return (
-    <Shell actions={
+    <Shell actions={<><PrintReport />{" "}
       <div className="tag-row">
         {mayExportOf(session, 'finance', 'ar') ? (
           <a className="btn" href={`/finance/ar/csv${csvQuery ? `?${csvQuery}` : ''}`} download>
@@ -39,7 +40,7 @@ export default async function ArPage({
         ) : null}
         <PagePrintButton />
       </div>
-    } current="/finance" title="ลูกหนี้" sub="เอกสารขายที่ยังเก็บเงินไม่ครบ">
+    </>} current="/finance" title="ลูกหนี้" sub="เอกสารขายที่ยังเก็บเงินไม่ครบ">
       <SubNav menu="finance" current="ar">
       <PrintHeader title="รายงานลูกหนี้คงค้าง" range={undefined} />
 
@@ -74,8 +75,8 @@ export default async function ArPage({
       <div className="card">
         <div className="toolbar">
           <form action="/finance/ar" method="get" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <input className="in" type="search" name="q" defaultValue={sp.q ?? ''}
-                   placeholder="เลขที่เอกสาร ชื่อลูกค้า หรือทะเบียนรถ" style={{ width: 260 }} />
+            <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
+                   placeholder="กรอกคำค้นหา — เลขที่เอกสาร ชื่อลูกค้า หรือทะเบียนรถ" style={{ width: 260 }} />
             <label className="tag-row" style={{ fontSize: 13 }}>
               <input type="checkbox" name="overdue" value="1" defaultChecked={onlyOverdue} />
               เฉพาะที่เกินกำหนด

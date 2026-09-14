@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { today } from '@drivegolight/core';
@@ -23,7 +22,6 @@ export default async function NewClaimPage({
       current="/stock"
       title={`เปิด${S.title}`}
       sub="บันทึกแล้วตัดสต๊อกทันที และแก้ไขไม่ได้อีก"
-      actions={<Link className="btn" href={S.href}>← กลับรายการ</Link>}
     >
       <ClaimEditor side={side} today={today()} />
     </Shell>
