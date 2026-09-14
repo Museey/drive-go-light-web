@@ -28,6 +28,7 @@ export const STOCK_COLS = [
   ['pB', 'ราคา B'],
   ['pC', 'ราคา C'],
   ['move', 'เคลื่อนไหวล่าสุด'],
+  ['expiry', 'วันหมดอายุ'],
 ] as const;
 
 export type StockCol = (typeof STOCK_COLS)[number][0];
