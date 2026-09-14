@@ -41,15 +41,17 @@ export async function SubNav({
   /* การ์ดสร้าง (สีอำพัน) — กรองตามสิทธิ์เมนูหลัก */
   /* การ์ดสร้าง (อำพัน) ย้ายไปต่อท้ายแถบไทล์ด้านบนของหน้ารายการแล้ว (ActionTiles)
      คอลัมน์ซ้ายเหลือเฉพาะการ์ดเครื่องมือ (โทนกลาง) และเมนูที่ไม่มีแถบไทล์ (ตั้งค่าร้าน) */
-  const acts = (item?.actions ?? []).filter((a) => (a.tone === 'neutral' || item?.key === 'settings' || item?.actionsFirst) && (!session || !item?.perm || can(session, item.perm)))
-    .sort((a, b) => Number(a.tone === 'neutral') - Number(b.tone === 'neutral'));   /* การ์ดเครื่องมือไปท้ายสุด (ชิดขวา) */
-  const actCards = acts.map((a) => (
+  const acts = (item?.actions ?? []).filter((a) => (a.tone === 'neutral' || item?.key === 'settings' || item?.actionsFirst) && (!session || !item?.perm || can(session, item.perm)));
+  const card = (a: typeof acts[number]) => (
     <Link key={a.href} href={a.href} className={a.tone === 'neutral' ? 'tool' : 'act'}>
       <span className="si"><Icon name={a.icon} size={26} color={a.tone === 'neutral' ? '#43535F' : '#7A4E00'} /></span>
       <span className="sw"><span className="sl">{a.label}</span></span>
       <u>{a.no}</u>
     </Link>
-  ));
+  );
+  /* ลำดับในแถบ: การ์ดสร้าง (อำพัน) → เมนูย่อย → การ์ดเครื่องมือ (โทนกลาง ชิดขวา) */
+  const amberCards = acts.filter((a) => a.tone !== 'neutral').map(card);
+  const toolCards = acts.filter((a) => a.tone === 'neutral').map(card);
 
   if (subs.length === 0 && acts.length === 0) return <>{children}</>;
 
@@ -58,7 +60,7 @@ export async function SubNav({
       <SubnavPortal>
       <nav className="subnav">
         <div className="ttl">{item!.label}</div>
-        {item!.actionsFirst ? actCards : null}
+        {item!.actionsFirst ? amberCards : null}
 
         {subs.map((s: SubItem) => {
           const on = s.key === current;
@@ -88,7 +90,8 @@ export async function SubNav({
           );
         })}
 
-        {!item!.actionsFirst ? actCards : null}
+        {!item!.actionsFirst ? amberCards : null}
+        {toolCards}
         {actions ? <div className="acts">{actions}</div> : null}
       </nav>
       </SubnavPortal>
