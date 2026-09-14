@@ -50,7 +50,9 @@ export default async function TrashPage({
               <table className="tbl hist fit">
                 <colgroup>
                   <col style={{ width: 150 }} /><col style={{ width: 150 }} /><col style={{ width: 90 }} />
-                  <col /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 170 }} />
+                  <col /><col style={{ width: 110 }} /><col style={{ width: 130 }} />
+                  {/* ปุ่ม "คัดลอกเป็นใบใหม่" + "ลบถาวร" กว้างกว่ากู้คืน — 170px ตัดปุ่มลบถาวรที่ 1280px */}
+                  <col style={{ width: 250 }} />
                 </colgroup>
                 <thead>
                   <tr>
