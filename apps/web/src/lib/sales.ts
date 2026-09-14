@@ -10,6 +10,7 @@ import {
 import { mutate } from './mutate';
 import { consumeStock, returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
+import { voidSalesDocWith } from './sales-void';
 import { REMAINING_LOTS_SQL } from './expiry';
 import { findByScanWith, parseScan } from './scan';
 
@@ -313,36 +314,9 @@ function addDays(dateIso: string, days: number): string {
  * สต๊อกที่ตัดไปต้องคืนกลับด้วย ไม่งั้นของหายจากบัญชีทั้งที่ยังอยู่ในร้าน
  */
 export async function voidSalesDoc(id: string, reason: string): Promise<void> {
-  return mutate('income', async (c, userId) => {
-    const child = await c.query(
-      `select doc_no from documents where parent_doc_id = $1 and status <> 'void' limit 1`, [id],
-    );
-    if (child.rows[0]) {
-      throw new Error(`ยกเลิกไม่ได้เพราะมีเอกสาร ${child.rows[0].doc_no} ออกต่อจากใบนี้แล้ว`);
-    }
-
-    /* ใบที่ถูกวางบิลไปแล้วยกเลิกไม่ได้ — ลูกค้าถือใบวางบิลที่มีเลขใบนี้อยู่ในมือ
-       ถ้าหายไปเฉย ๆ ยอดบนกระดาษกับในระบบจะไม่ตรงกันโดยไม่มีใครอธิบายได้ */
-    const bn = await billnoteOfDoc(c, id);
-    if (bn) {
-      throw new Error(`ใบนี้ถูกรวมอยู่ในใบวางบิล ${bn} — เอาออกจากใบวางบิลก่อน`);
-    }
-
-    /* คืนของด้วยต้นทุนที่เคยตัดไป ไม่ใช่ต้นทุนวันนี้ — ไม่งั้นการยกเลิกใบเสร็จ
-       จะกลายเป็นกำไรหรือขาดทุนจากอากาศ รายการคืนอ้างเอกสารที่ยกเลิกเสมอ
-       ทั้งเพราะสคีมาบังคับและเพราะต้องตามได้ว่าของกลับมาเพราะใบไหน */
-    await returnDocStock(c, id, {
-      movedOn: today(),
-      note: 'คืนสต๊อกจากการยกเลิกเอกสาร',
-      userId,
-    });
-
-    await c.query(
-      `update documents set status='void', voided_at=now(), voided_reason=$2 where id=$1`,
-      [id, reason || 'ยกเลิกโดยผู้ใช้'],
-    );
-  }, { sub: 'receipt' });
+  return mutate('income', (c, userId) => voidSalesDocWith(c, id, reason, userId), { sub: 'receipt' });
 }
+
 
 /* =====================================================================
    ตัวช่วยสำหรับหน้าจอออกเอกสาร
