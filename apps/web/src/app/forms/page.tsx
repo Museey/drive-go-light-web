@@ -1,4 +1,7 @@
 import { FitToPage } from '@/components/fit-to-page';
+import { Shell } from '@/components/shell';
+import { Icon } from '@/components/icon';
+import { SubnavPortal } from '@/components/subnav-portal';
 import Link from 'next/link';
 import { requireSession } from '@/lib/auth';
 import { getShop } from '@/lib/queries';
@@ -18,7 +21,7 @@ export default async function FormsPage({
 }) {
   await requireSession();
   const sp = await searchParams;
-  const kind = (KINDS.includes(sp.kind as FormKind) ? sp.kind : 'jobcard') as FormKind;
+  const kind = (KINDS.includes(sp.kind as FormKind) ? sp.kind : 'intake') as FormKind;
 
   /* ค่านอกรายการถูกปัดกลับเป็นค่าตั้งต้น กันคนใส่ ?copies=9999 แล้วเครื่องพิมพ์พ่นกระดาษทั้งลัง */
   const rows = (FORM_ROWS as readonly number[]).includes(Number(sp.rows))
@@ -42,50 +45,37 @@ export default async function FormsPage({
     taxId: shop.taxId ?? '',
   };
 
+  /* ลำดับเมนูย่อย 09.x ตามต้นแบบ — ใบรับรถขึ้นก่อน · แบบสั่งงานเดิมย้ายท้าย */
+  const ORDER: FormKind[] = ['intake', 'quote', 'invoice', 'receipt', 'billnote', 'purchase', 'expense', 'jobcard'];
+
   return (
-    <>
-      <div className="printbar">
-        <div className="tag-row">
-          {KINDS.map((k) => (
-            <Link key={k} className="chip"
-                  href={{ pathname: '/forms', query: { ...opts, kind: k } }}
-                  style={k === kind ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
-              {FORM_LABEL[k]}
-            </Link>
-          ))}
+    <Shell current="/forms" title="พิมพ์ฟอร์มเปล่า" sub={FORM_LABEL[kind]} actions={<PrintButton />}>
+      <div className="subwrap">
+        <SubnavPortal>
+          <nav className="subnav" aria-label="ฟอร์มเปล่า">
+            {ORDER.map((k, i) => (
+              <Link key={k} href={{ pathname: '/forms', query: { ...opts, kind: k } }} aria-current={k === kind ? 'true' : undefined}>
+                <span className="si"><Icon name="listp" size={28} color="#1D8A5F" /></span><span className="sw"><span>{FORM_LABEL[k].replace(/ \(.*\)$/, '')}</span></span><u>09.{i + 1}</u>
+              </Link>
+            ))}
+          </nav>
+        </SubnavPortal>
+        <div>
+          {/* จำนวนชุดที่จะพิมพ์ — จำนวนบรรทัดปรับให้พอดี A4 อัตโนมัติแล้ว จึงไม่ต้องเลือก */}
+          <div className="card"><div className="toolbar"><span className="subtle">พิมพ์กี่ชุด</span>
+            {FORM_COPIES.map((n) => (
+              <Link key={n} className="btn sm" href={{ pathname: '/forms', query: { kind, ...(n === 1 ? {} : { copies: n }) } }}
+                    style={n === copies ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>{n}</Link>
+            ))}
+          </div></div>
+          <div className="printview blank-forms">
+            <FitToPage />
+            {Array.from({ length: copies }).map((_, i) => (
+              <BlankForm key={i} kind={kind} shop={info} rows={rows} />
+            ))}
+          </div>
         </div>
-        <div className="spacer" />
-
-        <div className="tag-row">
-          <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>บรรทัด</span>
-          {FORM_ROWS.map((r) => (
-            <Link key={r} className="chip"
-                  href={{ pathname: '/forms', query: { kind, ...(copies > 1 ? { copies } : {}), ...(r === DEFAULT_FORM_ROWS ? {} : { rows: r }) } }}
-                  style={r === rows ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
-              {r}
-            </Link>
-          ))}
-        </div>
-
-        <div className="tag-row">
-          <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>ชุด</span>
-          {FORM_COPIES.map((n) => (
-            <Link key={n} className="chip"
-                  href={{ pathname: '/forms', query: { kind, ...(rows === DEFAULT_FORM_ROWS ? {} : { rows }), ...(n === 1 ? {} : { copies: n }) } }}
-                  style={n === copies ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
-              {n}
-            </Link>
-          ))}
-        </div>
-
-        <PrintButton />
       </div>
-
-      <div className="printview blank-forms">
-        {Array.from({ length: copies }).map((_, i) => (
-          <BlankForm key={i} kind={kind} shop={info} rows={rows} />
-        ))}
-      </div>
-    </>
+    </Shell>
   );
 }
