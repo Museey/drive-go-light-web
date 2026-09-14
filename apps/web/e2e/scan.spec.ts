@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import pg from 'pg';
 import { makeSession } from './session';
 
@@ -41,6 +41,27 @@ const scan = async (page: import('@playwright/test').Page, text: string) => {
   await page.keyboard.press('Enter');
 };
 
+/**
+ * ช่องจำนวนของบรรทัดที่มีรหัสนี้ — หาคอลัมน์จากหัวตาราง ไม่นับลำดับช่องกรอก
+ *
+ * ตารางรายการแบบใหม่ (ชุดแก้ 13 ก.ย.) มีช่อง รหัส · ชื่อ · จำนวน · หน่วย … และบรรทัดว่างรออยู่เสมอ
+ * เทสต์เดิมนับ nth(3) จากแถวแรกของ .tbl ตัวแรก ซึ่งตอนนี้ได้ช่องหน่วย — ผ่านหรือพังด้วยเหตุผลผิดทั้งคู่
+ */
+async function qtyOf(page: Page, productCode: string) {
+  const table = page.locator('table.lines');
+  const headers = (await table.locator('thead th').allInnerTexts()).map((h) => h.trim());
+  const col = headers.indexOf('จำนวน');
+  expect(col, `หัวตาราง: ${headers.join(' | ')}`).toBeGreaterThanOrEqual(0);
+  const row = table.locator('tbody tr', { has: page.locator(`input[value="${productCode}"]`) });
+  await expect(row).toHaveCount(1);
+  return row.locator('td').nth(col).locator('input');
+}
+
+/** รหัสที่ถูกเติมในตารางรายการ (บรรทัดว่างไม่นับ) */
+const filledCodes = (page: Page) =>
+  page.locator('table.lines tbody tr td:nth-child(2) input').evaluateAll(
+    (els) => els.map((e) => (e as HTMLInputElement).value.trim()).filter(Boolean));
+
 test('ยิงแล้วเข้าเป็นบรรทัดทันที และไม่เผลอบันทึกเอกสาร', async ({ page }) => {
   await page.goto('/income/new?kind=QT&blank=1');
   await expect(page.locator('#scan')).toBeFocused();
@@ -48,7 +69,7 @@ test('ยิงแล้วเข้าเป็นบรรทัดทัน�
   await scan(page, barcode);
 
   /* บรรทัดเข้าจริง */
-  await expect(page.locator('.tbl input[value="' + code + '"]')).toHaveCount(1);
+  await expect(page.locator('table.lines input[value="' + code + '"]')).toHaveCount(1);
   /* ยังอยู่หน้าเดิม — Enter ของปืนต้องไม่ไปกดปุ่มบันทึก */
   await expect(page).toHaveURL(/\/income\/new/);
   /* โฟกัสกลับมาที่ช่องยิงเอง พร้อมยิงตัวถัดไป */
@@ -62,24 +83,27 @@ test('ยิงซ้ำเพิ่มจำนวนในบรรทัด�
   await scan(page, barcode);
   await scan(page, barcode);
 
-  await expect(page.locator('.tbl input[value="' + code + '"]')).toHaveCount(1);
-  const qty = page.locator('.tbl tbody tr').first().locator('input').nth(3);
-  await expect(qty).toHaveValue('3');
+  await expect(page.locator('table.lines input[value="' + code + '"]')).toHaveCount(1);
+  await expect(await qtyOf(page, code)).toHaveValue('3');
+  /* ตัวอักษรของนัดถัดไปต้องไม่หลงไปอยู่ในช่องอื่น — เคยเจอ: Enter ของนัดแรกย้ายโฟกัสออกจากช่องยิง
+     นัดที่สองและสามจึงถูกพิมพ์ลงช่องรหัสของบรรทัดแรก ปืนดังครบทุกนัด แต่ในใบมีของชิ้นเดียว */
+  expect(await filledCodes(page)).toEqual([code]);
+  await expect(page.locator('#scan')).toBeFocused();
 });
 
 test('พิมพ์จำนวนนำหน้าแล้วยิง ได้ตามจำนวน', async ({ page }) => {
   await page.goto('/income/new?kind=QT&blank=1');
   await scan(page, `40*${barcode}`);
 
-  const qty = page.locator('.tbl tbody tr').first().locator('input').nth(3);
-  await expect(qty).toHaveValue('40');
+  await expect(await qtyOf(page, code)).toHaveValue('40');
 });
 
 test('ยิงไม่เจอ ไม่เพิ่มบรรทัด และเสนอทางไปสร้างสินค้าใหม่', async ({ page }) => {
   await page.goto('/income/new?kind=QT&blank=1');
   await scan(page, 'ไม่มีรหัสนี้จริง');
 
-  await expect(page.locator('.tbl tbody tr')).toHaveCount(0);
+  /* ตารางแบบใหม่มีบรรทัดว่างรออยู่เสมอ — ตรวจว่าไม่มีบรรทัดไหนถูกเติมรหัส ไม่ใช่นับแถว */
+  expect(await filledCodes(page)).toEqual([]);
   const link = page.locator('a', { hasText: 'เพิ่มเป็นสินค้าใหม่' });
   await expect(link).toBeVisible();
   /* พาบาร์โค้ดที่ยิงไปด้วย จะได้ไม่ต้องพิมพ์ซ้ำแล้วเสี่ยงพิมพ์ผิด */
@@ -89,5 +113,5 @@ test('ยิงไม่เจอ ไม่เพิ่มบรรทัด แ
 test('ยิงเข้าใบซื้อได้ด้วย', async ({ page }) => {
   await page.goto('/expense/new?kind=PO');
   await scan(page, barcode);
-  await expect(page.locator('.tbl input[value="' + code + '"]')).toHaveCount(1);
+  await expect(page.locator('table.lines input[value="' + code + '"]')).toHaveCount(1);
 });

@@ -269,9 +269,10 @@ a { color: inherit; text-decoration: none; }
    จึงไม่ต้องมีคอลัมน์ซ้ายของแถบหลักอีก เมนูย่อยเท่านั้นที่อยู่ซ้าย */
 @media (min-width: 1280px) {
   .rail { padding: 8px 18px; gap: 10px; }
-  .rail .brand .shop { display: block; }
+  /* ชื่อร้านไม่อยู่ในแถวเมนูของเดสก์ท็อป (สเปก §3 A) — ที่ 1280px ไม่พอให้เมนูครบเก้าตัว */
+  .rail .brand .shop { display: none; }
   .rail .navbtn .lbl { display: inline; }
-  .rail .navbtn { padding: 9px 12px; }
+  .rail .navbtn { padding: 9px 8px; }
   .rail .foot .who { display: flex; }
 }
 
@@ -831,20 +832,24 @@ input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px;
 .hits5 { max-height: 290px; overflow-y: auto; }
 
 /* ---------- ปุ่มย้อนกลับลอย มุมขวาล่าง สีอำพันโปร่งแสง ----------
-   มือถือไม่แสดง — มีปุ่มย้อนกลับของเครื่องและมุมขวาล่างเป็นที่ของแถบล่าง
-   แท็บเล็ต/เดสก์ท็อปแสดง และเว้นท้ายหน้าไว้ให้ ไม่ให้ปุ่มบังปุ่มท้ายตาราง */
+   ทุกขนาดจอ (สเปก §3 G) — มือถือลอยเหนือแถบล่าง ตำแหน่งตามจออยู่ท้ายไฟล์
+   **position: fixed ต้องอยู่ในกฎฐาน** — เดิมอยู่ในบล็อก ≥768 เท่านั้น พอชุดแก้ให้มือถือเห็นปุ่มด้วย
+   ปุ่มจึงไม่ลอย ไหลไปต่อท้ายเนื้อหาที่ความสูง 2,299px (e2e nav.spec จับได้)
+   เว้นท้ายหน้าไว้ให้ ไม่ให้ปุ่มบังปุ่มท้ายตารางหรือปุ่มบันทึก */
+.backfab {
+  display: inline-flex; align-items: center; gap: 6px;
+  position: fixed; right: 18px; bottom: 18px; z-index: var(--z-sticky);
+  background: rgba(255,191,0,.55); color: #3A2A00;
+  border: 1px solid rgba(255,191,0,.8); border-radius: 999px;
+  padding: 9px 14px; min-height: 44px;
+  font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 6px 18px -8px rgba(0,0,0,.35);
+  backdrop-filter: blur(2px);
+}
+.backfab:hover { background: rgba(255,191,0,.92); color: #1F1600; }
+/* มือถือ: แถบล่าง 58 + ระยะ 14 + ปุ่ม 44 + ระยะ 14 — ของชิ้นสุดท้ายในหน้าต้องเลื่อนพ้นทั้งสองอย่างได้ */
+.main .wrap { padding-bottom: calc(var(--h-tabbar) + 72px); }
 @media (min-width: 768px) {
-  .backfab {
-    display: inline-flex; align-items: center; gap: 6px;
-    position: fixed; right: 18px; bottom: 18px; z-index: var(--z-sticky);
-    background: rgba(255,191,0,.55); color: #3A2A00;
-    border: 1px solid rgba(255,191,0,.8); border-radius: 999px;
-    padding: 9px 14px; min-height: 44px;
-    font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
-    box-shadow: 0 6px 18px -8px rgba(0,0,0,.35);
-    backdrop-filter: blur(2px);
-  }
-  .backfab:hover { background: rgba(255,191,0,.92); color: #1F1600; }
   .main .wrap { padding-bottom: 80px; }
 }
 
@@ -870,13 +875,14 @@ input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px;
 /* ตารางรายการสินค้า — ช่องกรอกในบรรทัดเบากว่าช่องปกติ */
 table.lines th { font-weight: 600; }
 table.lines td { padding: 5px 6px; vertical-align: middle; }
-table.lines .in { padding: 5px 8px; min-height: 36px; }
+/* เป้ากด ≥ 44px ทุกโหมด (สเปก §2 §10) — เดิม 36px บนมือถือ/แท็บเล็ตจึงกดพลาดง่าย (e2e จับได้ 37–38 จุด) */
+table.lines .in { padding: 5px 8px; min-height: 44px; }
 table.lines td.idx { color: var(--ink-3); width: 36px; text-align: center; }
 table.lines td.amt { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; white-space: nowrap; }
 table.lines td.stock { color: var(--ink-3); text-align: center; white-space: nowrap; }
 table.lines .del {
-  background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-3);
-  width: 32px; height: 32px; cursor: pointer; font-size: 14px;
+  background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-3); cursor: pointer; font-size: 14px;
+  min-width: 44px; min-height: 44px;
 }
 table.lines .del:hover { border-color: var(--due); color: var(--due); }
 /* ผลค้นหาของบรรทัด — เป็นแถวใต้บรรทัดนั้น ไม่ลอย ไม่ถูกตัดด้วย overflow ของตาราง */
@@ -888,7 +894,9 @@ table.lines tr.hitrow table.tbl td { padding: 6px 10px; }
 .pctswitch { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .pctswitch button {
   border: 0; background: #fff; color: var(--ink-2); font-family: inherit; font-size: 12.5px;
-  padding: 6px 10px; min-height: 36px; cursor: pointer;
+  padding: 6px 10px; cursor: pointer;
+  /* เป้ากด ≥ 44px ทุกโหมด (สเปก §2 §10) — ปุ่มสลับ % / บาท ของส่วนลดท้ายบิลเดิม 36px */
+  min-height: 44px;
 }
 .pctswitch button[aria-pressed='true'] { background: var(--steel-dk); color: #fff; font-weight: 700; }
 

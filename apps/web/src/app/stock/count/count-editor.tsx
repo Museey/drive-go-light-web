@@ -98,6 +98,8 @@ export function CountEditor({ count }: { count: StockCount }) {
               <div className="field" style={{ gridColumn: 'span 2' }}>
                 <label htmlFor="scan">ยิงบาร์โค้ดเข้าใบตรวจนับ</label>
                 <input className="in mono" id="scan" ref={scanRef} autoComplete="off"
+                       /* Enter ของปืนเป็นของช่องนี้ ไม่ใช่ "ไปช่องถัดไป" — ไม่งั้นนัดที่สองลงช่องค้นสินค้า */
+                       data-enter="own"
                        value={scanTerm}
                        onChange={(e) => setScanTerm(e.target.value)}
                        onKeyDown={(e) => {

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Icon } from './icon';
-import { BLANK_FORM, isCurrent, navItems, tabItems } from './nav-data';
+import { BLANK_FORM, TAB_LABEL, isCurrent, navItems, tabItems } from './nav-data';
 import { NavDrawer } from './nav-drawer';
 import type { Session } from '@/lib/auth';
 import { licenseLine, type LicenseBrief } from './license-line';
@@ -22,6 +22,20 @@ import { licenseLine, type LicenseBrief } from './license-line';
  * **สลับด้วย CSS ไม่ใช่วัดความกว้างใน JS** เพื่อไม่ให้เมนูกระพริบตอนโหลด
  * เลขกำกับ 01–08 อยู่ครบทุกปุ่มทุกรูปแบบ ผู้ใช้เดิมที่จำเลขได้ยังใช้ได้เหมือนเดิม
  */
+/**
+ * ชื่อสั้นบนแถบบนของเดสก์ท็อป — ชื่อเต็มยังอยู่ใน title, aria-label, ลิ้นชัก และหัวหน้าของหน้า
+ *
+ * วัดจริงที่ 1280px (จอเดสก์ท็อปแคบสุด): ชื่อเต็มครบเก้าเมนู + ชื่อร้าน + ผู้ใช้ ต้องใช้ราว 1,800px
+ * ปุ่ม 08 กับ 09 หลุดขอบขวาไปทั้งปุ่ม (e2e nav.spec จับได้) และเพิ่มจุดตัดจอไม่ได้ตามสเปก §2
+ * ย่อเฉพาะสี่ชื่อที่ยาวเกิน — เลขกำกับ 01–09 ยังอยู่ครบ ผู้ใช้เดิมที่จำเลขได้ไม่ต้องเรียนใหม่
+ */
+const RAIL_LABEL: Record<string, string> = {
+  customer: 'ลูกค้า/ผู้ขาย',
+  finance: 'การเงิน',
+  license: 'ลิขสิทธิ์',
+  blankform: 'ฟอร์มเปล่า',
+};
+
 export function MenuBar({ session, current, license }: {
   session: Session; current: string; license?: LicenseBrief;
 }) {
@@ -46,20 +60,21 @@ export function MenuBar({ session, current, license }: {
             const href = subs.find((s) => !s.todo)?.href ?? menu.href;
             return (
               <Link key={menu.key} className="navbtn" href={href}
-                    aria-current={here} title={menu.label}>
+                    aria-current={here} title={menu.label} aria-label={`${menu.no} ${menu.label}`}>
                 <span className="k">{menu.no}</span>
                 <Icon name={menu.icon} size={17} color={here ? menu.color : '#D7EEE2'} />
-                <span className="lbl">{menu.label}</span>
+                <span className="lbl">{RAIL_LABEL[menu.key] ?? menu.label}</span>
               </Link>
             );
           })}
 
           <Link className="navbtn" href={BLANK_FORM.href}
-                aria-current={current.startsWith('/forms')} title={BLANK_FORM.label}>
+                aria-current={current.startsWith('/forms')} title={BLANK_FORM.label}
+                aria-label={`${BLANK_FORM.no} ${BLANK_FORM.label}`}>
             <span className="k">{BLANK_FORM.no}</span>
             <Icon name={BLANK_FORM.icon} size={17}
                   color={current.startsWith('/forms') ? BLANK_FORM.color : '#D7EEE2'} />
-            <span className="lbl">{BLANK_FORM.label}</span>
+            <span className="lbl">{RAIL_LABEL[BLANK_FORM.key] ?? BLANK_FORM.label}</span>
           </Link>
         </div>
 
@@ -83,7 +98,7 @@ export function MenuBar({ session, current, license }: {
                 aria-current={isCurrent(menu, current)}>
             <Icon name={menu.icon} size={21}
                   color={isCurrent(menu, current) ? '#fff' : '#BFE3D6'} />
-            <b>{menu.label.split(' / ')[0]}</b>
+            <b>{TAB_LABEL[menu.key as keyof typeof TAB_LABEL] ?? menu.label.split(' / ')[0]}</b>
           </Link>
         ))}
         <button type="button" className="tab" onClick={() => setDrawer(true)}
