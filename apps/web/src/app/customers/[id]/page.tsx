@@ -1,6 +1,9 @@
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { isUuid } from '@/lib/ids';
+import { safeBack } from '@/lib/saved-target';
+import { SavedNotice } from '@/components/saved-notice';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getContact, getContactHistory, nextContactCode } from '@/lib/contacts';
@@ -14,7 +17,7 @@ export default async function ContactPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string; kind?: string }>;
+  searchParams: Promise<{ saved?: string; savedId?: string; error?: string; kind?: string }>;
 }) {
   await requireTab('customer', 'customer');
   const { id } = await params;
@@ -23,6 +26,8 @@ export default async function ContactPage({
   const sp = await searchParams;
   const isNew = id === 'new';
   const defaultKind = sp.kind === 'vendor' ? 'vendor' : 'customer';
+  /* แก้ไขผู้ติดต่อเดิม บันทึกแล้วกลับหน้าที่กดแก้ไขมา (ผู้ใช้กำหนด) · เพิ่มใหม่กลับฟอร์มเปล่า (ฝั่ง action) */
+  const back = isNew ? undefined : (safeBack((await headers()).get('referer'), ['/customers']) ?? undefined);
 
   const contact = isNew ? null : await getContact(id);
   if (!isNew && !contact) notFound();
@@ -38,13 +43,14 @@ export default async function ContactPage({
       title={isNew ? 'เพิ่มผู้ติดต่อใหม่' : contact!.displayName || contact!.code}
       sub={isNew ? undefined : `${contact!.code} · ${contact!.kind === 'vendor' ? 'ผู้ขาย' : 'ลูกค้า'}`}
     >
-      {sp.saved ? <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย</div> : null}
+      <SavedNotice saved={sp.saved} savedId={sp.savedId} />
       {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}
 
       <div className="card">
         <header><h2>{isNew ? 'ข้อมูลผู้ติดต่อ' : 'แก้ไขข้อมูลผู้ติดต่อ'}</h2></header>
         <div className="body">
-          <ContactForm contact={contact} defaultCode={defaultCode} defaultKind={defaultKind} />
+          {/* key = ใบบันทึกล่าสุด — เพิ่มรายถัดไปติดกัน ฟอร์มต้องเริ่มใหม่ ไม่ค้างค่าที่พิมพ์ของรายก่อน */}
+          <ContactForm key={`${id}:${sp.savedId ?? ''}`} contact={contact} defaultCode={defaultCode} defaultKind={defaultKind} returnTo={back} />
         </div>
       </div>
 

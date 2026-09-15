@@ -9,7 +9,7 @@ import { blankBuyDoc, listBuyDocs, type BuyKind } from '@/lib/purchases';
 import { getShop } from '@/lib/queries';
 import { getDefaultNote, peekDocSeq } from '@/lib/sales';
 import { BuyEditor } from './buy-editor';
-import { SavedBanner } from '@/components/saved-banner';
+import { SavedNotice } from '@/components/saved-notice';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { HIST_DEFAULT_PAGE_SIZE, HIST_PAGE_SIZES, PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, payLabel, thDate } from '@/lib/format';
@@ -90,7 +90,7 @@ export default async function ExpensePage({
       </>}
     >
       <SubNav menu="expense" current={sp.kind === 'EX' ? 'expense' : 'purchase'}>
-      {sp.saved && sp.savedId ? <SavedBanner docNo={sp.saved} printHref={`/expense/${sp.savedId}/print`} openHref={`/expense/${sp.savedId}`} /> : null}
+      <SavedNotice saved={sp.saved} savedId={sp.savedId} />
       <div className="card">
         <div className="toolbar">
           <div className="tiles">

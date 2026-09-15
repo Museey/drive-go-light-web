@@ -11,7 +11,7 @@ import { HIST_DEFAULT_PAGE_SIZE, HIST_PAGE_SIZES, PageSize, pageSizeOf } from '@
 import { baht, thDate } from '@/lib/format';
 import { today } from '@drivegolight/core';
 import { BillForm, type Party } from './bill-form';
-import { SavedBanner } from '@/components/saved-banner';
+import { SavedNotice } from '@/components/saved-notice';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,7 +101,7 @@ export default async function BillingPage({
           เมื่อได้รับเงินแล้วให้ออกใบเสร็จรับเงินตามปกติ
         </div>
 
-        {sp.saved && sp.savedId ? <SavedBanner docNo={sp.saved} printHref={`/income/billing/${sp.savedId}/print`} openHref={`/income/billing/${sp.savedId}`} label="พิมพ์ใบวางบิล" /> : null}
+        <SavedNotice saved={sp.saved} savedId={sp.savedId} />
         <div className="card">
           <div className="toolbar">
             {/* แถบไทล์ตามเมนูย่อย "ใบวางบิล": ประวัติทั้งหมด · ประวัติ IVT · ประวัติ IV · [+ IVT] [+ IV] */}

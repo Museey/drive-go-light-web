@@ -5,6 +5,21 @@ import { redirect } from 'next/navigation';
 import { deleteContact, saveContact } from '@/lib/contacts';
 import { readVehicles } from '@/lib/read-vehicles';
 import { digits, friendlyDbError, keepValues, str, type FormResult } from '@/lib/mutate';
+import { CUST_COLS, setCustHiddenCols } from '@/lib/ui-prefs';
+import { safeBack, withSaved } from '@/lib/saved-target';
+
+/** การ์ดตั้งค่าการแสดงผลทะเบียนลูกค้า/ผู้ขาย — รับคอลัมน์ที่ติ๊กไว้ เก็บคอลัมน์ที่เหลือเป็นที่ซ่อน */
+export async function saveCustColsAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
+  const shown = fd.getAll('col').map(String);
+  const hidden = CUST_COLS.map(([k]) => k).filter((k) => !shown.includes(k));
+  try {
+    await setCustHiddenCols(hidden);
+  } catch (err) {
+    return { error: friendlyDbError(err) };
+  }
+  revalidatePath('/customers');
+  return { ok: true };
+}
 
 export async function saveContactAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
   const id = str(fd, 'id') || undefined;
@@ -54,7 +69,11 @@ export async function saveContactAction(_prev: FormResult, fd: FormData): Promis
   }
 
   revalidatePath('/customers');
-  redirect(`/customers/${savedId}?saved=1`);
+  /* การ์ดบันทึกแล้ว (ผู้ใช้กำหนด): เพิ่มใหม่ → ฟอร์มเปล่าชนิดเดิม พร้อมเพิ่มรายถัดไป · แก้ไข → หน้าที่กดแก้ไขมา */
+  const back = id
+    ? (safeBack(fd.get('returnTo'), ['/customers']) ?? `/customers/${savedId}`)
+    : `/customers/new?kind=${kind}`;
+  redirect(withSaved(back, 'contact', savedId));
 }
 
 export async function deleteContactAction(

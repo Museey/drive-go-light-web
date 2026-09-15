@@ -8,7 +8,9 @@ import { Pager } from '@/components/pager';
 import { getStockHiddenCols, STOCK_COLS, STOCK_COLS_FIXED } from '@/lib/ui-prefs';
 import { picShaOf } from '@/lib/pics';
 import { listPendingItems } from '@/lib/pending';
-import { ColPicker } from './col-picker';
+import { ColPicker } from '@/components/col-picker';
+import { saveStockColsAction } from './actions';
+import { SavedNotice } from '@/components/saved-notice';
 import { ActionTiles } from '@/components/action-tiles';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
@@ -22,7 +24,7 @@ export const dynamic = 'force-dynamic';
 export default async function StockPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cols?: string;
+  searchParams: Promise<{ cols?: string; saved?: string; savedId?: string;
     q?: string; cat?: string; reorder?: string; all?: string; page?: string; flag?: string; size?: string;
   }>;
 }) {
@@ -75,6 +77,8 @@ export default async function StockPage({
       sub={`${total.toLocaleString('en-US')} รายการ` + (show('cost') ? ` · มูลค่าสต๊อก ${baht(stockValue)}` : '')}
     >
       <SubNav menu="stock" current="list" badges={{ pending: pending.length }}>
+      {/* แก้ไขสินค้าจากทะเบียน บันทึกแล้วกลับมาที่นี่พร้อมการ์ด */}
+      <SavedNotice saved={sp.saved} savedId={sp.savedId} />
       <div className="card">
         {/* แถบไทล์แบบเดียวกับต้นแบบ: ทั้งหมด · ถึงจุดสั่งซื้อ · ตัวกรองสต๊อก · การ์ดอำพันเพิ่มสินค้า · ค้นหา · ตั้งค่าการแสดงผล · พิมพ์รายงาน */}
         <div className="toolbar">
@@ -105,7 +109,9 @@ export default async function StockPage({
             </label>
             <button className="btn" type="submit">ค้นหา</button>
           </form>
-          <ColPicker cols={STOCK_COLS} hidden={hidden} fixed={STOCK_COLS_FIXED} startOpen={sp.cols === '1'} />
+          <ColPicker cols={STOCK_COLS} hidden={hidden} fixed={STOCK_COLS_FIXED} action={saveStockColsAction}
+                     title="ตั้งค่าการแสดงผลรายการสินค้า" basicHint="พื้นฐาน: รหัสสินค้า · ชื่อสินค้า · คงเหลือ · ราคา A"
+                     startOpen={sp.cols === '1'} />
           <Link className="btn" href={`/stock/print${printQuery ? `?${printQuery}` : ''}`}>🖨 พิมพ์รายงาน</Link>
         </div>
 

@@ -6,6 +6,7 @@ import { SubNav } from '@/components/sub-nav';
 import { baht } from '@/lib/format';
 import { listKits } from '@/lib/kits';
 import { DeactivateKit } from './deactivate-kit';
+import { SavedNotice } from '@/components/saved-notice';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
 export default async function KitsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; saved?: string }>;
+  searchParams: Promise<{ q?: string; saved?: string; savedId?: string }>;
 }) {
   const session = await requireTab('stock', 'kits');
   const sp = await searchParams;
@@ -31,11 +32,8 @@ export default async function KitsPage({
     <Shell current="/stock" title="ชุดอะไหล่ซ่อมบำรุง"
            sub={`${kits.length.toLocaleString('en-US')} ชุด · ขายเป็นบรรทัดเดียว ใบเสร็จตัดสต๊อกชิ้นส่วนให้`}>
       <SubNav menu="stock" current="kits">
-        {sp.saved ? (
-          <div className="ok-msg saved" role="status">
-            บันทึกชุด <b className="mono">{sp.saved}</b> เรียบร้อย
-          </div>
-        ) : null}
+        {/* แก้ไขชุดจากรายการ บันทึกแล้วกลับมาที่นี่พร้อมการ์ด */}
+        <SavedNotice saved={sp.saved} savedId={sp.savedId} />
         <div className="card">
           <div className="toolbar">
             <div className="tiles">

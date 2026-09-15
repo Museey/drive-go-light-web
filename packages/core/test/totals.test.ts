@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  exTotals, isServiceItem, paidOf, payState, poTotals, recTotals, totalsOf, whtBaseOf,
+  exTotals, isServiceItem, paidOf, payState, poTotals, recTotals, totalsOf, WHT_MIN_BASE, whtBaseOf,
 } from '../src/index.js';
 
 const VAT7 = { vatRate: 7 };
@@ -97,20 +97,21 @@ describe('whtBaseOf — ฐานภาษีหัก ณ ที่จ่าย
 });
 
 describe('recTotals — เอกสารขาย', () => {
+  /* เดิมค่าแรง 500 หัก 15 บาท — ผู้ใช้กำหนดขั้นต่ำ 1,000 บาท (16 ก.ย. 2569) จึงยกค่าแรงเป็น 1,200 ให้ยังตรวจสูตรหักได้ */
   it('หักภาษี ณ ที่จ่าย 3% จากค่าแรงเท่านั้น', () => {
     const doc = {
       date: '2026-08-01',
-      items: [{ qty: 2, price: 1450 }, { qty: 1, price: 500, svc: true }],
+      items: [{ qty: 2, price: 1450 }, { qty: 1, price: 1200, svc: true }],
       vatMode: 'ex' as const,
       whtRate: 3,
     };
     const t = recTotals(doc, VAT7);
-    expect(t.net).toBe(3400);
-    expect(t.vat).toBe(238);
-    expect(t.grand).toBe(3638);
-    expect(t.whtBase).toBe(500);
-    expect(t.wht).toBe(15);          // 3% ของ 500
-    expect(t.payable).toBe(3623);    // ลูกค้าจ่ายจริง = 3,638 - 15
+    expect(t.net).toBe(4100);
+    expect(t.vat).toBe(287);
+    expect(t.grand).toBe(4387);
+    expect(t.whtBase).toBe(1200);
+    expect(t.wht).toBe(36);          // 3% ของ 1,200
+    expect(t.payable).toBe(4351);    // ลูกค้าจ่ายจริง = 4,387 - 36
   });
 
   it('whtRate = 0 ไม่หักอะไรเลย', () => {
@@ -121,6 +122,59 @@ describe('recTotals — เอกสารขาย', () => {
       whtRate: 0,
     };
     expect(recTotals(doc, VAT7).payable).toBe(1070);
+  });
+});
+
+/**
+ * ขั้นต่ำหัก ณ ที่จ่าย — ค่าบริการครั้งหนึ่ง 1,000 บาทขึ้นไปจึงหัก (ผู้ใช้กำหนด 16 ก.ย. 2569 · เฉพาะเอกสารรายรับ)
+ * ต่ำกว่านั้นลูกค้าไม่ต้องหัก ถ้าระบบหักให้ ยอดที่ลูกค้าจ่ายจะขาดไปและค้างเป็นลูกหนี้ปลอม
+ */
+describe('recTotals — ขั้นต่ำหัก ณ ที่จ่าย 1,000 บาท', () => {
+  const svc = (price: number, extra: object = {}) => ({
+    date: '2026-09-16', items: [{ qty: 1, price, svc: true }], vatMode: 'ex' as const, whtRate: 3, ...extra,
+  });
+
+  it('ค่าคงที่ขั้นต่ำคือ 1,000 บาท', () => {
+    expect(WHT_MIN_BASE).toBe(1000);
+  });
+
+  it('ค่าแรง 999.99 บาท — ไม่หัก ยอดชำระ = รวมทั้งสิ้น', () => {
+    const t = recTotals(svc(999.99), VAT7);
+    expect(t.whtBase).toBe(999.99);   // ฐานยังบอกไว้ ให้หน้าจอแจ้งได้ว่าไม่ถึง
+    expect(t.wht).toBe(0);
+    expect(t.payable).toBe(t.grand);
+  });
+
+  it('ค่าแรง 1,000.00 บาทพอดี — หัก 3% = 30 บาท', () => {
+    const t = recTotals(svc(1000), VAT7);
+    expect(t.wht).toBe(30);
+    expect(t.payable).toBe(1040);
+  });
+
+  it('ค่าแรง 1,500 บาท — หัก 45 บาท', () => {
+    expect(recTotals(svc(1500), VAT7).wht).toBe(45);
+  });
+
+  it('ค่าแรง 1,200 แต่ส่วนลดท้ายบิลทำให้ฐานเหลือ 960 — ไม่หัก', () => {
+    const t = recTotals(svc(1200, { discount: 240 }), VAT7);
+    expect(t.whtBase).toBe(960);
+    expect(t.wht).toBe(0);
+  });
+
+  it('ราคารวม VAT 1,059.30 → ฐานหลังถอด VAT 990 — ไม่หัก', () => {
+    const t = recTotals(svc(1059.3, { vatMode: 'in' as const }), VAT7);
+    expect(t.whtBase).toBe(990);
+    expect(t.wht).toBe(0);
+  });
+
+  it('ค่าอะไหล่ 5,000 + ค่าแรง 800 — ยอดรวมเกินแต่ค่าแรงไม่ถึง ไม่หัก', () => {
+    const doc = { ...svc(800), items: [{ qty: 1, price: 5000 }, { qty: 1, price: 800, svc: true }] };
+    expect(recTotals(doc, VAT7).wht).toBe(0);
+  });
+
+  it('ค่าใช้จ่าย (อู่เป็นผู้จ่าย) ไม่ใช้ขั้นต่ำนี้ — 500 บาทยังหัก 3% เท่าเดิม', () => {
+    const t = exTotals({ date: '2026-09-16', cat: 'other', items: [{ qty: 1, price: 500 }], vatMode: 'ex', whtRate: 3 }, VAT7);
+    expect(t.wht).toBe(15);
   });
 });
 

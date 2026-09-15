@@ -162,8 +162,10 @@ function NewProductPic({ state }: { state: FormResult }) {
 }
 
 export function ProductForm({
-  product, categories, presetBarcode, suppliers,
+  product, categories, presetBarcode, suppliers, returnTo,
 }: {
+  /** แก้ไขแล้วกลับหน้าที่กดแก้ไขมา — เซิร์ฟเวอร์กรองซ้ำด้วย safeBack */
+  returnTo?: string;
   product: ProductRow | null;
   suppliers?: ProductSupplier[];
   categories: Category[];
@@ -195,6 +197,7 @@ export function ProductForm({
   return (
     <form autoComplete="off" className="form" action={action}>
       {product ? <input type="hidden" name="id" value={product.id} /> : null}
+      {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
 
       {state.error ? <div className="err">{state.error}</div> : null}
 

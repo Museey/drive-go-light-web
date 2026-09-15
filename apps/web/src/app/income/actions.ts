@@ -7,6 +7,7 @@ import {
   saveSalesDoc, scanForDoc, searchCustomers, searchProducts, voidSalesDoc,
   type DocScan, type PickedContact, type PickedProduct, type SalesDocInput, openDocsFor, loadDocForCopy, type OpenDoc } from '@/lib/sales';
 import { friendlyDbError, type FormResult } from '@/lib/mutate';
+import { safeBack, withSaved } from '@/lib/saved-target';
 
 /**
  * ฟอร์มออกเอกสารเก็บสถานะไว้ฝั่งเบราว์เซอร์ทั้งก้อนแล้วส่งมาเป็น JSON ชุดเดียว
@@ -50,15 +51,12 @@ export async function saveDocAction(_prev: FormResult, fd: FormData): Promise<Fo
 
   revalidatePath('/income');
   revalidatePath('/stock');
-  /* บันทึกแล้วกลับไปหน้าเดิม (ที่ผู้ใช้ส่ง returnTo มา) พร้อมเลขที่และ id ไว้ทำปุ่มพิมพ์ — ไม่ส่ง = ไปหน้าเอกสาร */
   /* กด "พิมพ์เอกสาร" ในฟอร์ม → บันทึกแล้วไปหน้าพิมพ์ทันที */
   if (fd.get('printAfter') === '1') redirect(`/income/${saved.id}/print?saved=${encodeURIComponent(saved.docNo)}`);
-  const back = String(fd.get('returnTo') ?? '');
-  if (back.startsWith('/income')) {
-    const sep = back.includes('?') ? '&' : '?';
-    redirect(`${back}${sep}saved=${encodeURIComponent(saved.docNo)}&savedId=${saved.id}`);
-  }
-  redirect(`/income/${saved.id}?saved=${encodeURIComponent(saved.docNo)}`);
+  /* การ์ดบันทึกแล้ว (ผู้ใช้กำหนด): สร้างใหม่ → หน้าฟอร์มที่ส่ง returnTo มา หรือฟอร์มเปล่าชนิดเดิม
+     แก้ไข → หน้าที่กดแก้ไขมา (returnTo จาก Referer ของหน้าแก้ไข) ไม่มีก็หน้าเอกสาร */
+  const fallback = input.id ? `/income/${saved.id}` : `/income?kind=${input.kind}`;
+  redirect(withSaved(safeBack(fd.get('returnTo'), ['/income']) ?? fallback, 'sales', saved.id));
 }
 
 export async function voidDocAction(id: string, reason: string): Promise<void> {

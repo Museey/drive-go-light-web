@@ -172,7 +172,8 @@ test('สินค้า: ไม่ติ๊กเปิดใช้งาน �
       await fillNewProduct(page, code);
       if (!on) await page.locator('input[name="active"]').uncheck();
       await page.getByRole('button', { name: 'บันทึกสินค้า' }).click();
-      await expect(page).toHaveURL(/\/stock\/[0-9a-f-]{36}\?saved=1/);
+      /* บันทึกแล้วกลับฟอร์มเปล่าพร้อมการ์ด (ผู้ใช้กำหนด 16 ก.ย. 2569 — เดิมไปหน้าสินค้า) */
+      await expect(page).toHaveURL(/\/stock\/new\?saved=product&savedId=[0-9a-f-]{36}/);
     }
     const rows = await db((c) => c.query(`select code, active from products where code like $1 order by code`, [`${tag}%`]));
     expect(rows.rows).toEqual([{ code: `${tag}-OFF`, active: false }, { code: `${tag}-ON`, active: true }]);
@@ -205,7 +206,9 @@ test('สินค้าใหม่: เลือกรูปในฟอร์
     await expect(page.getByAltText('รูปสินค้าที่เลือก')).toBeVisible();
 
     await page.getByRole('button', { name: 'บันทึกสินค้า' }).click();
-    await expect(page).toHaveURL(/\/stock\/[0-9a-f-]{36}\?saved=1/);
+    /* บันทึกแล้วกลับฟอร์มเปล่าพร้อมการ์ด (ผู้ใช้กำหนด 16 ก.ย. 2569) — เปิดหน้าสินค้าจาก id ที่บันทึก */
+    await expect(page).toHaveURL(/\/stock\/new\?saved=product&savedId=[0-9a-f-]{36}/);
+    await page.goto(`/stock/${new URL(page.url()).searchParams.get('savedId')}`);
     const img = page.getByAltText('รูปสินค้า', { exact: true });
     await expect(img).toHaveAttribute('src', /^\/pics\//);
     expect(await img.evaluate((el: HTMLImageElement) => el.decode().then(() => el.naturalWidth))).toBe(640);

@@ -16,9 +16,11 @@ const emptyLine = (): Line => ({ productId: null, code: '', name: '', unit: '', 
 /** ตารางมีบรรทัดว่างท้ายเสมอ พิมพ์เองต่อได้ทันทีโดยไม่ต้องกดเพิ่ม (แบบเดียวกับฟอร์มเอกสาร) */
 const withBlank = (ls: Line[]) => (ls.some((l) => !l.productId && !l.name.trim()) ? ls : [...ls, emptyLine()]);
 
-export function KitEditor({ initial, code, showCost, mayEdit }: {
+export function KitEditor({ initial, code, showCost, mayEdit, returnTo }: {
   initial: { id: string; code: string; name: string; price: number; priceB: number; priceC: number; note: string; items: KitItemInput[] } | null;
   code: string;
+  /** แก้ไขแล้วกลับหน้าที่กดแก้ไขมา — เซิร์ฟเวอร์กรองซ้ำด้วย safeBack */
+  returnTo?: string;
   /** ผู้ไม่มีสิทธิ์เห็นต้นทุน: ไม่เห็นช่องทุน/กำไร — ค่าทุนเดิมส่งกลับไปแบบซ่อนเพื่อไม่ให้ถูกล้างเป็นศูนย์ */
   showCost: boolean;
   mayEdit: boolean;
@@ -58,6 +60,7 @@ export function KitEditor({ initial, code, showCost, mayEdit }: {
   return (
     <form autoComplete="off" className="form card" action={action} style={{ padding: 16 }}>
       <input type="hidden" name="id" value={initial?.id ?? ''} />
+      {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
       {state.error ? <div className="err" role="alert">{state.error}</div> : null}
 
       <div className="row-fields f4">
