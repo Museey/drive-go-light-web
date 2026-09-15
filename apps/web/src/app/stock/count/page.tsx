@@ -63,7 +63,7 @@ export default async function CountPage({
 
         <div className="card">
           <div className="toolbar">
-            <form action="/stock/count" method="get" style={{ display: 'flex', gap: 6 }}>
+            <form autoComplete="off" action="/stock/count" method="get" style={{ display: 'flex', gap: 6 }}>
               <input className="in" type="search" name="q" defaultValue={sp.q ?? ''}
                      placeholder="เลขที่ใบ หรือหมายเหตุ" style={{ width: 260 }} />
               <button className="btn" type="submit">ค้นหา</button>

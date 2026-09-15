@@ -121,7 +121,7 @@ export function CountEditor({ count }: { count: StockCount }) {
               <div className="field">
                 <label htmlFor="pq">หรือดึงสินค้ามาตรวจนับทีละหลายตัว</label>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <input className="in" id="pq" value={partQuery}
+                  <input autoComplete="off" className="in" id="pq" value={partQuery}
                          onChange={(e) => setPartQuery(e.target.value)}
                          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                          placeholder="รหัส ชื่อ หรือหมวด" />
@@ -226,7 +226,7 @@ export function CountEditor({ count }: { count: StockCount }) {
                             {it.countedQty === null ? '—' : fmtQty(it.countedQty)}
                           </span>
                         ) : (
-                          <input className="in mono" inputMode="decimal" placeholder="—"
+                          <input autoComplete="off" className="in mono" inputMode="decimal" placeholder="—"
                                  style={{ textAlign: 'right' }}
                                  value={draftQty[it.id] ?? (it.countedQty === null ? '' : fmtQty(it.countedQty))}
                                  onChange={(e) =>

@@ -40,7 +40,7 @@ export function VehicleFields({
           {row.map((f) => (
             <div className="field" key={f.key}>
               <label htmlFor={`veh-${f.key}`}>{f.label}</label>
-              <input id={`veh-${f.key}`} className={f.mono ? 'in mono' : 'in'}
+              <input autoComplete="off" id={`veh-${f.key}`} className={f.mono ? 'in mono' : 'in'}
                      value={veh[f.key] ?? ''} placeholder={f.hint}
                      onChange={(e) => set(f.key, e.target.value)} />
             </div>

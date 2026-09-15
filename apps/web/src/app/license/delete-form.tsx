@@ -20,7 +20,7 @@ export function DeleteTenantForm({ shopName }: { shopName: string }) {
     return (
       <div className="ok-msg">
         ลบข้อมูลเรียบร้อย — ข้อมูลทั้งหมดของอู่นี้ถูกลบออกจากระบบแล้ว
-        <form action="/logout" method="post" style={{ marginTop: 10 }}>
+        <form autoComplete="off" action="/logout" method="post" style={{ marginTop: 10 }}>
           <button className="btn" type="submit">ออกจากระบบ</button>
         </form>
       </div>
@@ -36,7 +36,7 @@ export function DeleteTenantForm({ shopName }: { shopName: string }) {
   }
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       {state.error ? <div className="err">{state.error}</div> : null}
 
       <div className="err">

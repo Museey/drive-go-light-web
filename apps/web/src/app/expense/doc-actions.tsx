@@ -28,7 +28,7 @@ export function BuyDocActions({ id, startVoiding }: {
                    onChange={(e) => setReason(e.target.value)} />
           </div>
           <div className="tag-row">
-            <form action={voidBuyDocAction.bind(null, id, reason)}>
+            <form autoComplete="off" action={voidBuyDocAction.bind(null, id, reason)}>
               <button className="btn danger" type="submit">ยืนยันยกเลิกเอกสาร</button>
             </form>
             <button className="btn" type="button" onClick={() => setVoiding(false)}>ไม่ยกเลิกแล้ว</button>
@@ -89,7 +89,7 @@ export function UnvoidBuyDoc({ id, docNo, hasStock }: {
           ) : null}
         </p>
         <div className="tag-row">
-          <form action={unvoidBuyDocAction.bind(null, id)}>
+          <form autoComplete="off" action={unvoidBuyDocAction.bind(null, id)}>
             <button className="btn primary" type="submit">ยืนยันกู้คืน</button>
           </form>
           <button className="btn" type="button" onClick={() => setAsking(false)}>ไม่กู้คืนแล้ว</button>

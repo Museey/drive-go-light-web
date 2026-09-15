@@ -46,7 +46,7 @@ export function DocActions({
                    onChange={(e) => setReason(e.target.value)} />
           </div>
           <div className="tag-row">
-            <form action={voidDocAction.bind(null, id, reason)}>
+            <form autoComplete="off" action={voidDocAction.bind(null, id, reason)}>
               <button className="btn danger" type="submit">ยืนยันยกเลิกเอกสาร</button>
             </form>
             <button className="btn" type="button" onClick={() => setVoiding(false)}>ไม่ยกเลิกแล้ว</button>

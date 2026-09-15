@@ -68,7 +68,7 @@ export function PaymentsPanel({
                       <span className="subtle" style={{ fontSize: 12 }}>แก้ที่ตัวเอกสาร</span>
                     ) : confirming === p.id ? (
                       <div className="tag-row">
-                        <form action={async () => {
+                        <form autoComplete="off" action={async () => {
                           const r = await deletePaymentAction(p.id, docId);
                           setError(r.error ?? null);
                           setConfirming(null);

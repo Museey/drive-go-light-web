@@ -27,7 +27,7 @@ export function ContactsImport({ kind }: { kind: 'customer' | 'vendor' }) {
   const p = state.plan;
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       <input type="hidden" name="kind" value={kind} />
 
       {state.error ? <div className="err">{state.error}</div> : null}

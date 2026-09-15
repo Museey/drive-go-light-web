@@ -67,7 +67,7 @@ export function TrashActions({ source, id, docNo, kindName, mayPurge }: {
       {confirming ? createPortal(
         <>
           <button className="scrim" type="button" aria-label="ปิด" onClick={close} />
-          <form className="confirm" role="dialog" aria-modal="true" aria-label={`ยืนยันลบ ${docNo} ถาวร`}
+          <form autoComplete="off" className="confirm" role="dialog" aria-modal="true" aria-label={`ยืนยันลบ ${docNo} ถาวร`}
                 onSubmit={(e) => { e.preventDefault(); if (password) run(() => purgeTrashAction(source, id, password)); }}>
             <header>
               <b>ลบถาวร — กู้คืนไม่ได้</b>

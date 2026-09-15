@@ -54,7 +54,7 @@ export function PendingRow({ item }: { item: PendingItem }) {
                     onClick={() => setPanel(panel === 'create' ? null : 'create')}>
               สร้างสินค้าใหม่
             </button>
-            <form action={ignorePendingAction.bind(null, item.nameNorm)}>
+            <form autoComplete="off" action={ignorePendingAction.bind(null, item.nameNorm)}>
               <button className="btn sm" type="submit">ข้าม</button>
             </form>
           </div>
@@ -64,7 +64,7 @@ export function PendingRow({ item }: { item: PendingItem }) {
       {panel === 'link' ? (
         <tr>
           <td colSpan={6} style={{ background: 'var(--bg)' }}>
-            <form action={linkAction} className="form" style={{ padding: '6px 0' }}>
+            <form autoComplete="off" action={linkAction} className="form" style={{ padding: '6px 0' }}>
               <input type="hidden" name="nameNorm" value={item.nameNorm} />
               {linkState.error ? <div className="err">{linkState.error}</div> : null}
 
@@ -105,7 +105,7 @@ export function PendingRow({ item }: { item: PendingItem }) {
       {panel === 'create' ? (
         <tr>
           <td colSpan={6} style={{ background: 'var(--bg)' }}>
-            <form action={createAction} className="form" style={{ padding: '6px 0' }}>
+            <form autoComplete="off" action={createAction} className="form" style={{ padding: '6px 0' }}>
               <input type="hidden" name="nameNorm" value={item.nameNorm} />
               {createState.error ? <div className="err">{createState.error}</div> : null}
 

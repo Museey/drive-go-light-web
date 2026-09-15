@@ -41,7 +41,7 @@ export function VoidBillnote({ id, no, startOpen }: {
         </div>
         <div className="field">
           <label htmlFor="reason">เหตุผล</label>
-          <input className="in" id="reason" value={reason}
+          <input className="in" id="reason" autoComplete="off" value={reason}
                  onChange={(e) => setReason(e.target.value)}
                  placeholder="เช่น ลูกค้าขอให้แยกบิลใหม่" />
         </div>

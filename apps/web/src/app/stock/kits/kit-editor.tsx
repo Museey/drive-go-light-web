@@ -56,7 +56,7 @@ export function KitEditor({ initial, code, showCost, mayEdit }: {
   const bad = (f: string) => (state.field === f ? 'field bad' : 'field');
 
   return (
-    <form className="form card" action={action} style={{ padding: 16 }}>
+    <form autoComplete="off" className="form card" action={action} style={{ padding: 16 }}>
       <input type="hidden" name="id" value={initial?.id ?? ''} />
       {state.error ? <div className="err" role="alert">{state.error}</div> : null}
 
@@ -136,10 +136,10 @@ export function KitEditor({ initial, code, showCost, mayEdit }: {
           <thead>
             <tr>
               <th style={{ width: 34 }}>#</th>
-              <th>รายการในชุด</th>
-              <th style={{ width: 90 }}>หน่วย</th>
-              <th className="num" style={{ width: 90 }}>จำนวน</th>
-              {showCost ? <><th className="num" style={{ width: 110 }}>ทุน/หน่วย</th><th className="num" style={{ width: 110 }}>รวม</th></> : null}
+              <th className="c-name">รายการในชุด</th>
+              <th className="c-unit">หน่วย</th>
+              <th className="num c-qty">จำนวน</th>
+              {showCost ? <><th className="num c-price">ทุน/หน่วย</th><th className="num" style={{ width: 110 }}>รวม</th></> : null}
               <th style={{ width: 48 }} />
             </tr>
           </thead>
@@ -147,7 +147,7 @@ export function KitEditor({ initial, code, showCost, mayEdit }: {
             {lines.map((l, i) => (
               <tr key={i}>
                 <td style={{ textAlign: 'center' }}>{i + 1}</td>
-                <td>
+                <td className="c-name">
                   <input type="hidden" name={`it${i}_pid`} value={l.productId ?? ''} />
                   <input className="in" name={`it${i}_name`} value={l.name} readOnly={!mayEdit || !!l.productId}
                          onChange={(e) => setLine(i, { name: e.target.value })}
@@ -155,18 +155,18 @@ export function KitEditor({ initial, code, showCost, mayEdit }: {
                   {l.productId ? <span className="chip ok" title="ผูกทะเบียนสินค้า ใบเสร็จตัดสต๊อก">{l.code || 'ทะเบียน'}</span>
                     : l.name.trim() ? <span className="chip warn" title="ไม่ได้ผูกกับทะเบียนสินค้า จะไม่ตัดสต๊อก">ไม่ตัดสต๊อก</span> : null}
                 </td>
-                <td>
+                <td className="c-unit">
                   <input className="in" name={`it${i}_unit`} value={l.unit} readOnly={!mayEdit || !!l.productId}
                          onChange={(e) => setLine(i, { unit: e.target.value })} />
                 </td>
-                <td className="num">
+                <td className="num c-qty">
                   <input className="in mono" name={`it${i}_qty`} inputMode="decimal" value={l.qty} readOnly={!mayEdit}
                          style={{ textAlign: 'right', ...(state.field === `it${i}_qty` ? { borderColor: 'var(--due)' } : {}) }}
                          onChange={(e) => setLine(i, { qty: Number(e.target.value) || 0 })} />
                 </td>
                 {showCost ? (
                   <>
-                    <td className="num">
+                    <td className="num c-price">
                       <input className="in mono" name={`it${i}_cost`} inputMode="decimal" value={l.unitCost} readOnly={!mayEdit}
                              style={{ textAlign: 'right', ...(state.field === `it${i}_cost` ? { borderColor: 'var(--due)' } : {}) }}
                              onChange={(e) => setLine(i, { unitCost: Number(e.target.value) || 0 })} />

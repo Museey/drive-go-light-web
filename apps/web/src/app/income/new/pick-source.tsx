@@ -36,7 +36,7 @@ export function PickSource({
       <div className="body">
         <p style={{ color: 'var(--ink-2)', marginTop: 0 }}>{hint}</p>
 
-        <form action="/income/new" method="get" style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        <form autoComplete="off" action="/income/new" method="get" style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
           <input type="hidden" name="kind" value={kind} />
           <input className="in" type="search" name="q" defaultValue={search}
                  placeholder="เลขที่เอกสาร ชื่อลูกค้า หรือทะเบียนรถ" style={{ width: 280 }} />

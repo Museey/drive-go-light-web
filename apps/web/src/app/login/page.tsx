@@ -46,7 +46,7 @@ export default async function LoginPage({
             </div>
           ) : null}
 
-          <form action={submit}>
+          <form autoComplete="off" action={submit}>
             <label className="in-label" htmlFor="email" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
               อีเมล
             </label>

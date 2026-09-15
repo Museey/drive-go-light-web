@@ -39,7 +39,7 @@ export function ColPicker({ cols, hidden, fixed, startOpen = false }: {
   return (
     <div className="card" style={{ margin: '0 0 12px', flexBasis: '100%' }}>
       <header><h2>ตั้งค่าการแสดงผลรายการสินค้า</h2><div className="spacer" /><span className="subtle">ติ๊กคอลัมน์ที่ต้องการให้เห็นในตาราง · ข้อมูลทุกช่องยังเก็บครบเหมือนเดิม</span></header>
-      <form action={action} className="body">
+      <form autoComplete="off" action={action} className="body">
         {state.error ? <div className="err" style={{ marginBottom: 10 }}>{state.error}</div> : null}
         <div className="tiles">
           {cols.map(([k, label]) => {

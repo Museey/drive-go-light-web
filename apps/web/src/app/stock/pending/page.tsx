@@ -35,7 +35,7 @@ export default async function PendingPage() {
           <h2>ชื่อที่ยังไม่มีรหัสสินค้า</h2>
           <div className="spacer" />
           {ignored > 0 ? (
-            <form action={restoreIgnoredAction}>
+            <form autoComplete="off" action={restoreIgnoredAction}>
               <button className="btn" type="submit">นำรายการที่ข้ามไว้กลับมา ({ignored})</button>
             </form>
           ) : null}

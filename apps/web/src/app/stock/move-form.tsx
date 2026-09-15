@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { addMonths } from '@drivegolight/core';
 import { stockMoveAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
+import { ThaiDateField } from '@/components/thai-date-input';
 
 type Dir = 'in' | 'out' | 'use';
 
@@ -53,7 +54,7 @@ export function MoveForm({ productId, unit, today, shelfLifeMonths }: {
   };
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       {/* เบิกใช้ในอู่แยกจากตัดออกเฉย ๆ เพราะงบกำไรขาดทุนนับคนละช่อง —
           ของที่เบิกใช้เป็นค่าใช้จ่ายดำเนินงาน ไม่ใช่ต้นทุนขาย */}
       <input type="hidden" name="productId" value={productId} />
@@ -86,8 +87,7 @@ export function MoveForm({ productId, unit, today, shelfLifeMonths }: {
         </div>
         <div className={state.field === 'movedOn' ? 'field bad' : 'field'}>
           <label htmlFor="movedOn">วันที่</label>
-          <input className="in mono" id="movedOn" name="movedOn" type="date" required
-                 value={movedOn} onChange={(e) => changeDate(e.target.value)} />
+          <ThaiDateField id="movedOn" name="movedOn" required full value={movedOn} onChange={changeDate} />
         </div>
         <div className="field">
           <label htmlFor="moveNote">หมายเหตุ</label>
@@ -105,9 +105,8 @@ export function MoveForm({ productId, unit, today, shelfLifeMonths }: {
         <div className="row-fields f3" style={{ marginTop: 12 }}>
           <div className="field">
             <label htmlFor="moveExpiresOn">วันหมดอายุของล็อตนี้</label>
-            <input className="in mono" id="moveExpiresOn" name="expiresOn" type="date"
-                   value={expiresOn}
-                   onChange={(e) => { setTouched(true); setExpiresOn(e.target.value); }} />
+            <ThaiDateField id="moveExpiresOn" name="expiresOn" full allowEmpty value={expiresOn}
+                           onChange={(d) => { setTouched(true); setExpiresOn(d); }} />
             <span className="hint">
               {shelfLifeMonths
                 ? `เติมให้จากอายุการเก็บ ${shelfLifeMonths} เดือน แก้ได้ถ้าของจริงไม่ตรง`

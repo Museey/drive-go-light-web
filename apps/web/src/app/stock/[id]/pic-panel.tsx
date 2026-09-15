@@ -124,7 +124,7 @@ export function PicPanel({
 
         {canEdit ? (
           <>
-            <form className="form" action={action}>
+            <form autoComplete="off" className="form" action={action}>
               <input type="hidden" name="productId" value={productId} />
               <input ref={fullRef} type="file" name="full" hidden />
               <input ref={thumbRef} type="file" name="thumb" hidden />
@@ -148,7 +148,7 @@ export function PicPanel({
             </form>
 
             {sha ? (
-              <form action={delAction} style={{ marginTop: 10 }}>
+              <form autoComplete="off" action={delAction} style={{ marginTop: 10 }}>
                 <input type="hidden" name="productId" value={productId} />
                 <Remove />
               </form>

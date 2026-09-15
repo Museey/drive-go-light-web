@@ -6,6 +6,7 @@ import { useFormStatus } from 'react-dom';
 import { recordBulkPaymentsAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 import { baht, thDate } from '@/lib/format';
+import { ThaiDateInput } from '@/components/thai-date-input';
 
 /**
  * ตัดชำระหลายใบพร้อมกัน
@@ -95,7 +96,7 @@ export function BulkPay({
   if (!open) {
     return (
       <div className="no-print" style={{ marginBottom: 14 }}>
-        <button className="btn" type="button" onClick={() => setOpen(true)}>
+        <button className="btn ok" type="button" onClick={() => setOpen(true)}>
           {word}ชำระหลายใบพร้อมกัน
         </button>
       </div>
@@ -110,7 +111,7 @@ export function BulkPay({
         <button className="btn" type="button" onClick={() => setOpen(false)}>ปิด</button>
       </div>
 
-      <form className="form" action={action}>
+      <form autoComplete="off" className="form" action={action}>
         {state.error ? <div className="err">{state.error}</div> : null}
         {state.ok ? <div className="ok-msg">{state.values?.note}</div> : null}
 
@@ -127,7 +128,7 @@ export function BulkPay({
           </div>
           <div className={state.field === 'paidOn' ? 'field bad' : 'field'}>
             <label htmlFor="bulk-date">วันที่{word}</label>
-            <input className="in mono" id="bulk-date" name="paidOn" type="date" defaultValue={today()} />
+            <ThaiDateInput id="bulk-date" name="paidOn" defaultIso={today()} full />
           </div>
           <div className="field">
             <label htmlFor="bulk-method">ช่องทาง</label>

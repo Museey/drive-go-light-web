@@ -83,7 +83,7 @@ export default async function CustomersPage({
 
           <div className="spacer" />
 
-          <form action="/customers" method="get" style={{ display: 'flex', gap: 6 }}>
+          <form autoComplete="off" action="/customers" method="get" style={{ display: 'flex', gap: 6 }}>
             {sp.kind ? <input type="hidden" name="kind" value={sp.kind} /> : null}
             {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
             <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}

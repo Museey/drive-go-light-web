@@ -124,6 +124,17 @@ describe.skipIf(!DB_URL)('ใบวางบิล', () => {
     expect(got!.docs.map((d) => d.docNo).sort()).toEqual(['IVT-001', 'IVT-002']);
   });
 
+  /* เมนู 03 ทุกรายการเรียงล่าสุดบนสุด (ผู้ใช้กำหนด) — รายการใบให้เลือกในหน้าสร้าง/เปิดใบวางบิลเคยเรียงเก่า→ใหม่ */
+  it('รายการใบค้างให้เลือก เรียงวันที่ล่าสุดบนสุด วันเดียวกันเลขที่มากก่อน', async () => {
+    await invoice('IVT-001', '2026-03-05', 1000);
+    await invoice('IVT-003', '2026-03-20', 3000);
+    await invoice('IVT-002', '2026-03-12', 2000);
+    await invoice('IVT-004', '2026-03-20', 4000);
+
+    const got = await openInvoices(app, { partyId: custId });
+    expect(got.map((d) => d.docNo)).toEqual(['IVT-004', 'IVT-003', 'IVT-002', 'IVT-001']);
+  });
+
   it('ลูกค้าจ่ายบางใบแล้ว ยอดบนใบวางบิลลดตามเอง', async () => {
     const a = await invoice('IVT-001', '2026-03-05', 1000);
     const b = await invoice('IVT-002', '2026-03-12', 2000);

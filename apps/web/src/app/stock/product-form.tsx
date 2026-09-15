@@ -10,6 +10,7 @@ import type { FormResult } from '@/lib/mutate';
 import type { Category, ProductRow, ProductSupplier } from '@/lib/products';
 import { useLiveSearch } from '@/components/use-live-search';
 import { searchVendorsAction } from '../expense/actions';
+import { ThaiDateInput } from '@/components/thai-date-input';
 
 function Submit({ label }: {
   /** บาร์โค้ดตั้งต้นสำหรับสินค้าใหม่ที่มาจากการยิงแล้วไม่เจอ */
@@ -48,7 +49,7 @@ function SupplierPicker({ initial }: { initial: ProductSupplier[] }) {
   };
   return (
     <div className="card" style={{ marginTop: 12 }}>
-      <header><h2 style={{ fontSize: 14 }}>ผู้ขายของสินค้านี้</h2><div className="spacer" /><span className="subtle">มีได้หลายราย</span></header>
+      <header><h2 style={{ fontSize: 14 }}>ผู้ขายของสินค้านี้ <span className="subtle" style={{ fontWeight: 400 }}>(มีได้หลายราย)</span></h2></header>
       <div className="body" style={{ padding: 12 }}>
         <input type="hidden" name="suppliers" value={JSON.stringify(list)} />
         {list.length ? (
@@ -67,7 +68,7 @@ function SupplierPicker({ initial }: { initial: ProductSupplier[] }) {
           <input className="in search" value={q} placeholder="กรอกคำค้นหา — ชื่อหรือรหัสผู้ขาย" style={{ flex: 1, minWidth: 200 }}
                  onChange={(e) => setQ(e.target.value)}
                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (results?.[0]) add({ vendorId: results[0].id, name: results[0].name }); else if (q.trim()) add({ vendorId: null, name: q }); } }} />
-          <button className="btn" type="button" disabled={!q.trim()} onClick={() => add({ vendorId: null, name: q })}>+ เพิ่มรายชื่อเอง</button>
+          <button className="btn ok" type="button" disabled={!q.trim()} onClick={() => add({ vendorId: null, name: q })}>+ เพิ่มรายชื่อเอง</button>
           {busy ? <span className="subtle">กำลังค้น…</span> : null}
         </div>
         {results ? (
@@ -115,9 +116,14 @@ export function ProductForm({
   const [categoryId, setCategoryId] = useState<string>(String(v('categoryId', product?.categoryId ?? '') ?? ''));
   const [bType, setBType] = useState<BarcodeType | 'AUTO'>((product?.barcodeType as BarcodeType | undefined) ?? 'AUTO');
   const bcheck = validateBarcode(barcode, bType);
+  /* วันหมดอายุ — ถามก่อนว่ามีไหม (ผู้ใช้กำหนด) · สินค้าที่ตั้งอายุการเก็บไว้แล้วเปิดมาเป็น "มี" */
+  const [hasExpiry, setHasExpiry] = useState<boolean>(
+    String(v('shelfLifeMonths', product?.shelfLifeMonths ?? '')).trim() !== ''
+    || String(v('openingExpiresOn', '')).trim() !== '',
+  );
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       {product ? <input type="hidden" name="id" value={product.id} /> : null}
 
       {state.error ? <div className="err">{state.error}</div> : null}
@@ -210,21 +216,51 @@ export function ProductForm({
         <span className="hint">ตั้งตั้งแต่ตอนเพิ่มสินค้า ใช้ตัดต้นทุนตอนออกใบเสร็จและคิดมูลค่าสต๊อก</span>
       </div>
 
-      <div className="row-fields f2">
-        <div className="field">
-          <label htmlFor="shelfLifeMonths">วันหมดอายุ / อายุการเก็บ (เดือน)</label>
-          <input className="in mono" id="shelfLifeMonths" name="shelfLifeMonths" inputMode="numeric"
-                 defaultValue={v('shelfLifeMonths', product?.shelfLifeMonths ?? '')} placeholder="ว่าง = ไม่มีวันหมดอายุ" />
-          <span className="hint">ใส่แล้วระบบเติมวันหมดอายุให้ตอนรับของเข้า</span>
+      {/* วันหมดอายุ — ถามทีละขั้น (ผู้ใช้กำหนด)
+          เดิมช่อง "วันหมดอายุ / อายุการเก็บ (เดือน)" รับจำนวนเดือน แต่ชื่อชวนให้กรอกวันที่
+          ส่วนวันที่หมดอายุของยอดยกมาเป็นช่องไม่มีป้ายติดกับยอดยกมา — ผู้ใช้กรอกไม่ถูกว่าช่องไหนมีผล */}
+      <div className="field">
+        <label>วันหมดอายุ</label>
+        <div className="tiles" role="radiogroup" aria-label="วันหมดอายุ">
+          <label className="tile radio">
+            <input type="radio" name="hasExpiry" value="no" checked={!hasExpiry} onChange={() => setHasExpiry(false)} />
+            ไม่มีวันหมดอายุ
+          </label>
+          <label className="tile radio">
+            <input type="radio" name="hasExpiry" value="yes" checked={hasExpiry} onChange={() => setHasExpiry(true)} />
+            มีวันหมดอายุ
+          </label>
         </div>
+      </div>
+      {hasExpiry ? (
+        <div className="row-fields f2">
+          <div className={bad('shelfLifeMonths')}>
+            <label htmlFor="shelfLifeMonths">อายุการเก็บ (เดือน)</label>
+            <input className="in mono" id="shelfLifeMonths" name="shelfLifeMonths" inputMode="numeric"
+                   defaultValue={v('shelfLifeMonths', product?.shelfLifeMonths ?? '')} placeholder="เช่น 12" />
+            <span className="hint">ระบบเติมวันหมดอายุให้เองตอนรับของเข้า (วันที่รับ + จำนวนเดือนนี้)</span>
+          </div>
+          {isNew ? (
+            <div className="field">
+              <label htmlFor="openingExpiresOn">วันหมดอายุของยอดยกมา</label>
+              <ThaiDateInput id="openingExpiresOn" name="openingExpiresOn" defaultIso={v('openingExpiresOn', '')} full />
+              <span className="hint">ของที่มีอยู่ตอนนี้หมดอายุวันไหน · เว้นว่างได้</span>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        /* ไม่มีวันหมดอายุ — ส่งค่าว่างให้ชัด ไม่ใช่ค่าที่เคยพิมพ์ค้างไว้ก่อนสลับ (ฝั่งเซิร์ฟเวอร์: ว่าง = null) */
+        <>
+          <input type="hidden" name="shelfLifeMonths" value="" />
+          {isNew ? <input type="hidden" name="openingExpiresOn" value="" /> : null}
+        </>
+      )}
+
+      <div className="row-fields f2">
         {isNew ? (
           <div className="field">
             <label htmlFor="openingQty">ยอดยกมา (จำนวนที่มีอยู่ตอนนี้)</label>
-            <div className="row-fields f2 gap-6">
-              <input className="in mono" id="openingQty" name="openingQty" inputMode="decimal" defaultValue={v('openingQty', 0)} />
-              <input className="in mono" id="openingExpiresOn" name="openingExpiresOn" type="date" title="วันหมดอายุของยอดยกมา" defaultValue={v('openingExpiresOn', '')} />
-            </div>
-            <span className="hint">ช่องขวา = วันหมดอายุของยอดยกมา เว้นว่างได้</span>
+            <input className="in mono" id="openingQty" name="openingQty" inputMode="decimal" defaultValue={v('openingQty', 0)} />
           </div>
         ) : (
           <div className="field">

@@ -25,7 +25,7 @@ export function RenewForm() {
   }
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       {state.error ? <div className="err">{state.error}</div> : null}
 
       <div className="row-fields f3">

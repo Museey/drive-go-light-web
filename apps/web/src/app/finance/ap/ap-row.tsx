@@ -33,7 +33,8 @@ export function ApRow({ row }: { row: PayableRow }) {
           {baht(row.outstanding)}
         </td>
         <td>
-          <button className="btn" type="button" onClick={() => setOpen(!open)}>
+          {/* ปุ่มจ่ายชำระสีเขียว (ผู้ใช้กำหนด) — ตอนเปิดฟอร์มอยู่เป็น "ปิด" สีปกติ */}
+          <button className={open ? 'btn' : 'btn ok'} type="button" onClick={() => setOpen(!open)}>
             {open ? 'ปิด' : 'จ่ายชำระ'}
           </button>
         </td>

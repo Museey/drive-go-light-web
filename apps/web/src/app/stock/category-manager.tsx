@@ -19,7 +19,7 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
     <div className="body">
       {state.error ? <div className="err" style={{ marginBottom: 12 }}>{state.error}</div> : null}
 
-      <form action={addAction} className="tag-row" style={{ marginBottom: 14 }}>
+      <form autoComplete="off" action={addAction} className="tag-row" style={{ marginBottom: 14 }}>
         <input className="in" name="name" placeholder="ชื่อหมวดหมู่ใหม่" style={{ width: 220 }} required />
         <button className="btn" type="submit">เพิ่มหมวดหมู่</button>
       </form>
@@ -45,7 +45,7 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
                   <td>
                     {editing === c.id ? (
                       <div className="tag-row">
-                        <form action={async () => { await renameCategoryAction(c.id, name); setEditing(null); }}>
+                        <form autoComplete="off" action={async () => { await renameCategoryAction(c.id, name); setEditing(null); }}>
                           <button className="btn" type="submit">บันทึก</button>
                         </form>
                         <button className="btn" type="button" onClick={() => setEditing(null)}>ยกเลิก</button>
@@ -57,7 +57,7 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
                             ? `สินค้า ${c.productCount} รายการจะกลายเป็นไม่ระบุหมวด`
                             : 'ยืนยันลบหมวดหมู่นี้?'}
                         </span>
-                        <form action={async () => { await deleteCategoryAction(c.id); setConfirmDelete(null); }}>
+                        <form autoComplete="off" action={async () => { await deleteCategoryAction(c.id); setConfirmDelete(null); }}>
                           <button className="btn danger" type="submit">ลบ</button>
                         </form>
                         <button className="btn" type="button" onClick={() => setConfirmDelete(null)}>ไม่ลบ</button>

@@ -88,7 +88,7 @@ export function MenuBar({ session, current, license }: {
                 aria-label={`${session.name} · ${role}${lic ? ` · ${lic.text}` : ''}`}>
             {lic ? <span className={`lic ${lic.tone}`}>{lic.short}</span> : null}
           </span>
-          <form action="/logout" method="post">
+          <form autoComplete="off" action="/logout" method="post">
             <button type="submit" className="signout">ออกจากระบบ</button>
           </form>
         </div>

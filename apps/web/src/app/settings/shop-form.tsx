@@ -35,7 +35,7 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
   };
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       <input type="hidden" name="logoUrl" value={logo} />
       <input type="hidden" name="signatureUrl" value={sig} />
 

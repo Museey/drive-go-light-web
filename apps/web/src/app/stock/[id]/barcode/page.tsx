@@ -50,7 +50,7 @@ export default async function BarcodePage({
   return (
     <>
       <div className="printbar">
-        <form action={`/stock/${id}/barcode`} method="get"
+        <form autoComplete="off" action={`/stock/${id}/barcode`} method="get"
               style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <label className="subtle" htmlFor="n">จำนวนดวง</label>
           <input className="in mono" id="n" name="n" type="number" min={1} max={120}

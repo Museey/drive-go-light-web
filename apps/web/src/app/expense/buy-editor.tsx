@@ -75,29 +75,30 @@ function BuyLineRow({
       <tr>
         <td className="idx">{i + 1}</td>
         {isPurchase ? (
-          <td style={{ width: 150 }}>
+          <td className="c-code">
             <input className="in mono" placeholder="พิมพ์รหัส / ชื่อ" value={query || item.code}
                    onChange={(e) => { setQuery(e.target.value); onChange({ code: e.target.value, productId: null }); }}
                    onKeyDown={enterKey} />
           </td>
         ) : null}
-        <td>
+        {/* ความกว้างคอลัมน์อยู่ที่ CSS (table.lines .c-*) — ชื่อสินค้าได้ที่เหลือทั้งหมด */}
+        <td className="c-name">
           <input className="in" placeholder={isPurchase ? '— เลือกสินค้า หรือพิมพ์ชื่อเอง —' : 'รายการค่าใช้จ่าย'}
                  value={item.name} onChange={(e) => onChange({ name: e.target.value })} onKeyDown={enterKey} />
           {isPurchase && item.productId ? <span className="chip ok" style={{ marginTop: 4 }}>เข้าสต๊อก</span> : null}
         </td>
-        <td style={{ width: 84 }}>
+        <td className="c-qty">
           <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.qty}
                  onChange={(e) => onChange({ qty: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
         </td>
-        <td style={{ width: 80 }}>
+        <td className="c-unit">
           <input className="in" value={item.unit} placeholder="หน่วย" onChange={(e) => onChange({ unit: e.target.value })} onKeyDown={enterKey} />
         </td>
-        <td style={{ width: 120 }}>
+        <td className="c-price">
           <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.unitPrice}
                  onChange={(e) => onChange({ unitPrice: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
         </td>
-        <td style={{ width: 84 }}>
+        <td className="c-disc">
           <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.discPct ?? 0} title="ส่วนลดรายบรรทัด (%)"
                  onChange={(e) => onChange({ discPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} onKeyDown={enterKey} />
         </td>
@@ -268,7 +269,7 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
   ];
 
   return (
-    <form action={action} id="buy-form"
+    <form autoComplete="off" action={action} id="buy-form"
           onKeyDown={(e) => { const el = e.target as HTMLElement; if (e.key === 'Enter' && el.tagName === 'INPUT') e.preventDefault(); }}>
       <input type="hidden" name="payload" value={payload} />
       {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
@@ -406,12 +407,12 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
           <table className="tbl lines picked">
             <thead><tr>
               <th className="idx">ลำดับ</th>
-              {isPurchase ? <th>รหัสสินค้า</th> : null}
-              <th>{isPurchase ? 'ชื่อสินค้า' : 'รายการ'}</th>
-              <th className="num">จำนวน</th>
-              <th>หน่วย</th>
-              <th className="num">{isPurchase ? 'ราคาซื้อ/หน่วย' : 'ราคา/หน่วย'}</th>
-              <th className="num">ส่วนลด %</th>
+              {isPurchase ? <th className="c-code">รหัสสินค้า</th> : null}
+              <th className="c-name">{isPurchase ? 'ชื่อสินค้า' : 'รายการ'}</th>
+              <th className="num c-qty">จำนวน</th>
+              <th className="c-unit">หน่วย</th>
+              <th className="num c-price">{isPurchase ? 'ราคาซื้อ/หน่วย' : 'ราคา/หน่วย'}</th>
+              <th className="num c-disc">ส่วนลด %</th>
               <th className="num">จำนวนเงิน</th>
               {isPurchase ? <th>วันหมดอายุ</th> : null}
               <th />

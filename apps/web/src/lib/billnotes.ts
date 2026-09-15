@@ -81,7 +81,7 @@ export async function openInvoices(
      where ((${BILLABLE})${keep})
        and d.status <> 'void' and d.direction = 'sell' and d.kind <> 'QT'
        ${where.length ? 'and ' + where.join(' and ') : ''}
-     order by d.doc_date, d.doc_no`,
+     order by d.doc_date desc, d.doc_no desc`,
     params,
   );
 

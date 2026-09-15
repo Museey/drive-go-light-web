@@ -67,7 +67,7 @@ export function ContactForm({
     state.values?.[name] ?? (fallback === undefined ? '' : String(fallback));
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       {contact ? <input type="hidden" name="id" value={contact.id} /> : null}
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="kind" value={kind} />
@@ -223,7 +223,9 @@ export function ContactForm({
         <span className="hint">ถ้ากรอกช่องนี้ ระบบจะใช้ข้อความนี้บนเอกสารแทนที่อยู่ที่กรอกแยกช่อง</span>
       </div>
 
-      {/* ---------- รถ ---------- */}
+      {/* ---------- รถ — เฉพาะลูกค้า ผู้ขายไม่มีรถที่ดูแล (ผู้ใช้กำหนด)
+           สลับไปผู้ขายแล้วกลับมา รถที่พิมพ์ไว้ยังอยู่ใน state · เซิร์ฟเวอร์ไม่แตะตารางรถของผู้ขาย ---------- */}
+      {kind === 'customer' ? (<>
       <div className="field" style={{ marginTop: 8 }}>
         <label style={{ fontWeight: 600, color: 'var(--ink)' }}>
           รถที่ดูแล {vehicles.length > 0 ? `(${vehicles.length} คัน)` : ''}
@@ -305,6 +307,7 @@ export function ContactForm({
           + เพิ่มรถ
         </button>
       </div>
+      </>) : null}
 
       <div className="field">
         <label htmlFor="note">หมายเหตุ</label>

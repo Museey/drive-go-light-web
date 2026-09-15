@@ -70,7 +70,7 @@ export default async function SetupPage({
             </div>
           ) : null}
 
-          <form action={submit}>
+          <form autoComplete="off" action={submit}>
             <label htmlFor="password" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
               รหัสผ่านใหม่ (อย่างน้อย 10 ตัวอักษร)
             </label>

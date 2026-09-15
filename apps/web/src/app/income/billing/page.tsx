@@ -111,7 +111,7 @@ export default async function BillingPage({
               {mayEdit ? <Link className="tile act" href="/income/billing?vat=yes">+ ใบวางบิล (IVT)</Link> : null}
               {mayEdit ? <Link className="tile act" href="/income/billing?vat=no">+ ใบวางบิล (IV)</Link> : null}
             </div>
-            <form action="/income/billing" method="get" style={{ display: 'flex', gap: 6 }}>
+            <form autoComplete="off" action="/income/billing" method="get" style={{ display: 'flex', gap: 6 }}>
             <input type="hidden" name="hist" value="1" />
               <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
                      placeholder="กรอกคำค้นหา — เลขที่ใบวางบิล หรือชื่อลูกค้า" style={{ width: 260 }} />
