@@ -27,13 +27,18 @@ export function monthRange(year: number, month1: number): { from: string; to: st
 }
 
 export function DocDateFilter({
-  base, from, to, keep = {},
+  base, from, to, keep = {}, monthPicker = true,
 }: {
   base: string;
   from?: string;
   to?: string;
   /** ค่าอื่นในแถบที่อยากให้ติดไปด้วยตอนกดปุ่มลัด เช่น ชนิดเอกสารหรือคำค้น */
   keep?: Record<string, string>;
+  /**
+   * dropdown เดือน/ปี — หน้ารายการเอกสารเมนู 03 ปิด (ผู้ใช้กำหนด: ค้นแบบกำหนดเองเลือกจากปฏิทินพอ ไม่ซ้ำซ้อน)
+   * เมนูอื่นคงไว้ · ฝั่งเซิร์ฟเวอร์ยังอ่าน ?month=&year= ได้ ลิงก์เก่าไม่พัง
+   */
+  monthPicker?: boolean;
 }) {
   const now = new Date();
   const y = now.getFullYear();
@@ -74,17 +79,19 @@ export function DocDateFilter({
       <div className="spacer" />
 
       {/* เลือกเดือน — ส่งเป็น from/to ให้ฝั่งเซิร์ฟเวอร์ จะได้มีทางเดียวที่กรองวันที่ */}
-      <form autoComplete="off" action={base} method="get" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        {Object.entries(keep).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-        <select className="in" name="month" defaultValue="" aria-label="เดือน">
-          <option value="">เดือน</option>
-          {TH_MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-        </select>
-        <select className="in mono" name="year" defaultValue={y} aria-label="ปี">
-          {years.map((yy) => <option key={yy} value={yy}>{yy + 543}</option>)}
-        </select>
-        <button className="btn" type="submit">ดู</button>
-      </form>
+      {monthPicker ? (
+        <form autoComplete="off" action={base} method="get" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {Object.entries(keep).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+          <select className="in" name="month" defaultValue="" aria-label="เดือน">
+            <option value="">เดือน</option>
+            {TH_MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <select className="in mono" name="year" defaultValue={y} aria-label="ปี">
+            {years.map((yy) => <option key={yy} value={yy}>{yy + 543}</option>)}
+          </select>
+          <button className="btn" type="submit">ดู</button>
+        </form>
+      ) : null}
 
       <form autoComplete="off" action={base} method="get" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         {Object.entries(keep).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}

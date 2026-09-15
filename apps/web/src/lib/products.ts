@@ -4,6 +4,7 @@ import type pg from 'pg';
 import { stockFlags, today, type StockFlag } from '@drivegolight/core';
 import { query } from './auth';
 import { mutate } from './mutate';
+import { savePic } from './pics';
 import { listExpiringLotsWith, REMAINING_LOTS_SQL, type ExpiringLotRow } from './expiry';
 import { BOOK_VALUE_SQL, consumeStock, receiveStock } from './stock-cost';
 
@@ -323,7 +324,12 @@ export interface ProductInput {
   openingQty?: number;
   /** วันหมดอายุของยอดยกมา — ใช้เฉพาะตอนสร้างสินค้าใหม่ */
   openingExpiresOn?: string | null;
+  /** รูปสินค้า (รูปเต็ม + รูปย่อ ที่เบราว์เซอร์ย่อมาแล้ว) — ใช้เฉพาะตอนสร้างสินค้าใหม่ */
+  pic?: { full: Uint8Array; thumb: Uint8Array };
 }
+
+/** รูปที่แนบมากับสินค้าใหม่ไม่ผ่านการตรวจ — โยนเพื่อยกเลิกทั้งทรานแซกชัน ไม่ให้เหลือสินค้าไร้รูปค้าง */
+export class ProductPicError extends Error {}
 
 
 /** เขียนผู้ขายของสินค้าใหม่ทั้งชุด (ลบแล้วใส่ตามลำดับ) */
@@ -382,6 +388,13 @@ export async function saveProduct(input: ProductInput): Promise<string> {
       );
     }
     await writeSuppliers(c, id, input.suppliers);
+
+    /* รูปลงในทรานแซกชันเดียวกับสินค้า — รูปไม่ผ่านหรือโควตาเต็ม สินค้าก็ไม่ถูกสร้าง
+       ผู้ใช้กดบันทึกซ้ำได้โดยไม่ชนรหัสซ้ำกับสินค้าที่ค้างไว้ครึ่ง ๆ */
+    if (input.pic) {
+      const saved = await savePic(c, id, input.pic.full, input.pic.thumb);
+      if (!saved.ok) throw new ProductPicError(saved.error);
+    }
     return id;
   }, { sub: 'list' });
 }

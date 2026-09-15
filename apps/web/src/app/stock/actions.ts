@@ -5,7 +5,7 @@ import { validateBarcode, type BarcodeType } from '@drivegolight/core';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
-  adjustStock, createCategory, deleteCategory, recordStockMove, renameCategory, saveProduct,
+  adjustStock, createCategory, deleteCategory, ProductPicError, recordStockMove, renameCategory, saveProduct,
 } from '@/lib/products';
 import {
   createProductFromPending, ignorePendingItem, linkPendingToProduct, restoreIgnoredItems,
@@ -58,9 +58,21 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
     barcodeType = chk.type!;
   }
 
+  /* รูปสินค้าในฟอร์มเพิ่มสินค้าใหม่ — เลือกได้หรือไม่เลือกก็ได้ · สินค้าที่มีอยู่แล้วแก้รูปที่กล่องรูปหน้าสินค้า */
+  let pic: { full: Uint8Array; thumb: Uint8Array } | undefined;
+  const full = fd.get('picFull');
+  const thumb = fd.get('picThumb');
+  if (!id && full instanceof File && full.size > 0) {
+    if (!(thumb instanceof File) || thumb.size === 0) {
+      return { error: 'ย่อรูปไม่สำเร็จ — เลือกรูปใหม่อีกครั้ง', field: 'pic', values: kept };
+    }
+    pic = { full: new Uint8Array(await full.arrayBuffer()), thumb: new Uint8Array(await thumb.arrayBuffer()) };
+  }
+
   let savedId: string;
   try {
     savedId = await saveProduct({
+      pic,
       id,
       code,
       name,
@@ -84,6 +96,9 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
       openingExpiresOn: id ? undefined : (str(fd, 'openingExpiresOn') || null),
     });
   } catch (err) {
+    if (err instanceof ProductPicError) {
+      return { error: `รูปสินค้าใช้ไม่ได้ — ${err.message} (ยังไม่ได้บันทึกสินค้า)`, field: 'pic', values: kept };
+    }
     return {
       error: friendlyDbError(err, {
         code: `รหัสสินค้า "${code}" มีอยู่แล้ว ใช้รหัสอื่น`,

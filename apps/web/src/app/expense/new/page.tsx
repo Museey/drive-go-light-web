@@ -53,7 +53,8 @@ export default async function NewBuyPage({
       title={kind === 'PO' ? 'บันทึกใบซื้อสินค้า' : 'บันทึกค่าใช้จ่าย'}
       sub={vendor ? `เปิดจากทะเบียนผู้ขาย — ${vendor.name}` : undefined}
     >
-      <BuyEditor initial={initial} vatRate={shop.vatRate} mode="new"
+      {/* key = ชนิด + ผู้ขายที่เปิดมา — เปลี่ยนแค่ query ฟอร์มต้องเริ่มใหม่ (ดู expense/page.tsx) */}
+      <BuyEditor key={`${kind}:${vendor?.id ?? ''}`} initial={initial} vatRate={shop.vatRate} mode="new"
                  docNoPreview={{ seq: await peekDocSeq(kind, initial.docDate), month: initial.docDate.slice(0, 7) }} />
     </Shell>
   );

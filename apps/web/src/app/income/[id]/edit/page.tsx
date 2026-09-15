@@ -32,7 +32,8 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
       current="/income"
       title={`แก้ไข${KIND_LABEL[source.kind]}`}
     >
-      <DocEditor initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="edit"
+      {/* key = รหัสเอกสาร — จากหน้าแก้ไขใบหนึ่งไปอีกใบ ฟอร์มต้องไม่ค้างข้อมูลใบเดิม */}
+      <DocEditor key={id} initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="edit"
                  lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
                  docNo={docNo ?? undefined} />
     </Shell>

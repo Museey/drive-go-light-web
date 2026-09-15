@@ -52,6 +52,31 @@ describe('เมนูหลักที่กำลังเปิดอยู�
     expect(isCurrent(stock, '/stock/expiry')).toBe(true);
     expect(isCurrent(stock, '/finance/ar')).toBe(false);
   });
+
+  /* เมนู 06 ลิงก์ไป /finance/ar — หน้าอื่นในหมวดเดียวกันต้องสว่างด้วย (เคยไม่มีขีดเหลืองใต้เมนู) */
+  it('เมนู 06 การเงิน สว่างทุกหน้าในหมวด ไม่ใช่เฉพาะหน้าที่ลิงก์ไป', () => {
+    const finance = MENU.find((m) => m.key === 'finance')!;
+    for (const p of ['/finance', '/finance/sales', '/finance/ar', '/finance/ap', '/finance/pl', '/finance/print']) {
+      expect(isCurrent(finance, p), p).toBe(true);
+    }
+  });
+
+  it('ต้องตรงทั้งส่วนของ path — ชื่อที่ขึ้นต้นเหมือนกันไม่นับ', () => {
+    const finance = MENU.find((m) => m.key === 'finance')!;
+    const stock = MENU.find((m) => m.key === 'stock')!;
+    expect(isCurrent(finance, '/finance-x')).toBe(false);
+    expect(isCurrent(stock, '/stocktake')).toBe(false);
+  });
+
+  it('ทุกหน้าย่อยในผังเมนูทำให้เมนูหลักของตัวเองสว่าง และสว่างเมนูเดียว', () => {
+    for (const m of MENU) {
+      for (const s of m.subs ?? []) {
+        const path = s.href.split('?')[0]!;
+        const lit = MENU.filter((x) => isCurrent(x, path)).map((x) => x.key);
+        expect(lit, `${s.no} ${s.href}`).toEqual([m.key]);
+      }
+    }
+  });
 });
 
 describe('ห้าช่องของแถบล่างบนมือถือ', () => {

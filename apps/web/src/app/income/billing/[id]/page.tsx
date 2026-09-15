@@ -129,6 +129,8 @@ export default async function BillnotePage({
           <header><h2>{isNew ? 'รายละเอียดใบวางบิล' : 'แก้ไขใบวางบิล'}</h2></header>
           <div className="body">
             <BillForm
+              /* key = ใบนี้ + ใบที่คัดลอกมา + vat — เปลี่ยนแค่ query ฟอร์มต้องเริ่มใหม่ */
+              key={`${id}:${fromId}:${sp.vat ?? ''}`}
               id={isNew ? undefined : id}
               no={note?.note.no}
               billDate={note?.note.billDate ?? today()}

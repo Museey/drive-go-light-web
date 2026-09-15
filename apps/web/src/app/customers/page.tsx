@@ -99,7 +99,7 @@ export default async function CustomersPage({
             {/* ตารางพอดีหน้า ตัวอักษร 14px (ผู้ใช้กำหนด): รหัส · ชื่อ(ที่เหลือ) · โทร · ทะเบียนรถ/เลขภาษี · เครดิต · ยอดสะสม · คงค้าง · ปุ่ม */}
             <table className="tbl hist fit cust">
               <colgroup>
-                <col style={{ width: 92 }} /><col style={{ width: '24%' }} /><col style={{ width: 112 }} /><col style={{ width: 120 }} /><col />
+                <col style={{ width: 92 }} /><col style={{ width: 240 }} /><col style={{ width: 112 }} /><col style={{ width: 120 }} /><col />
                 <col style={{ width: 60 }} /><col className="opt" style={{ width: 92 }} /><col style={{ width: 92 }} /><col style={{ width: 176 }} />
               </colgroup>
               <thead>

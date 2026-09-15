@@ -27,7 +27,8 @@ export default async function EditBuyPage({ params }: { params: Promise<{ id: st
       title={doc.kind === 'PO' ? 'แก้ไขใบซื้อ' : 'แก้ไขค่าใช้จ่าย'}
       sub={`เลขที่ ${meta.docNo}`}
     >
-      <BuyEditor initial={doc} vatRate={shop.vatRate} mode="edit" docNo={meta.docNo} />
+      {/* key = รหัสเอกสาร — จากหน้าแก้ไขใบหนึ่งไปอีกใบ ฟอร์มต้องไม่ค้างข้อมูลใบเดิม */}
+      <BuyEditor key={id} initial={doc} vatRate={shop.vatRate} mode="edit" docNo={meta.docNo} />
     </Shell>
   );
 }

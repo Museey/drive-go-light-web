@@ -71,7 +71,7 @@ for (const path of LINE_PAGES) {
       if (m) expect(m.scroll, `${cls} "${text}" ถูกตัด (${m.scroll} > ${m.client})`).toBeLessThanOrEqual(m.client + 1);
     }
 
-    const widths = await table.evaluate((t) => Object.fromEntries(
+    const widths = await table.evaluate((t): Record<string, number> => Object.fromEntries(
       [...t.querySelectorAll('thead th')].map((th) => [th.className.match(/c-[a-z]+/)?.[0] ?? '', th.getBoundingClientRect().width])
         .filter(([k]) => k),
     ));
@@ -120,8 +120,9 @@ test('ช่องค้นหา: ไอคอนและกรอบเขี
 });
 
 /* ข้อ 7 */
+/* หน้ารายการเมนู 03 ไม่มี dropdown เดือนแล้ว (ปรับแก้อีก 8 ข้อ ข้อ 7) — ตรวจที่หน้ารายจ่ายซึ่งยังมี */
 test('ตัวกรองวันที่: dropdown เดือนขึ้นว่า "เดือน"', async ({ page }) => {
-  await page.goto('/income?kind=RC&hist=1');
+  await page.goto('/expense?kind=PO&hist=1');
   await expect(page.locator('select[name="month"] option').first()).toHaveText('เดือน');
 });
 

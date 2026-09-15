@@ -52,11 +52,17 @@ export function tabItems(session: Session): NavItem[] {
     .filter((n): n is NavItem => Boolean(n));
 }
 
-/** หน้าไหนอยู่ในเมนูไหน — ใช้ทำแถบไฮไลต์ให้ตรงกันทุกรูปแบบ */
+/**
+ * หน้าไหนอยู่ในเมนูไหน — ใช้ทำแถบไฮไลต์ให้ตรงกันทุกรูปแบบ
+ *
+ * **เทียบด้วยหมวด (ส่วนแรกของ path) ไม่ใช่ลิงก์ของเมนู** — เมนู 06 ลิงก์ไป `/finance/ar`
+ * เดิมเทียบว่าขึ้นต้นด้วย `/finance/ar` หน้า ยอดขาย/เจ้าหนี้/กำไรขาดทุน จึงไม่มีขีดเหลืองใต้เมนู
+ * ต้องตรงทั้งส่วน (`/finance` หรือ `/finance/…`) — `/finance-x` ไม่นับ
+ */
 export function isCurrent(menu: MenuItem, current: string): boolean {
-  return menu.href === '/'
-    ? current === '/'
-    : current.startsWith(menu.href.split('?')[0]!);
+  if (menu.href === '/') return current === '/';
+  const section = `/${menu.href.split('?')[0]!.split('/')[1] ?? ''}`;
+  return current === section || current.startsWith(`${section}/`) || current.startsWith(`${section}?`);
 }
 
 /**
