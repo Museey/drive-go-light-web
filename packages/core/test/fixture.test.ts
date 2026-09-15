@@ -12,6 +12,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { makeLegacy } from './legacy.generated.mjs';
+import { legacyArWithMinimum, legacyRecWithMinimum } from './wht-minimum.js';
 import {
   apDueOf, arDue, exTotals, poTotals, recTotals, salesDocs, totalsOf, vatChain,
 } from '../src/index.js';
@@ -59,8 +60,9 @@ describe('ไฟล์สำรองข้อมูลชุดทดสอบ'
   it('ยอดของเอกสารขายทุกใบตรงกับของเดิม', () => {
     expect(db.receipts.length + db.invoices.length).toBeGreaterThan(250);
     for (const r of [...db.receipts, ...db.invoices]) {
-      expect(recTotals(r, ctx), `เอกสาร ${r.no}`).toEqual(legacy.recTotals(r));
-      expect(arDue(r, ctx), `ยอดค้างชำระ ${r.no}`).toBe(legacy.arDue(r));
+      /* หัก ณ ที่จ่าย: ผลของเดิม + ขั้นต่ำ 1,000 บาทที่ตั้งใจเพิ่ม (ดู wht-minimum.ts) */
+      expect(recTotals(r, ctx), `เอกสาร ${r.no}`).toEqual(legacyRecWithMinimum(legacy, r));
+      expect(arDue(r, ctx), `ยอดค้างชำระ ${r.no}`).toBe(legacyArWithMinimum(legacy, r).due);
     }
   });
 

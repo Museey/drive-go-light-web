@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { PrintReport } from '@/components/print-report';
 import { RowLink } from '@/components/row-link';
 import { DocEditor } from './doc-editor';
-import { SavedBanner } from '@/components/saved-banner';
+import { SavedNotice } from '@/components/saved-notice';
 import { blankSalesDoc, getDefaultNote, getDefaultWarranty, lotExpiryOf, peekDocSeq } from '@/lib/sales';
 import { today } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
@@ -140,7 +140,7 @@ export default async function IncomePage({
       actions={undefined}
     >
       <SubNav menu="income" current={SUB_OF[kind] ?? ''}>
-      {sp.saved && sp.savedId ? <SavedBanner docNo={sp.saved} printHref={`/income/${sp.savedId}/print`} openHref={`/income/${sp.savedId}`} /> : null}
+      <SavedNotice saved={sp.saved} savedId={sp.savedId} />
       {/* แถบไทล์ (ประวัติ… / + สร้าง) อยู่บนสุดเสมอ · ประวัติแสดงเมื่อกด "ประวัติ…" เท่านั้น (ผู้ใช้กำหนด) */}
       <div className="card">
         <div className="toolbar">

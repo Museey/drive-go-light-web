@@ -2,10 +2,9 @@ import Link from 'next/link';
 import { today } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { canEdit } from '@/lib/perms';
-import { isUuid } from '@/lib/ids';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
-import { SavedBanner } from '@/components/saved-banner';
+import { SavedNotice } from '@/components/saved-notice';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { HIST_DEFAULT_PAGE_SIZE, HIST_PAGE_SIZES, PageSize, pageSizeOf } from '@/components/page-size';
 import { getShop, listIncomeDocs } from '@/lib/queries';
@@ -80,9 +79,7 @@ export default async function WalkinPage({
       sub="ลูกค้าเดินเข้ามาซื้อของจ่ายสด — ออกใบเสร็จทันที ไม่ต้องมีใบเสนอราคา"
     >
       <SubNav menu="income" current="walkin">
-        {sp.saved && sp.savedId && isUuid(sp.savedId) ? (
-          <SavedBanner docNo={sp.saved} printHref={`/income/${sp.savedId}/print`} openHref={`/income/${sp.savedId}`} />
-        ) : null}
+        <SavedNotice saved={sp.saved} savedId={sp.savedId} />
 
         <div className="card">
           <div className="toolbar">

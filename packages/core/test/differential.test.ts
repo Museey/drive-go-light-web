@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { makeLegacy } from './legacy.generated.mjs';
+import { legacyArWithMinimum, legacyRecWithMinimum } from './wht-minimum.js';
 import {
   addDays, apDueOf, apTotalOf, arDue, arTotal, bahttext, daysBetween,
   exTotals, laterPaidOf, paidOf, payState, poTotals, recTotals,
@@ -139,11 +140,13 @@ describe('เทียบยอดเอกสารกับโปรแกร�
         const sale = makeSalesDoc(rand, i);
         expect(totalsOf(sale, ctx), `totalsOf ใบที่ ${i}`).toEqual(legacy.totalsOf(sale));
         expect(whtBaseOf(sale, ctx), `whtBaseOf ใบที่ ${i}`).toBe(legacy.whtBaseOf(sale));
-        expect(recTotals(sale, ctx), `recTotals ใบที่ ${i}`).toEqual(legacy.recTotals(sale));
+        /* หัก ณ ที่จ่าย: ผลของเดิม + ขั้นต่ำ 1,000 บาทที่ตั้งใจเพิ่ม (ดู wht-minimum.ts) — ช่องอื่นเท่าของเดิมทุกช่อง */
+        expect(recTotals(sale, ctx), `recTotals ใบที่ ${i}`).toEqual(legacyRecWithMinimum(legacy, sale));
         expect(paidOf(sale)).toBe(legacy.paidOf(sale));
         expect(laterPaidOf(sale)).toBe(legacy.laterPaidOf(sale));
-        expect(arTotal(sale, ctx)).toBe(legacy.arTotal(sale));
-        expect(arDue(sale, ctx)).toBe(legacy.arDue(sale));
+        const ar = legacyArWithMinimum(legacy, sale);
+        expect(arTotal(sale, ctx)).toBe(ar.total);
+        expect(arDue(sale, ctx)).toBe(ar.due);
 
         const po = makePurchase(rand, i);
         expect(poTotals(po, ctx), `poTotals ใบที่ ${i}`).toEqual(legacy.poTotals(po));

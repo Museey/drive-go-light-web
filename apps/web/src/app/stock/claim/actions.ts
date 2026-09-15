@@ -10,6 +10,7 @@ import { searchProducts } from '@/lib/sales';
 import { searchCustomers } from '@/lib/sales';
 import { searchVendors } from '@/lib/purchases';
 import { plateOf } from '@/lib/doc-chain';
+import { withSaved } from '@/lib/saved-target';
 
 function describe(err: unknown, fallback: string): string {
   if (err && typeof err === 'object' && 'code' in err) return friendlyDbError(err);
@@ -85,7 +86,8 @@ export async function saveClaimAction(_prev: FormResult, fd: FormData): Promise<
   revalidatePath('/stock/claim');
   revalidatePath('/stock/vclaim');
   revalidatePath('/finance/pl');
-  redirect(`/stock/claim/${saved.id}?saved=1`);
+  /* การ์ดบันทึกแล้ว (ผู้ใช้กำหนด): ฟอร์มใบเคลมเปล่าฝั่งเดิม พร้อมเปิดใบถัดไป · ใบเคลมแก้ไขไม่ได้จึงมีแต่สร้างใหม่ */
+  redirect(withSaved(`/stock/claim/new?side=${side}`, 'claim', saved.id));
 }
 
 export async function voidClaimAction(id: string, reason: string): Promise<FormResult> {

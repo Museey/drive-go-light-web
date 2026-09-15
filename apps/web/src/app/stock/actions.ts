@@ -15,6 +15,7 @@ import {
   flag, friendlyDbError, keepValues, money, mutate, qty, str, type FormResult,
 } from '@/lib/mutate';
 import { setStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
+import { safeBack, withSaved } from '@/lib/saved-target';
 
 /** รายชื่อผู้ขายจากฟอร์ม (JSON) — กรองของเสีย ไม่ให้ค่าพัง ๆ ลงฐาน */
 function parseSuppliers(raw: string): { vendorId: string | null; name: string }[] | undefined {
@@ -110,7 +111,9 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
   }
 
   revalidatePath('/stock');
-  redirect(`/stock/${savedId}?saved=1`);
+  /* การ์ดบันทึกแล้ว (ผู้ใช้กำหนด): เพิ่มใหม่ → ฟอร์มเปล่า พร้อมเพิ่มรายการถัดไป · แก้ไข → หน้าที่กดแก้ไขมา */
+  const back = id ? (safeBack(fd.get('returnTo'), ['/stock']) ?? `/stock/${savedId}`) : '/stock/new';
+  redirect(withSaved(back, 'product', savedId));
 }
 
 export async function adjustStockAction(_prev: FormResult, fd: FormData): Promise<FormResult> {

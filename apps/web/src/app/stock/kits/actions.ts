@@ -8,6 +8,7 @@ import { canCost } from '@/lib/perms';
 import { friendlyDbError, keepValues, money, qty, str, type FormResult } from '@/lib/mutate';
 import { kitProblem, type KitInput, type KitItemInput } from '@/lib/kit-calc';
 import { deactivateKit, saveKit, searchKitParts } from '@/lib/kits';
+import { safeBack, withSaved } from '@/lib/saved-target';
 
 function describe(err: unknown, fallback: string): string {
   if (err && typeof err === 'object' && 'code' in err) {
@@ -51,13 +52,16 @@ export async function saveKitAction(_prev: FormResult, fd: FormData): Promise<Fo
   const bad = kitProblem(input);
   if (bad) return { ...bad, values: keepValues(fd) };
 
+  let saved: { id: string };
   try {
-    await saveKit(input);
+    saved = await saveKit(input);
   } catch (err) {
     return { error: describe(err, 'บันทึกชุดอะไหล่ไม่สำเร็จ'), values: keepValues(fd) };
   }
   revalidatePath('/stock/kits');
-  redirect(`/stock/kits?saved=${encodeURIComponent(input.code)}`);
+  /* การ์ดบันทึกแล้ว (ผู้ใช้กำหนด): สร้างใหม่ → ฟอร์มชุดเปล่า · แก้ไข → หน้าที่กดแก้ไขมา ไม่มีก็รายการชุด */
+  const back = id ? (safeBack(fd.get('returnTo'), ['/stock/kits']) ?? '/stock/kits') : '/stock/kits/new';
+  redirect(withSaved(back, 'kit', saved.id));
 }
 
 export async function deactivateKitAction(id: string): Promise<FormResult> {

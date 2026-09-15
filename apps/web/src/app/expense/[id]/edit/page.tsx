@@ -1,5 +1,7 @@
+import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { isUuid } from '@/lib/ids';
+import { safeBack } from '@/lib/saved-target';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
@@ -20,6 +22,8 @@ export default async function EditBuyPage({ params }: { params: Promise<{ id: st
   if (meta.status === 'void') {
     redirect(`/expense/${id}?error=${encodeURIComponent('เอกสารนี้ถูกยกเลิกแล้ว แก้ไขไม่ได้')}`);
   }
+  /* บันทึกแล้วกลับหน้าที่กดแก้ไขมา (ผู้ใช้กำหนด) — กรองใน safeBack เหลือเฉพาะหน้าในเมนูรายจ่าย */
+  const back = safeBack((await headers()).get('referer'), ['/expense']);
 
   return (
     <Shell doc
@@ -28,7 +32,7 @@ export default async function EditBuyPage({ params }: { params: Promise<{ id: st
       sub={`เลขที่ ${meta.docNo}`}
     >
       {/* key = รหัสเอกสาร — จากหน้าแก้ไขใบหนึ่งไปอีกใบ ฟอร์มต้องไม่ค้างข้อมูลใบเดิม */}
-      <BuyEditor key={id} initial={doc} vatRate={shop.vatRate} mode="edit" docNo={meta.docNo} />
+      <BuyEditor key={id} initial={doc} vatRate={shop.vatRate} mode="edit" docNo={meta.docNo} returnTo={back ?? undefined} />
     </Shell>
   );
 }

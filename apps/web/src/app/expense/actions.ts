@@ -7,6 +7,7 @@ import {
   type BuyDocInput, type PickedVendor,
 } from '@/lib/purchases';
 import { friendlyDbError, type FormResult } from '@/lib/mutate';
+import { safeBack, withSaved } from '@/lib/saved-target';
 
 function describe(err: unknown, fallback: string): string {
   if (err && typeof err === 'object' && 'code' in err) return friendlyDbError(err);
@@ -49,12 +50,9 @@ export async function saveBuyDocAction(_prev: FormResult, fd: FormData): Promise
   revalidatePath('/stock');
   revalidatePath('/finance/ap');
   if (fd.get('printAfter') === '1') redirect(`/expense/${saved.id}/print?saved=${encodeURIComponent(saved.docNo)}`);
-  const back = String(fd.get('returnTo') ?? '');
-  if (back.startsWith('/expense')) {
-    const sep = back.includes('?') ? '&' : '?';
-    redirect(`${back}${sep}saved=${encodeURIComponent(saved.docNo)}&savedId=${saved.id}`);
-  }
-  redirect(`/expense/${saved.id}?saved=${encodeURIComponent(saved.docNo)}`);
+  /* การ์ดบันทึกแล้ว (ผู้ใช้กำหนด): สร้างใหม่ → ฟอร์มที่ส่ง returnTo มา หรือฟอร์มเปล่าชนิดเดิม · แก้ไข → หน้าที่กดแก้ไขมา */
+  const fallback = input.id ? `/expense/${saved.id}` : `/expense?kind=${input.kind}`;
+  redirect(withSaved(safeBack(fd.get('returnTo'), ['/expense']) ?? fallback, 'buy', saved.id));
 }
 
 export async function voidBuyDocAction(id: string, reason: string): Promise<void> {

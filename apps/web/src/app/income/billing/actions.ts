@@ -6,6 +6,7 @@ import { requirePerm } from '@/lib/auth';
 import { mutate } from '@/lib/mutate';
 import { saveBillnote, voidBillnote } from '@/lib/billnotes';
 import { friendlyDbError, keepValues, str, type FormResult } from '@/lib/mutate';
+import { safeBack, withSaved } from '@/lib/saved-target';
 
 function describe(err: unknown, fallback: string): string {
   if (err && typeof err === 'object' && 'code' in err) return friendlyDbError(err);
@@ -38,12 +39,9 @@ export async function saveBillnoteAction(_prev: FormResult, fd: FormData): Promi
 
   revalidatePath('/income/billing');
   if (fd.get('printAfter') === '1') redirect(`/income/billing/${saved.id}/print`);
-  const back = String(fd.get('returnTo') ?? '');
-  if (back.startsWith('/income/billing')) {
-    const sep = back.includes('?') ? '&' : '?';
-    redirect(`${back}${sep}saved=${encodeURIComponent(saved.no ?? saved.id)}&savedId=${saved.id}`);
-  }
-  redirect(`/income/billing/${saved.id}?saved=1`);
+  /* การ์ดบันทึกแล้ว (ผู้ใช้กำหนด): สร้างใหม่ → ฟอร์มเปล่า vat เดิม (returnTo) · แก้ไข → หน้าที่กดแก้ไขมา ไม่มีก็หน้าใบวางบิล */
+  const fallback = id ? `/income/billing/${saved.id}` : '/income/billing';
+  redirect(withSaved(safeBack(fd.get('returnTo'), ['/income/billing']) ?? fallback, 'bill', saved.id));
 }
 
 export async function voidBillnoteAction(id: string, reason: string): Promise<FormResult> {

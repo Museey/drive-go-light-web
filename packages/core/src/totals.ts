@@ -67,15 +67,25 @@ export function whtBaseOf(doc: TotalsInput, ctx: ShopContext): number {
 }
 
 /**
+ * ขั้นต่ำหัก ณ ที่จ่ายของเอกสารขาย — ค่าบริการครั้งหนึ่ง 1,000 บาทขึ้นไปจึงหัก
+ *
+ * ผู้ใช้กำหนด 16 ก.ย. 2569 ตามกติกาสรรพากร ("จ่ายครั้งหนึ่ง 1,000 บาทขึ้นไป")
+ * ต่างจากโปรแกรมเดิมที่หักทุกยอด (เทสต์เทียบของเดิมใส่กติกานี้ทับไว้ใน test/wht-minimum.ts)
+ * ใช้กับฝั่งขายเท่านั้น — ค่าใช้จ่ายที่อู่เป็นผู้จ่าย (`exTotals`) คงเดิมตามที่ผู้ใช้เลือก
+ */
+export const WHT_MIN_BASE = 1000;
+
+/**
  * ยอดของเอกสารขาย — หักภาษี ณ ที่จ่ายจากฝั่งลูกค้า
  *
  * ลำดับการปัดของ wht สำคัญ: ปัด `whtBase * rate` เป็นจำนวนเต็มก่อน แล้วค่อยหาร 100
  * (ไม่ใช่ `round2(whtBase * rate / 100)`) — เป็นพฤติกรรมของโปรแกรมเดิม ห้ามเปลี่ยน
+ * ฐานต่ำกว่า `WHT_MIN_BASE` ไม่หัก — `whtBase` ยังคืนค่าจริงไว้ให้หน้าจอแจ้งว่าไม่ถึง
  */
 export function recTotals(doc: SalesDoc, ctx: ShopContext): SalesTotals {
   const t = totalsOf(doc, ctx);
   const whtBase = whtBaseOf(doc, ctx);
-  const wht = Math.round(whtBase * num(doc.whtRate)) / 100;
+  const wht = whtBase < WHT_MIN_BASE ? 0 : Math.round(whtBase * num(doc.whtRate)) / 100;
   return { ...t, whtBase, wht, payable: round2(t.grand - wht) };
 }
 

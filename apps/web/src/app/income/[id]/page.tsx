@@ -12,6 +12,7 @@ import { PaymentsPanel } from '../../finance/payments-panel';
 import { DocActions } from '../doc-actions';
 import { baht, KIND_LABEL, payLabel, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
 import { DocHistory } from '@/components/doc-history';
+import { SavedNotice } from '@/components/saved-notice';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ export default async function DocPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string; void?: string }>;
+  searchParams: Promise<{ saved?: string; savedId?: string; error?: string; void?: string }>;
 }) {
   const session = await requireTab('income', 'receipt');
   const { id } = await params;
@@ -42,11 +43,7 @@ export default async function DocPage({
       title={KIND_LABEL[doc.kind] ?? doc.kind}
       sub={`เลขที่ ${doc.docNo} · ${thDateLong(doc.docDate)}`}
     >
-      {sp.saved ? (
-        <div className="ok-msg" style={{ marginBottom: 16 }}>
-          บันทึกเรียบร้อย — เลขที่ {sp.saved}
-        </div>
-      ) : null}
+      <SavedNotice saved={sp.saved} savedId={sp.savedId} />
       {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}
       {/* ขั้นตอน A→B→C — ขั้นปัจจุบันสีเข้ม ขั้นถัดไปอำพันกดออกใบต่อได้ (เจ๊ก ข้อ 4, 5, 7) */}
       <DocSteps kind={doc.kind} id={id} voided={doc.status === 'void'}
@@ -173,10 +170,15 @@ export default async function DocPage({
             {doc.discount > 0 ? (
               <div className="row"><span className="lbl">ส่วนลด</span><span>−{baht(doc.discount)}</span></div>
             ) : null}
-            <div className="row"><span className="lbl">มูลค่าก่อนภาษี</span><span>{baht(doc.netAmount)}</span></div>
-            <div className="row">
-              <span className="lbl">ภาษีมูลค่าเพิ่ม {doc.vatRate}%</span><span>{baht(doc.vatAmount)}</span>
-            </div>
+            {/* ไม่คิดภาษี → ไม่มีมูลค่าก่อนภาษี/VAT ให้แสดง (ผู้ใช้แจ้ง — ฟอร์มกับหน้าพิมพ์ซ่อนอยู่แล้ว เหลือหน้านี้) */}
+            {doc.vatMode !== 'none' ? (
+              <>
+                <div className="row"><span className="lbl">มูลค่าก่อนภาษี</span><span>{baht(doc.netAmount)}</span></div>
+                <div className="row">
+                  <span className="lbl">ภาษีมูลค่าเพิ่ม {doc.vatRate}%</span><span>{baht(doc.vatAmount)}</span>
+                </div>
+              </>
+            ) : null}
             <div className="row grand"><span>รวมทั้งสิ้น</span><span>{baht(doc.grandTotal)}</span></div>
             {doc.whtAmount > 0 ? (
               <>

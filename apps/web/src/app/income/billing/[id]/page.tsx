@@ -1,6 +1,9 @@
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { isUuid } from '@/lib/ids';
+import { safeBack } from '@/lib/saved-target';
+import { SavedNotice } from '@/components/saved-notice';
 import { today } from '@drivegolight/core';
 import { query, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
@@ -15,7 +18,7 @@ export default async function BillnotePage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; void?: string; from?: string; vat?: string }>;
+  searchParams: Promise<{ saved?: string; savedId?: string; void?: string; from?: string; vat?: string }>;
 }) {
   await requireTab('income', 'billing');
   const { id } = await params;
@@ -23,6 +26,8 @@ export default async function BillnotePage({
   if (id !== 'new' && !isUuid(id)) notFound();
   const sp = await searchParams;
   const isNew = id === 'new';
+  /* แก้ไขใบเดิม บันทึกแล้วกลับหน้าที่กดแก้ไขมา (ผู้ใช้กำหนด) · ใบใหม่กลับฟอร์มเปล่า (ฝั่ง action) */
+  const back = isNew ? undefined : (safeBack((await headers()).get('referer'), ['/income/billing']) ?? undefined);
 
   /* คัดลอกใบวางบิลที่ยกเลิกเป็นใบใหม่ — ทางออกเดียวของใบที่ยกเลิกไปแล้ว ตามรุ่น 6.4 */
   const fromId = isNew ? (sp.from ?? '') : '';
@@ -96,7 +101,7 @@ export default async function BillnotePage({
         </div>
       }
     >
-      {sp.saved ? <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย</div> : null}
+      <SavedNotice saved={sp.saved} savedId={sp.savedId} />
 
       {source ? (
         <div className="note" style={{ marginBottom: 16 }}>
@@ -132,6 +137,7 @@ export default async function BillnotePage({
               /* key = ใบนี้ + ใบที่คัดลอกมา + vat — เปลี่ยนแค่ query ฟอร์มต้องเริ่มใหม่ */
               key={`${id}:${fromId}:${sp.vat ?? ''}`}
               id={isNew ? undefined : id}
+              returnTo={back}
               no={note?.note.no}
               billDate={note?.note.billDate ?? today()}
               /* วันนัดรับเงินไม่คัดลอกมา — วันนัดของใบที่ยกเลิกไปแล้วเป็นวันที่ผ่านไปแล้ว

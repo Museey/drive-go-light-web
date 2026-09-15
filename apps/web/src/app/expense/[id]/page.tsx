@@ -11,6 +11,7 @@ import { PaymentsPanel } from '../../finance/payments-panel';
 import { BuyDocActions, UnvoidBuyDoc } from '../doc-actions';
 import { baht, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
 import { DocHistory } from '@/components/doc-history';
+import { SavedNotice } from '@/components/saved-notice';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ export default async function BuyDocPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string; void?: string }>;
+  searchParams: Promise<{ saved?: string; savedId?: string; error?: string; void?: string }>;
 }) {
   const session = await requireTab('expense', 'purchase');
   const { id } = await params;
@@ -43,9 +44,7 @@ export default async function BuyDocPage({
       title={isPurchase ? 'ใบซื้อสินค้า' : `ค่าใช้จ่าย — ${cat?.label ?? ''}`}
       sub={`เลขที่ ${doc.docNo} · ${thDateLong(doc.docDate)}`}
     >
-      {sp.saved ? (
-        <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย — เลขที่ {sp.saved}</div>
-      ) : null}
+      <SavedNotice saved={sp.saved} savedId={sp.savedId} />
       {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}
 
       {meta.status === 'void' ? (

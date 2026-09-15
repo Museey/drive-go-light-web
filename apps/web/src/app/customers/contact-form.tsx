@@ -42,11 +42,13 @@ function Submit({ label }: { label: string }) {
 }
 
 export function ContactForm({
-  contact, defaultCode, defaultKind,
+  contact, defaultCode, defaultKind, returnTo,
 }: {
   contact: Contact | null;
   defaultCode: string;
   defaultKind: 'customer' | 'vendor';
+  /** แก้ไขแล้วกลับหน้าที่กดแก้ไขมา — เซิร์ฟเวอร์กรองซ้ำด้วย safeBack */
+  returnTo?: string;
 }) {
   const [state, action] = useActionState<FormResult, FormData>(saveContactAction, {});
   const [type, setType] = useState<'person' | 'company'>(contact?.type ?? 'person');
@@ -69,6 +71,7 @@ export function ContactForm({
   return (
     <form autoComplete="off" className="form" action={action}>
       {contact ? <input type="hidden" name="id" value={contact.id} /> : null}
+      {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="kind" value={kind} />
 

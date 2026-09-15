@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { bahttext, expiredLines, lineAmount, recTotals, type VatMode } from '@drivegolight/core';
+import { bahttext, expiredLines, lineAmount, recTotals, WHT_MIN_BASE, type VatMode } from '@drivegolight/core';
 import { loadSourceAction, saveDocAction, scanPartAction, searchCustomersAction, searchOpenSourcesAction, searchProductsAction } from './actions';
 import { useLiveSearch } from '@/components/use-live-search';
 import { ConfirmSave } from '@/components/confirm-save';
@@ -594,6 +594,8 @@ export function DocEditor({
                     <input className="in mono" id="whtRate" inputMode="decimal" value={doc.whtRate}
                            onChange={(e) => set('whtRate', Number(e.target.value) || 0)} />
                     <span className="hint">คิดจากค่าแรงเท่านั้น (ร้านตั้งไว้ {shopWhtRate}%)</span>
+                    {/* ขั้นต่ำตามกติกาสรรพากร — เตือนแดงให้เห็นชัด (ผู้ใช้กำหนด) · สูตรอยู่ที่ recTotals (WHT_MIN_BASE) */}
+                    <span className="hint" style={{ color: 'var(--due)', fontWeight: 600 }}>(ค่าบริการ {WHT_MIN_BASE.toLocaleString('en-US')} บาทขึ้นไป)</span>
                   </div>
                   <div className="field">
                     <label>อ้างอิงใบเสนอราคา{doc.kind === 'RC' ? ' / ใบส่งมอบ' : ''} <span className="hint">พิมพ์เลขที่ ชื่อ หรือทะเบียน — ค้นจากใบที่เปิดค้างอยู่ เลือกแล้วดึงรายการมาให้</span></label>
@@ -817,6 +819,10 @@ export function DocEditor({
                 <div className="row"><span className="lbl">หัก ณ ที่จ่าย {doc.whtRate}% (ค่าแรง {baht(t.whtBase)})</span><span>−{baht(t.wht)}</span></div>
                 <div className="row grand"><span>ยอดชำระทั้งสิ้น</span><span>{baht(t.payable)}</span></div>
               </>
+            ) : !isQuote && doc.whtRate > 0 && t.whtBase > 0 && t.whtBase < WHT_MIN_BASE ? (
+              <div className="note" style={{ margin: '6px 0' }}>
+                ค่าแรง {baht(t.whtBase)} บาท ไม่ถึง {WHT_MIN_BASE.toLocaleString('en-US')} บาท — ไม่หัก ณ ที่จ่าย
+              </div>
             ) : null}
             <div className="subtle" style={{ fontSize: 12.5, marginTop: 4 }}>({bahttext(t.payable)})</div>
 

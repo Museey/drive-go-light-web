@@ -1,6 +1,9 @@
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { isUuid } from '@/lib/ids';
+import { safeBack } from '@/lib/saved-target';
+import { SavedNotice } from '@/components/saved-notice';
 import { today } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { canCost, canEdit, HIDDEN_COST } from '@/lib/perms';
@@ -33,7 +36,7 @@ export default async function ProductPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; barcode?: string }>;
+  searchParams: Promise<{ saved?: string; savedId?: string; barcode?: string }>;
 }) {
   const session = await requireTab('stock', 'list');
   const seeCost = canCost(session);
@@ -43,6 +46,8 @@ export default async function ProductPage({
   if (id !== 'new' && !isUuid(id)) notFound();
   const sp = await searchParams;
   const isNew = id === 'new';
+  /* แก้ไขสินค้าเดิม บันทึกแล้วกลับหน้าที่กดแก้ไขมา (ผู้ใช้กำหนด) · เพิ่มใหม่กลับฟอร์มเปล่า (ฝั่ง action) */
+  const back = isNew ? undefined : (safeBack((await headers()).get('referer'), ['/stock']) ?? undefined);
 
   const [product, categories, shop, suppliers] = await Promise.all([
     isNew ? Promise.resolve(null) : getProduct(id),
@@ -72,7 +77,7 @@ export default async function ProductPage({
       title={isNew ? 'เพิ่มสินค้าใหม่' : product!.name}
       sub={isNew ? undefined : `รหัส ${product!.code}`}
     >
-      {sp.saved ? <div className="ok-msg" style={{ marginBottom: 16 }}>บันทึกเรียบร้อย</div> : null}
+      <SavedNotice saved={sp.saved} savedId={sp.savedId} />
 
       {/* รูปอยู่หลังฟอร์มไม่ได้ เพราะสินค้าใหม่ยังไม่มี id ให้ผูกรูป */}
       {product ? (
@@ -85,8 +90,9 @@ export default async function ProductPage({
         <div className="card">
           <header><h2>{isNew ? 'ข้อมูลสินค้า' : 'แก้ไขข้อมูลสินค้า'}</h2></header>
           <div className="body">
-            <ProductForm product={product} categories={categories} suppliers={suppliers}
-                         presetBarcode={isNew ? sp.barcode : undefined} />
+            {/* key = ใบบันทึกล่าสุด — เพิ่มสินค้าถัดไปติดกัน ฟอร์มต้องเริ่มใหม่ ไม่ค้างค่าของรายก่อน */}
+            <ProductForm key={`${id}:${sp.savedId ?? ''}`} product={product} categories={categories} suppliers={suppliers}
+                         presetBarcode={isNew ? sp.barcode : undefined} returnTo={back} />
           </div>
         </div>
       ) : (

@@ -1,5 +1,7 @@
+import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { isUuid } from '@/lib/ids';
+import { safeBack } from '@/lib/saved-target';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
@@ -26,6 +28,8 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
 
   const initial = { ...source, id };
   const lotExpiry = await lotExpiryOf(source.items.map((i) => i.productId));
+  /* บันทึกแล้วกลับหน้าที่กดแก้ไขมา (ผู้ใช้กำหนด) — กรองใน safeBack เหลือเฉพาะหน้าในเมนูรายรับ */
+  const back = safeBack((await headers()).get('referer'), ['/income']);
 
   return (
     <Shell doc
@@ -35,7 +39,7 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
       {/* key = รหัสเอกสาร — จากหน้าแก้ไขใบหนึ่งไปอีกใบ ฟอร์มต้องไม่ค้างข้อมูลใบเดิม */}
       <DocEditor key={id} initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="edit"
                  lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
-                 docNo={docNo ?? undefined} />
+                 docNo={docNo ?? undefined} returnTo={back ?? undefined} />
     </Shell>
   );
 }
