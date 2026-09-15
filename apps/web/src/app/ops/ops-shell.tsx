@@ -49,7 +49,7 @@ export function OpsShell({
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 12.5, color: '#8FA3B0' }}>{email}</span>
         {/* ต้องเป็น form + POST ห้ามเป็น <Link> — ดูคอมเมนต์ใน /ops/logout/route.ts */}
-        <form action="/ops/logout" method="post">
+        <form autoComplete="off" action="/ops/logout" method="post">
           <button
             type="submit"
             style={{

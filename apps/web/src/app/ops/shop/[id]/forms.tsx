@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { issueResetAction, renewAction, setSeatsAction, type LinkResult } from '../../actions';
 import { LinkBox } from '../../link-box';
 import type { FormResult } from '@/lib/mutate';
+import { ThaiDateInput } from '@/components/thai-date-input';
 
 function Submit({ label, busy }: { label: string; busy: string }) {
   const { pending } = useFormStatus();
@@ -17,7 +18,7 @@ export function SeatsForm({ tenantId, maxUsers }: { tenantId: string; maxUsers: 
   const [state, action] = useActionState<FormResult, FormData>(setSeatsAction, {});
 
   return (
-    <form action={action} style={{ marginTop: 10 }}>
+    <form autoComplete="off" action={action} style={{ marginTop: 10 }}>
       <input type="hidden" name="tenantId" value={tenantId} />
       {state.error ? <div className="err">{state.error}</div> : null}
       {state.ok ? <div className="ok-msg">บันทึกแล้ว</div> : null}
@@ -41,7 +42,7 @@ export function RenewForm({
   const [state, action] = useActionState<FormResult, FormData>(renewAction, {});
 
   return (
-    <form action={action}>
+    <form autoComplete="off" action={action}>
       <input type="hidden" name="tenantId" value={tenantId} />
       {state.error ? <div className="err">{state.error}</div> : null}
       {state.ok ? <div className="ok-msg">บันทึกการต่ออายุแล้ว</div> : null}
@@ -51,15 +52,13 @@ export function RenewForm({
           <label htmlFor="from" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)' }}>
             เริ่มวันที่
           </label>
-          <input className="in" id="from" name="from" type="date" defaultValue={from}
-                 required style={{ width: '100%' }} />
+          <ThaiDateInput id="from" name="from" defaultIso={from} required full />
         </div>
         <div>
           <label htmlFor="to" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)' }}>
             ถึงวันที่
           </label>
-          <input className="in" id="to" name="to" type="date" defaultValue={to}
-                 required style={{ width: '100%' }} />
+          <ThaiDateInput id="to" name="to" defaultIso={to} required full />
         </div>
         <div>
           <label htmlFor="plan" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)' }}>
@@ -95,7 +94,7 @@ export function ResetLink({ tenantId }: { tenantId: string }) {
   const [state, action] = useActionState<LinkResult, FormData>(issueResetAction, {});
 
   return (
-    <form action={action}>
+    <form autoComplete="off" action={action}>
       <input type="hidden" name="tenantId" value={tenantId} />
       {state.error ? <div className="err">{state.error}</div> : null}
       {state.ok && state.link ? (

@@ -892,6 +892,20 @@ table.lines th { font-weight: 600; }
 table.lines td { padding: 5px 6px; vertical-align: middle; }
 /* เป้ากด ≥ 44px ทุกโหมด (สเปก §2 §10) — เดิม 36px บนมือถือ/แท็บเล็ตจึงกดพลาดง่าย (e2e จับได้ 37–38 จุด) */
 table.lines .in { padding: 5px 8px; min-height: 44px; }
+/* ช่องกรอกเต็มคอลัมน์ — ไม่งั้น <input> ใช้ความกว้างของตัวเอง (~172px) ทุกช่อง ตารางไม่ฟัง width ที่ตั้งไว้
+   วัดที่ 1280: ทุกคอลัมน์กว้าง 184px ชื่อสินค้าเท่าช่องจำนวน ตาราง 1,419px ในกรอบ 1,234px ต้องเลื่อน
+   ความกว้างวัดจากตัวอักษรจริง 14px + ขอบช่อง 18 + ระยะในช่อง 12 (ผู้ใช้กำหนด: จำนวน 6 หลัก · ชื่อหน่วย 8 ตัวอักษร · ส่วนลด 4 หลัก) */
+table.lines td > .in, table.lines td > .datein { width: 100%; min-width: 0; box-sizing: border-box; }
+/* width + min-width คู่กัน — จอแคบกว่าตาราง ตาราง auto บีบคอลัมน์ต่ำกว่า width ได้ (ช่องกรอก min-width: 0)
+   วัดที่ 375/768: ช่องจำนวนเหลือ 46px "999999" ถูกตัด · ใส่ min-width แล้วตารางกว้างเกินจอเลื่อนในกรอบตาราง (ตามดีไซน์เดิม) */
+table.lines .c-code { width: 150px; min-width: 150px; }
+table.lines .c-qty { width: 84px; min-width: 84px; }      /* "999999" 53px */
+table.lines .c-unit { width: 88px; min-width: 88px; }     /* "กิโลกรัม" / "ชุดอะไหล่" 48–56px */
+table.lines .c-price { width: 120px; min-width: 120px; }
+table.lines .c-disc { width: 66px; min-width: 66px; }     /* "9999" 36px */
+/* หัวคอลัมน์ "ส่วนลด %" ยาวกว่าช่อง 4 หลัก — บรรทัดเดียวดันคอลัมน์เป็น 79px (วัดที่ 1280) ให้ขึ้นสองบรรทัดได้ */
+table.lines th.c-disc { white-space: normal; line-height: 1.2; padding-left: 4px; padding-right: 6px; }
+table.lines .c-name { min-width: 220px; } /* ไม่ตั้งความกว้าง — ได้ที่เหลือทั้งหมด · จอแคบเลื่อนในกรอบตาราง */
 table.lines td.idx { color: var(--ink-3); width: 36px; text-align: center; }
 table.lines td.amt { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; white-space: nowrap; }
 table.lines td.stock { color: var(--ink-3); text-align: center; white-space: nowrap; }
@@ -1062,11 +1076,38 @@ a.chip:not(table *) .mono, button.chip:not(table *) .mono { font-size: 12px; fon
 .subnav a.act u { color: #7A4E00; }
 
 /* ---------- ช่องค้นหา: ไอคอนแว่น + ข้อความไกด์สีเทา ---------- */
+/* ไอคอนแว่น + กรอบเขียวเข้ม (ผู้ใช้กำหนด) — เดิมเทาอ่อน #7C8B96 จางจนมองไม่ออกว่าเป็นช่องค้นหา */
 .in.search {
   padding-left: 34px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237C8B96' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='16.5' y1='16.5' x2='21' y2='21'/%3E%3C/svg%3E");
+  border-color: var(--steel-dk); border-width: 1.5px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230F5C3E' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='16.5' y1='16.5' x2='21' y2='21'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: 10px center;
 }
+
+/* ---------- แถบปุ่มต่อกัน (ช่วงเวลาหน้าแรก) ----------
+   มือถือ 3+3 ช่องเท่ากัน · แท็บเล็ตขึ้นไปแถวเดียว · เป้ากด 44px บนจอสัมผัส เดสก์ท็อป 38px */
+.seg {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1.5px solid var(--steel-dk); border-radius: 10px; overflow: hidden; background: #fff;
+}
+.seg-btn {
+  display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 14px;
+  font-size: 14px; font-weight: 600; color: var(--steel-dk); text-decoration: none; white-space: nowrap;
+  border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.seg-btn:nth-child(3n) { border-right: 0; }
+.seg-btn:nth-child(n+4) { border-bottom: 0; }
+.seg-btn:hover { background: var(--steel-soft); }
+.seg-btn[aria-current='true'] { background: var(--steel-dk); color: #fff; }
+.range-form { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.range-f { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+@media (min-width: 768px) {
+  .seg { display: inline-flex; }
+  .seg-btn { border-bottom: 0; }
+  .seg-btn:nth-child(3n) { border-right: 1px solid var(--line); }
+  .seg-btn:last-child { border-right: 0; }
+}
+@media (min-width: 1280px) { .seg-btn { min-height: 38px; } }
 .in.search::placeholder { color: #9AA8B2; }
 /* การ์ดตั้งค่า/เครื่องมือในเมนูย่อย — โทนกลาง ต่างจากการ์ดสร้าง (อำพัน) */
 .subnav a.tool { background: #EEF2F0; border-style: dashed; }
@@ -1074,6 +1115,9 @@ a.chip:not(table *) .mono, button.chip:not(table *) .mono { font-size: 12px; fon
 
 /* ---------- ปฏิทินเลือกวัน (พ.ศ.) ---------- */
 .datein { display: inline-flex; align-items: center; gap: 4px; }
+/* ช่องวันที่ในฟอร์มแบบกริด — กว้างเต็มช่องเหมือนช่องกรอกอื่น (แทน <input type="date"> ที่เต็มช่อง) */
+.datein.full { display: flex; width: 100%; }
+.datein.full > .in { flex: 1 1 auto; min-width: 0; }
 .btn.calbtn { padding: 0 10px; min-width: 40px; font-size: 16px; }
 .thcal { z-index: var(--z-drawer); width: 280px; background: #fff; border: 1px solid var(--line); border-radius: 10px;
          box-shadow: 0 10px 30px -10px rgba(11,26,38,.45); padding: 10px; font-size: 13px; }

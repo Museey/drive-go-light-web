@@ -18,7 +18,7 @@ export function AdjustForm({ productId, current, unit }: { productId: string; cu
   const [state, action] = useActionState<FormResult, FormData>(adjustStockAction, {});
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       <input type="hidden" name="productId" value={productId} />
 
       {state.error ? <div className="err">{state.error}</div> : null}

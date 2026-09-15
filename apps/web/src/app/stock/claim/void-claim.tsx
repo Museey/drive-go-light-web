@@ -37,7 +37,7 @@ export function VoidClaim({ id, no }: { id: string; no: string }) {
         </div>
         <div className="field">
           <label htmlFor="reason">เหตุผล</label>
-          <input className="in" id="reason" value={reason}
+          <input className="in" id="reason" autoComplete="off" value={reason}
                  onChange={(e) => setReason(e.target.value)}
                  placeholder="เช่น เปิดใบผิดคน" />
         </div>

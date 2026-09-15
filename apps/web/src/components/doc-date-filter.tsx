@@ -74,10 +74,10 @@ export function DocDateFilter({
       <div className="spacer" />
 
       {/* เลือกเดือน — ส่งเป็น from/to ให้ฝั่งเซิร์ฟเวอร์ จะได้มีทางเดียวที่กรองวันที่ */}
-      <form action={base} method="get" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <form autoComplete="off" action={base} method="get" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         {Object.entries(keep).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
         <select className="in" name="month" defaultValue="" aria-label="เดือน">
-          <option value="">เลือกเดือน</option>
+          <option value="">เดือน</option>
           {TH_MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
         </select>
         <select className="in mono" name="year" defaultValue={y} aria-label="ปี">
@@ -86,7 +86,7 @@ export function DocDateFilter({
         <button className="btn" type="submit">ดู</button>
       </form>
 
-      <form action={base} method="get" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <form autoComplete="off" action={base} method="get" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         {Object.entries(keep).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
         <span className="subtle">ตั้งแต่</span>
         <ThaiDateInput name="from" defaultIso={from} ariaLabel="ตั้งแต่" />

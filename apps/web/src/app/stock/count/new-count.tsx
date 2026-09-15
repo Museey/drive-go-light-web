@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { createCountAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
+import { ThaiDateInput } from '@/components/thai-date-input';
 
 /** เปิดใบตรวจนับใหม่ — ถามแค่วันที่กับหมายเหตุ แล้วเข้าไปกรอกในใบ */
 export function NewCount({ today }: { today: string }) {
@@ -19,10 +20,9 @@ export function NewCount({ today }: { today: string }) {
   }
 
   return (
-    <form action={action} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+    <form autoComplete="off" action={action} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
       {state.error ? <span className="chip due">{state.error}</span> : null}
-      <input className="in mono" name="countDate" type="date" defaultValue={today} required
-             style={{ width: 150 }} />
+      <ThaiDateInput name="countDate" defaultIso={today} required ariaLabel="วันที่ตรวจนับ" />
       <input className="in" name="note" placeholder="เช่น ตรวจนับประจำเดือน ชั้น A–C"
              style={{ width: 260 }} />
       <Submit />

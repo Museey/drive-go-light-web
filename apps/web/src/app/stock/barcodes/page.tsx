@@ -78,7 +78,7 @@ export default async function BarcodeSheetPage({
     <>
       <div className="printbar">
 
-        <form action="/stock/barcodes" method="get"
+        <form autoComplete="off" action="/stock/barcodes" method="get"
               style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {sp.q ? <input type="hidden" name="q" value={sp.q} /> : null}
           {sp.cat ? <input type="hidden" name="cat" value={sp.cat} /> : null}

@@ -48,7 +48,7 @@ export default async function OpsLoginPage({
             </div>
           ) : null}
 
-          <form action={submit}>
+          <form autoComplete="off" action={submit}>
             <label htmlFor="email"
                    style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
               อีเมล

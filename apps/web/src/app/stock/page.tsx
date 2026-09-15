@@ -90,7 +90,7 @@ export default async function StockPage({
             <ActionTiles menu="stock" />
           </div>
           <span className="spacer" />
-          <form action="/stock" method="get" className="row-flex">
+          <form autoComplete="off" action="/stock" method="get" className="row-flex">
             <input className="in search w-240" type="search" name="q" defaultValue={sp.q ?? ''}
                    placeholder="กรอกคำค้นหา — รหัส ชื่อ หรือหมวด" />
             <select className="in w-auto" name="cat" defaultValue={sp.cat ?? ''}>

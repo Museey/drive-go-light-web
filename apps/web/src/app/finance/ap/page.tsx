@@ -74,7 +74,7 @@ export default async function ApPage({
 
       <div className="card">
         <div className="toolbar">
-          <form action="/finance/ap" method="get" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <form autoComplete="off" action="/finance/ap" method="get" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
                    placeholder="กรอกคำค้นหา — เลขที่ ชื่อผู้ขาย หรือเลขใบกำกับ" style={{ width: 260 }} />
             <label className="tag-row" style={{ fontSize: 13 }}>

@@ -28,7 +28,7 @@ export function NewShopForm() {
   const [state, action] = useActionState<LinkResult, FormData>(openShopAction, {});
 
   return (
-    <form action={action}>
+    <form autoComplete="off" action={action}>
       {state.error ? <div className="err">{state.error}</div> : null}
 
       {state.ok && state.link ? (

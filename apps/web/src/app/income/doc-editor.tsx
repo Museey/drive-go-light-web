@@ -102,29 +102,30 @@ function LineRow({
     <>
       <tr>
         <td className="idx">{i + 1}</td>
-        <td style={{ width: 150 }}>
+        {/* ความกว้างคอลัมน์อยู่ที่ CSS (table.lines .c-*) — ช่องกรอกเต็มคอลัมน์ ชื่อสินค้าได้ที่เหลือทั้งหมด */}
+        <td className="c-code">
           <input className="in mono" placeholder="พิมพ์รหัส / ชื่อ" value={query || item.code}
                  onChange={(e) => { setQuery(e.target.value); onChange({ code: e.target.value, productId: null }); }}
                  onKeyDown={enterKey} />
         </td>
-        <td>
+        <td className="c-name">
           <input className="in" placeholder="— เลือกสินค้า หรือพิมพ์ชื่อเอง —" value={item.name}
                  onChange={(e) => onChange({ name: e.target.value })} onKeyDown={enterKey} />
         </td>
-        <td style={{ width: 84 }}>
+        <td className="c-qty">
           <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.qty}
                  onChange={(e) => onChange({ qty: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
         </td>
         <td className="stock">{item.productId && stock !== null ? stock.toLocaleString('en-US') : '-'}</td>
-        <td style={{ width: 80 }}>
+        <td className="c-unit">
           <input className="in" value={item.unit} placeholder="หน่วย"
                  onChange={(e) => onChange({ unit: e.target.value })} onKeyDown={enterKey} />
         </td>
-        <td style={{ width: 120 }}>
+        <td className="c-price">
           <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.unitPrice}
                  onChange={(e) => onChange({ unitPrice: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
         </td>
-        <td style={{ width: 84 }}>
+        <td className="c-disc">
           <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.discPct ?? 0}
                  title="ส่วนลดรายบรรทัด (%)"
                  onChange={(e) => onChange({ discPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
@@ -408,7 +409,7 @@ export function DocEditor({
   ];
 
   return (
-    <form action={action} id="doc-form"
+    <form autoComplete="off" action={action} id="doc-form"
           /* Enter ในช่องกรอกห้ามส่งฟอร์มข้ามแผงยืนยัน — บันทึกจริงผ่านปุ่มในแผงเท่านั้น */
           onKeyDown={(e) => {
             const el = e.target as HTMLElement;
@@ -695,13 +696,13 @@ export function DocEditor({
             <thead>
               <tr>
                 <th className="idx">ลำดับ</th>
-                <th>รหัสสินค้า</th>
-                <th>ชื่อสินค้า</th>
-                <th className="num">จำนวน</th>
+                <th className="c-code">รหัสสินค้า</th>
+                <th className="c-name">ชื่อสินค้า</th>
+                <th className="num c-qty">จำนวน</th>
                 <th style={{ textAlign: 'center' }}>คงเหลือ</th>
-                <th>หน่วย</th>
-                <th className="num">ราคา/หน่วย</th>
-                <th className="num">ส่วนลด %</th>
+                <th className="c-unit">หน่วย</th>
+                <th className="num c-price">ราคา/หน่วย</th>
+                <th className="num c-disc">ส่วนลด %</th>
                 <th className="num">จำนวนเงิน</th>
                 <th style={{ textAlign: 'center' }}>ค่าแรง</th>
                 <th />

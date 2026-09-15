@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { recordPaymentAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 import { baht } from '@/lib/format';
+import { ThaiDateInput } from '@/components/thai-date-input';
 
 const METHODS = ['เงินสด', 'เงินโอน', 'บัตรเครดิต', 'เช็ค'];
 
@@ -45,7 +46,7 @@ export function PayForm({
   }
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       <input type="hidden" name="docId" value={docId} />
 
       {state.error ? <div className="err">{state.error}</div> : null}
@@ -68,7 +69,7 @@ export function PayForm({
 
         <div className={state.field === 'paidOn' ? 'field bad' : 'field'}>
           <label htmlFor={`d-${docId}`}>วันที่{word}</label>
-          <input className="in mono" id={`d-${docId}`} name="paidOn" type="date" defaultValue={today()} />
+          <ThaiDateInput id={`d-${docId}`} name="paidOn" defaultIso={today()} full />
         </div>
 
         <div className="field">

@@ -8,6 +8,7 @@ import { VehicleFields } from '../../income/vehicle-fields';
 import { CLAIM_KINDS, CLAIM_SIDE, type ClaimSide } from '@/lib/claims';
 import type { FormResult } from '@/lib/mutate';
 import { baht } from '@/lib/format';
+import { ThaiDateInput } from '@/components/thai-date-input';
 
 /**
  * ฟอร์มออกใบเคลม — ทั้งฝั่งลูกค้าและฝั่งผู้ขายใช้ตัวเดียวกัน ต่างกันแค่ side
@@ -95,7 +96,7 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
   };
 
   return (
-    <form className="form" action={action}
+    <form autoComplete="off" className="form" action={action}
           onKeyDown={(e) => { const el = e.target as HTMLElement; if (e.key === 'Enter' && el.tagName === 'INPUT') e.preventDefault(); }}>
       <input type="hidden" name="side" value={side} />
       <input type="hidden" name="partyId" value={party?.id ?? ''} />
@@ -120,8 +121,7 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
         </div>
         <div className={state.field === 'claimDate' ? 'field bad' : 'field'}>
           <label htmlFor="claimDate">วันที่</label>
-          <input className="in mono" id="claimDate" name="claimDate" type="date"
-                 defaultValue={today} required />
+          <ThaiDateInput id="claimDate" name="claimDate" defaultIso={today} required full />
         </div>
         <div className="field">
           {/* 6.4 เรียกช่องนี้ต่างกันตามฝั่ง — เคลมผู้ขายคือการส่งของชำรุดคืนร้านอะไหล่
@@ -251,14 +251,15 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
       </div>
 
       <div className="tablewrap" style={{ border: '1px solid var(--line)', borderRadius: 6 }}>
-        <table className="tbl">
+        {/* ตารางรายการแบบเดียวกับใบขาย/ใบซื้อ — ความกว้างคอลัมน์อยู่ที่ CSS (table.lines .c-*) */}
+        <table className="tbl lines">
           <thead>
             <tr>
               <th style={{ width: 34 }}>#</th>
-              <th style={{ width: 130 }}>รหัสสินค้า</th>
-              <th>รายการ</th>
-              <th className="num" style={{ width: 90 }}>จำนวน</th>
-              <th className="num" style={{ width: 110 }}>ต้นทุน/หน่วย</th>
+              <th className="c-code">รหัสสินค้า</th>
+              <th className="c-name">รายการ</th>
+              <th className="num c-qty">จำนวน</th>
+              <th className="num c-price">ต้นทุน/หน่วย</th>
               <th className="num" style={{ width: 110 }}>มูลค่ารวม</th>
               <th style={{ width: 34 }} />
             </tr>
@@ -267,14 +268,14 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
             {lines.map((l, i) => (
               <tr key={i}>
                 <td style={{ textAlign: 'center' }}>{i + 1}</td>
-                <td>
+                <td className="c-code">
                   <input type="hidden" name={`it${i}_pid`} value={l.productId ?? ''} />
                   <input type="hidden" name={`it${i}_oem`} value={l.oem} />
                   <input type="hidden" name={`it${i}_unit`} value={l.unit} />
                   <input className="in mono" name={`it${i}_code`} value={l.code}
                          onChange={(e) => setLine(i, { code: e.target.value })} />
                 </td>
-                <td>
+                <td className="c-name">
                   <input className="in" name={`it${i}_name`} value={l.name}
                          onChange={(e) => setLine(i, { name: e.target.value })}
                          placeholder="ชื่อรายการ" />
@@ -283,7 +284,7 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
                           title="ไม่ได้ผูกกับทะเบียนสินค้า จะไม่ตัดสต๊อก">ไม่ตัดสต๊อก</span>
                   ) : null}
                 </td>
-                <td className="num">
+                <td className="num c-qty">
                   <input className="in mono" name={`it${i}_qty`} inputMode="decimal"
                          style={{ textAlign: 'right' }} value={l.qty}
                          onChange={(e) => setLine(i, { qty: Number(e.target.value) || 0 })} />
@@ -293,7 +294,7 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
                     </span>
                   ) : null}
                 </td>
-                <td className="num">
+                <td className="num c-price">
                   <input className="in mono" name={`it${i}_cost`} inputMode="decimal"
                          style={{ textAlign: 'right' }} value={l.unitCost}
                          onChange={(e) => setLine(i, { unitCost: Number(e.target.value) || 0 })} />

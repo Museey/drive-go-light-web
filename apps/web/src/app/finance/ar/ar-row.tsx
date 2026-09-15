@@ -30,7 +30,8 @@ export function ArRow({ row }: { row: ReceivableRow }) {
           {baht(row.outstanding)}
         </td>
         <td>
-          <button className="btn" type="button" onClick={() => setOpen(!open)}>
+          {/* ปุ่มรับชำระสีเขียว (ผู้ใช้กำหนด) — ตอนเปิดฟอร์มอยู่เป็น "ปิด" สีปกติ */}
+          <button className={open ? 'btn' : 'btn ok'} type="button" onClick={() => setOpen(!open)}>
             {open ? 'ปิด' : 'รับชำระ'}
           </button>
         </td>

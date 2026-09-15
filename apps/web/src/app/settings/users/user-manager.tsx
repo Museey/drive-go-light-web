@@ -24,7 +24,7 @@ function StaffForm({ user, nextCode, onDone }: {
   const bad = (f: string) => (state.field === f ? 'field bad' : 'field');
 
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       {user ? <input type="hidden" name="id" value={user.id} /> : null}
       {state.error ? <div className="err">{state.error}</div> : null}
 
@@ -303,7 +303,7 @@ export function UserManager({ users, nextCode, currentUserId, startNew }: {
                       </button>
                     ) : null}
                     {u.role !== 'owner' && u.active ? (
-                      <form action={async () => { await promoteAction(u.id); }}>
+                      <form autoComplete="off" action={async () => { await promoteAction(u.id); }}>
                         <button className="btn" type="submit">ตั้งเป็นเจ้าของ</button>
                       </form>
                     ) : null}

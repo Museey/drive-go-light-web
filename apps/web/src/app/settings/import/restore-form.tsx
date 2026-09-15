@@ -82,7 +82,7 @@ export function RestoreForm() {
   /* ---------- ขั้นที่ 1 · เลือกไฟล์แล้วตรวจ ---------- */
   if (!preview) {
     return (
-      <form className="form" action={checkAction}>
+      <form autoComplete="off" className="form" action={checkAction}>
         {check.error ? <div className="err">{check.error}</div> : null}
 
         <div className="note">
@@ -105,7 +105,7 @@ export function RestoreForm() {
 
   /* ---------- ขั้นที่ 2 · เห็นแล้วว่ามีอะไร ค่อยยืนยัน ---------- */
   return (
-    <form className="form" action={action}>
+    <form autoComplete="off" className="form" action={action}>
       {state.error ? <div className="err">{state.error}</div> : null}
 
       <div className="ok-msg">

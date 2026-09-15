@@ -16,7 +16,7 @@ export function LinkBox({ link, note }: { link: string; note: string }) {
     <div className="ok-msg" style={{ marginBottom: 14 }}>
       <div style={{ marginBottom: 8 }}>{note}</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input
+        <input autoComplete="off"
           className="in mono"
           readOnly
           value={link}

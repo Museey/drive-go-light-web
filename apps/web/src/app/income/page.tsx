@@ -158,7 +158,7 @@ export default async function IncomePage({
 
           <div className="spacer" />
 
-          <form action="/income" method="get" style={{ display: 'flex', gap: 6 }}>
+          <form autoComplete="off" action="/income" method="get" style={{ display: 'flex', gap: 6 }}>
             <input type="hidden" name="hist" value="1" />
             {kind ? <input type="hidden" name="kind" value={kind} /> : null}
             {from ? <input type="hidden" name="from" value={from} /> : null}

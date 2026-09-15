@@ -53,7 +53,7 @@ export default async function CountSheetPage({
     <>
       <div className="printbar">
 
-        <form action="/stock/sheet" method="get" style={{ display: 'flex', gap: 6 }}>
+        <form autoComplete="off" action="/stock/sheet" method="get" style={{ display: 'flex', gap: 6 }}>
           <select className="in" name="cat" defaultValue={sp.cat ?? ''} style={{ width: 190 }}>
             <option value="">— ทุกหมวดหมู่ —</option>
             {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}

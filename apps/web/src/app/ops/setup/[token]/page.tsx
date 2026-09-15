@@ -64,7 +64,7 @@ export default async function OpsSetupPage({
             บัญชี <b>{info.email}</b>
           </p>
 
-          <form action={submit}>
+          <form autoComplete="off" action={submit}>
             <label htmlFor="password"
                    style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
               รหัสผ่านใหม่ (อย่างน้อย {OPS_MIN_PASSWORD} ตัวอักษร)

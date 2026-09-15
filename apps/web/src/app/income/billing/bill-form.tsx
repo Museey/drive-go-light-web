@@ -7,6 +7,7 @@ import { ConfirmSave } from '@/components/confirm-save';
 import { saveBillnoteAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 import type { OpenInvoice } from '@/lib/billnotes';
+import { ThaiDateInput } from '@/components/thai-date-input';
 
 /**
  * ฟอร์มออกและแก้ใบวางบิล
@@ -82,7 +83,7 @@ export function BillForm({
   if (readOnly) return null;
 
   return (
-    <form className="form" action={action}
+    <form autoComplete="off" className="form" action={action}
           onKeyDown={(e) => { const el = e.target as HTMLElement; if (e.key === 'Enter' && el.tagName === 'INPUT') e.preventDefault(); }}>
       {id ? <input type="hidden" name="id" value={id} /> : null}
       {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
@@ -115,12 +116,11 @@ export function BillForm({
         </div>
         <div className="field">
           <label htmlFor="billDate">วันที่วางบิล</label>
-          <input className="in mono" id="billDate" name="billDate" type="date"
-                 defaultValue={billDate} required />
+          <ThaiDateInput id="billDate" name="billDate" defaultIso={billDate} required full />
         </div>
         <div className="field">
           <label htmlFor="dueDate">นัดรับเงิน</label>
-          <input className="in mono" id="dueDate" name="dueDate" type="date" defaultValue={dueDate} />
+          <ThaiDateInput id="dueDate" name="dueDate" defaultIso={dueDate} full />
         </div>
       </div>
 

@@ -16,7 +16,7 @@ export function AddOperator() {
   const [state, action] = useActionState<LinkResult, FormData>(addOperatorAction, {});
 
   return (
-    <form action={action}>
+    <form autoComplete="off" action={action}>
       {state.error ? <div className="err">{state.error}</div> : null}
       {state.ok && state.link ? (
         <LinkBox link={state.link} note={`เพิ่มบัญชี ${state.email} แล้ว — ส่งลิงก์นี้ให้เขาตั้งรหัสผ่าน`} />
@@ -34,7 +34,7 @@ export function AddOperator() {
 
 export function ToggleOperator({ id, active }: { id: string; active: boolean }) {
   return (
-    <form action={async () => { await toggleOperatorAction(id, !active); }}>
+    <form autoComplete="off" action={async () => { await toggleOperatorAction(id, !active); }}>
       <button className={active ? 'btn danger sm' : 'btn sm'} type="submit">
         {active ? 'ปิดบัญชี' : 'เปิดบัญชี'}
       </button>

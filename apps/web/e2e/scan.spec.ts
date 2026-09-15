@@ -36,7 +36,10 @@ test.beforeEach(async ({ context }) => {
 
 const scan = async (page: import('@playwright/test').Page, text: string) => {
   /* **พิมพ์ลงตัวที่โฟกัสอยู่ ไม่คลิกช่องก่อน** — ปืนยิงไม่มีมือไปคลิกจอ
-     ถ้าคลิกก่อนทุกนัด เทสต์จะซ่อมโฟกัสให้เองและมองไม่เห็นบั๊กโฟกัสหลุด */
+     ถ้าคลิกก่อนทุกนัด เทสต์จะซ่อมโฟกัสให้เองและมองไม่เห็นบั๊กโฟกัสหลุด
+     รอให้ช่องยิงได้โฟกัสเองก่อน (ไม่ใช่คลิกให้) — บน production build หน้า hydrate ช้ากว่า dev
+     ตัวอักษรแรกที่พิมพ์ก่อนนั้นหาย ("40*" กลายเป็น "0*") ซึ่งไม่ใช่สิ่งที่เทสต์นี้ตรวจ */
+  await expect(page.locator('#scan')).toBeFocused();
   await page.keyboard.type(text, { delay: 0 });
   await page.keyboard.press('Enter');
 };

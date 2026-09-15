@@ -2,6 +2,7 @@ import 'server-only';
 import { query } from './auth';
 import { mutate } from './mutate';
 import { CONTACT_MONEY_SQL } from './contact-totals';
+import { syncVehiclesWith } from './contact-vehicles';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
@@ -322,36 +323,8 @@ export async function saveContact(input: ContactInput): Promise<string> {
       id = rows[0].id;
     }
 
-    /* รถที่ถูกเอาออกจากฟอร์ม ให้ลบ — ยกเว้นคันที่มีเอกสารอ้างถึง
-       เอกสารเก็บ snapshot รถไว้ในตัวเองแล้ว การลบทะเบียนจึงไม่ทำให้เอกสารเก่าเสียหาย */
-    const keep = input.vehicles.map((v) => v.id).filter(Boolean) as string[];
-    await c.query(
-      `delete from vehicles
-       where contact_id = $1
-         and ($2::uuid[] is null or not (id = any($2)))
-         and not exists (select 1 from documents d where d.vehicle_id = vehicles.id)`,
-      [id, keep.length ? keep : null],
-    );
-
-    for (const v of input.vehicles) {
-      if (v.id) {
-        await c.query(
-          `update vehicles set brand=$2, model=$3, year=$4, color=$5, plate_a=$6, plate_b=$7,
-                  plate_province=$8, engine_no=$9, chassis_no=$10, mileage=$11, other=$12
-           where id=$1`,
-          [v.id, v.brand, v.model, v.year, v.color, v.plateA, v.plateB,
-           v.plateProvince, v.engineNo, v.chassisNo, v.mileage, v.other ?? ''],
-        );
-      } else {
-        await c.query(
-          `insert into vehicles (tenant_id, contact_id, brand, model, year, color,
-                                 plate_a, plate_b, plate_province, engine_no, chassis_no, mileage, other)
-           values (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-          [id, v.brand, v.model, v.year, v.color, v.plateA, v.plateB,
-           v.plateProvince, v.engineNo, v.chassisNo, v.mileage, v.other ?? ''],
-        );
-      }
-    }
+    /* รถ — ผู้ขายไม่แตะ (ฟอร์มผู้ขายไม่มีส่วนรถ) · ดู syncVehiclesWith */
+    await syncVehiclesWith(c, id!, input.kind, input.vehicles);
 
     return id!;
   });

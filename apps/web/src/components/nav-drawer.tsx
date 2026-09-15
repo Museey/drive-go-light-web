@@ -99,7 +99,7 @@ export function NavDrawer({
           <div className="foot">
             <span className="who">{name} · {role}</span>
             {note}
-            <form action="/logout" method="post">
+            <form autoComplete="off" action="/logout" method="post">
               <button type="submit" className="signout" style={{ width: '100%' }}>
                 ออกจากระบบ
               </button>
