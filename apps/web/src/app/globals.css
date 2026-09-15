@@ -767,6 +767,10 @@ body { font-size: 15px; }
 .wrap { padding: 11px; padding-bottom: calc(var(--h-tabbar) + 22px); }
 /* มือถือ: ปุ่มหัวหน้าลงแถวใหม่ทั้งก้อนเมื่อไม่พอ (แท็บเล็ตขึ้นไปกลับเป็นแถวเดียวที่กฎแถบเมนูย่อยในหัวหน้า) */
 .topbar { padding: 12px 14px; flex-wrap: wrap; }
+/* ตัวดันขวา (flex: 1) ขึ้นแถวว่างของตัวเองเมื่อชื่อหน้าเต็มแถว — แถวว่าง + ช่องไฟ 12px ทำให้หัวหน้าสูงเกิน
+   ชื่อค้างขอบบน (ขายหน้าร้าน 375px: ว่างบน 0 ล่าง 12) · ใช้ margin-left: auto ดันปุ่มขวาแทน (≥ 768 ซ่อนตัวดันอยู่แล้ว) */
+.topbar > .spacer { display: none; }
+.topbar > .spacer + * { margin-left: auto; }
 .topbar h1 { font-size: 16px; }
 
 .grid.g2, .grid.g4 { grid-template-columns: minmax(0, 1fr); }
@@ -983,11 +987,25 @@ table.tbl tr.pick.voided { opacity: .55; }
 }
 .tile[aria-current='true'] .k, .tile.on .k { color: #BFE3D6; }
 /* มือถือ: สองคอลัมน์เต็มแถว ตัวเล็กลงนิด */
-.tiles .tile { flex: 1 1 calc(50% - 10px); justify-content: center; font-size: 15px; padding: 10px 12px; }
+/* ไทล์ครึ่งแถว 129–182px — ไทล์เป็น inline-flex เลขเมนู (.k) ช่องติ๊ก และข้อความจึงเป็นคนละก้อน
+   ข้อความเหลือ 51–75px ขึ้นสองบรรทัด แล้ว .k ลอยกลางระหว่างสองบรรทัดเป็นแถวที่สาม
+   ("05.11 + เพิ่มรายการสินค้าใหม่" · "รหัสสินค้า เสมอ") — ลดตัวอักษร/ระยะอย่างเดียววัดแล้วยัง 3 บรรทัด
+   → บนมือถือไทล์เป็นบล็อก ตัวหนังสือกลาง ทุกชิ้นไหลในบรรทัดเดียวกัน
+   align-content: center จัดกลางแนวตั้ง — ไทล์บรรทัดเดียวที่ถูกยืดสูงเท่าเพื่อนสองบรรทัด (74px) ไม่งั้นตัวหนังสือค้างบน 21px */
+.tiles .tile {
+  flex: 1 1 calc(50% - 10px); display: block; text-align: center; align-content: center;
+  font-size: 14px; line-height: 1.5; padding: 15px 10px;
+}
+.tiles .tile .k, .tiles .tile input { vertical-align: middle; margin: 0 4px 0 0; }
 /* ตัวเลือกข้อความยาว (วิธีคิดต้นทุน) — ครึ่งแถว 147px ขึ้น 4 บรรทัดที่ 360px จึงเต็มแถวบนมือถือ */
 .tiles .tile.radio { flex-basis: 100%; justify-content: flex-start; }
 @media (min-width: 768px) {
-  .tiles .tile { flex: 0 1 auto; justify-content: flex-start; font-size: 15px; padding: 10px 18px; }
+  /* แท็บเล็ตขึ้นไปกลับเป็นไทล์ inline-flex แบบเดิมทุกค่า */
+  .tiles .tile {
+    flex: 0 1 auto; display: inline-flex; text-align: left; line-height: normal; align-content: normal;
+    justify-content: flex-start; font-size: 15px; padding: 10px 18px; gap: 10px;
+  }
+  .tiles .tile .k, .tiles .tile input { vertical-align: revert; margin: revert; }
   .tiles .tile.radio { flex-basis: auto; }
 }
 

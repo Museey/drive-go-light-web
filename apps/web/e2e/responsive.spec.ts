@@ -76,6 +76,25 @@ async function layoutIssues(page: Page, touch: boolean): Promise<Issue[]> {
       const n = lines(el);
       if (n > 1) out.push({ kind: 'ตกบรรทัด', what: `${name(el)} ${n} บรรทัด กว้าง ${Math.round(el.getBoundingClientRect().width)}` });
     }
+    /* ไทล์ครึ่งแถวบนมือถือ — ชื่อยาวขึ้นบรรทัดสองได้ ไม่เกินนั้น (เคย 3 บรรทัด: "05.11 + เพิ่มรายการสินค้าใหม่") */
+    for (const el of document.querySelectorAll('.tiles .tile')) {
+      if (!shown(el) || onPaper(el)) continue;
+      const n = lines(el);
+      if (n > 2) out.push({ kind: 'ไทล์ตกบรรทัด', what: `${name(el)} ${n} บรรทัด กว้าง ${Math.round(el.getBoundingClientRect().width)}` });
+    }
+    /* หัวหน้า — ข้อความต้องอยู่กลางแนวตั้ง (ตัวดันขวาขึ้นแถวว่างเคยทำให้ว่างบน 0 ล่าง 12) */
+    for (const t of document.querySelectorAll('.main > .topbar')) {
+      if (!shown(t)) continue;
+      const cs = getComputedStyle(t);
+      const r = t.getBoundingClientRect();
+      const rg = document.createRange();
+      rg.selectNodeContents(t);
+      const rects = [...rg.getClientRects()].filter((x) => x.width > 0 && x.height > 0);
+      if (!rects.length) continue;
+      const top = Math.min(...rects.map((x) => x.top)) - (r.top + parseFloat(cs.paddingTop) + parseFloat(cs.borderTopWidth));
+      const bottom = (r.bottom - parseFloat(cs.paddingBottom) - parseFloat(cs.borderBottomWidth)) - Math.max(...rects.map((x) => x.bottom));
+      if (Math.abs(bottom - top) > 6) out.push({ kind: 'หัวหน้าไม่อยู่กลาง', what: `ว่างบน ${Math.round(top)} ล่าง ${Math.round(bottom)} สูง ${Math.round(r.height)}` });
+    }
     /* ปุ่มในแถวต้องอยู่ในช่องของตัวเองครบ — ช่องตาราง overflow: hidden ปุ่มที่ล้นถูกตัดหายโดยไม่ตกบรรทัด
        (ปุ่ม 2×2 ที่กลายเป็นแถวเดียว: "แก้ไข/พิมพ์/เปิด" ล้นขอบการ์ดขวาที่ 1280) */
     for (const el of document.querySelectorAll('.row-acts .btn')) {
@@ -135,8 +154,8 @@ const report = (xs: Issue[]) => xs.slice(0, 12).map((x) => `${x.kind}: ${x.what}
 /* หน้าที่มีต้นเหตุครบทุกกลุ่ม — ปุ่มในแถว (ก) · ช่องชื่อตัดบรรทัด (ข) · ชิป (ง) · เมนูย่อย (จ)
    หน้าพิมพ์รายงาน (ฉ) · ตัวแบ่งหน้า/ปุ่มหัวหน้า (ช) · ปุ่มลบบรรทัด (ซ) */
 const PAGES = [
-  '/', '/customers', '/income?kind=RC&hist=1', '/income/walkin?hist=1', '/expense?kind=PO&hist=1',
-  '/income/billing?hist=1', '/stock', '/stock/kits', '/stock/pending', '/stock/claim', '/stock/claim/new',
+  '/', '/customers', '/income?kind=RC&hist=1', '/income/walkin', '/income/walkin?hist=1', '/expense?kind=PO&hist=1',
+  '/income/billing?hist=1', '/stock', '/stock?cols=1', '/stock/kits', '/stock/pending', '/stock/claim', '/stock/claim/new',
   '/stock/count', '/stock/new', '/settings/trash', '/finance/sales',
   '/customers/print', '/expense/print', '/finance/print', '/stock/print', '/stock/sheet',
   '/stock/expiry/print', '/stock/pending/print', '/stock/barcodes',
