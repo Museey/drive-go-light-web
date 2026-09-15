@@ -19,8 +19,8 @@ export function LicenseNag({ expiredDays }: { expiredDays: number }) {
     <>
       <button className="scrim" type="button" aria-label="ปิด" onClick={close} />
       <div className="confirm licnag" role="alertdialog" aria-modal="true" aria-label="ลิขสิทธิ์หมดอายุ">
-        <header><b style={{ color: 'var(--due)' }}>ลิขสิทธิ์การใช้งานหมดอายุแล้ว {expiredDays} วัน</b></header>
-        <p style={{ fontSize: 15 }}>กรุณาชำระเงินเพื่อต่ออายุการใช้งาน — ข้อมูลทั้งหมดยังอยู่ครบ ต่ออายุแล้วใช้งานต่อได้ทันที</p>
+        <header><b className="due-text">ลิขสิทธิ์การใช้งานหมดอายุแล้ว {expiredDays} วัน</b></header>
+        <p className="fs-15">กรุณาชำระเงินเพื่อต่ออายุการใช้งาน — ข้อมูลทั้งหมดยังอยู่ครบ ต่ออายุแล้วใช้งานต่อได้ทันที</p>
         <div className="acts">
           <Link className="btn ok" href="/license" onClick={close}>ไปหน้าต่ออายุ (08)</Link>
           <button className="btn amber" type="button" onClick={close}>ปิดไว้ก่อน</button>

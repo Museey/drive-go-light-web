@@ -7,7 +7,7 @@ import { SubNav } from '@/components/sub-nav';
 import { query } from '@/lib/auth';
 import { listBillnotes, openInvoices, unbilledSummary } from '@/lib/billnotes';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
-import { PageSize, pageSizeOf } from '@/components/page-size';
+import { HIST_DEFAULT_PAGE_SIZE, HIST_PAGE_SIZES, PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, thDate } from '@/lib/format';
 import { today } from '@drivegolight/core';
 import { BillForm, type Party } from './bill-form';
@@ -29,7 +29,7 @@ export default async function BillingPage({
   const sp = await searchParams;
   const { from, to } = rangeFromParams(sp);
   const page = Math.max(1, Number(sp.page ?? '1') || 1);
-  const pageSize = pageSizeOf(sp.size);
+  const pageSize = pageSizeOf(sp.size, HIST_PAGE_SIZES, HIST_DEFAULT_PAGE_SIZE);
   const vat = sp.vat === 'yes' || sp.vat === 'no' ? sp.vat : undefined;
   const histFirst = sp.hist === '1';
 
@@ -195,7 +195,7 @@ export default async function BillingPage({
 
           <div className="pager">
             <span>หน้า {page} จาก {lastPage}</span>
-            <PageSize base="/income/billing" size={pageSize} keep={keep} />
+            <PageSize base="/income/billing" size={pageSize} keep={keep} sizes={HIST_PAGE_SIZES} defaultSize={HIST_DEFAULT_PAGE_SIZE} />
             <div className="spacer" />
             {page > 1 ? (
               <Link className="btn" href={{ pathname: '/income/billing', query: { ...paged, page: page - 1 } }}>

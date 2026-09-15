@@ -43,7 +43,7 @@ const KIND_HELP: Record<SalesKind, string> = {
 };
 
 const emptyItem = (): DocItemInput => ({
-  productId: null, code: '', oem: '', name: '', unit: '',
+  productId: null, kitId: null, code: '', oem: '', name: '', unit: '',
   qty: 1, unitPrice: 0, isService: false, discPct: 0,
 });
 
@@ -155,7 +155,7 @@ function LineRow({
                       <tr key={p.id} className="pick" role="button" tabIndex={0}
                           onClick={() => pick(p)}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(p); } }}>
-                        <td className="mono">{p.code}</td>
+                        <td className="mono">{p.kitId ? <span className="chip ok" style={{ marginRight: 4 }}>ชุด</span> : null}{p.code}</td>
                         <td className="wrap">{p.name}</td>
                         <td className="num">{baht(priceOf(p))}</td>
                         <td className="num subtle">
@@ -213,6 +213,8 @@ export function DocEditor({
   const [confirm, setConfirm] = useState(false);
   const [precheck, setPrecheck] = useState('');
   const [printAfter, setPrintAfter] = useState(false);
+  /* โฟกัสช่องยอดเมื่อกด "ชำระบางส่วน" — ใช้ autoFocus ผ่าน state แทนการอ่าน DOM */
+  const [focusPartial, setFocusPartial] = useState(false);
   /* อ้างอิงใบเสนอราคา/ใบส่งมอบจากในฟอร์ม: ค้นใบที่เปิดค้าง เลือกแล้วดึงลูกค้า รถ รายการ มาทั้งชุด */
   const [srcQuery, setSrcQuery] = useState('');
   const [srcNo, setSrcNo] = useState('');
@@ -347,7 +349,7 @@ export function DocEditor({
   /* ---------- ใส่สินค้าลงบรรทัด ---------- */
   const fillRow = (i: number, p: PickedProduct, qty = 1) => {
     learn([p]);
-    setItem(i, { productId: p.id, code: p.code, oem: p.oem, name: p.name, unit: p.unit, qty, unitPrice: priceOf(p) });
+    setItem(i, { productId: p.kitId ? null : p.id, kitId: p.kitId ?? null, code: p.code, oem: p.oem, name: p.name, unit: p.unit, qty, unitPrice: priceOf(p) });
   };
 
   /** ยิงบาร์โค้ด/เพิ่มจากที่อื่น — ตัวเดิมที่มีอยู่แล้วให้เพิ่มจำนวน ไม่มีก็ลงบรรทัดว่างแรก */
@@ -356,7 +358,7 @@ export function DocEditor({
     setDoc((d) => {
       const at = d.items.findIndex((i) => i.productId === p.id);
       if (at >= 0) return { ...d, items: d.items.map((i, j) => (j === at ? { ...i, qty: i.qty + qty } : i)) };
-      const line = { ...emptyItem(), productId: p.id, code: p.code, oem: p.oem, name: p.name, unit: p.unit, qty, unitPrice: priceOf(p) };
+      const line = { ...emptyItem(), productId: p.kitId ? null : p.id, kitId: p.kitId ?? null, code: p.code, oem: p.oem, name: p.name, unit: p.unit, qty, unitPrice: priceOf(p) };
       const blank = d.items.findIndex((i) => !isRealItem(i));
       return blank >= 0
         ? { ...d, items: d.items.map((i, j) => (j === blank ? line : i)) }
@@ -831,7 +833,7 @@ export function DocEditor({
                     return (
                       <div className="field" key={method}>
                         <label>{method}</label>
-                        <input className="in mono" id={`pay-${method}`} inputMode="decimal" value={amount || ''} placeholder="0.00"
+                        <input className="in mono" id={`pay-${method}`} autoFocus={focusPartial && method === 'เงินสด'} inputMode="decimal" value={amount || ''} placeholder="0.00"
                                onChange={(e) => {
                                  const v = Number(e.target.value) || 0;
                                  setCashAuto(false);
@@ -866,7 +868,7 @@ export function DocEditor({
                 <div className="tag-row" style={{ marginTop: 10 }}>
                   <button className="btn sm" type="button" onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: t.payable, ref: '' }] })); }}>รับเงินสดเต็มจำนวน</button>
                   <button className="btn sm" type="button" onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินโอน', amount: t.payable, ref: banks?.[0] ? bankRef(banks[0]) : '' }] })); }}>รับโอนเต็มจำนวน</button>
-                  <button className="btn sm" type="button" onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: 0, ref: '' }] })); setTimeout(() => (document.getElementById('pay-เงินสด') as HTMLInputElement | null)?.focus(), 0); }}>ชำระบางส่วน — กรอกยอด</button>
+                  <button className="btn sm" type="button" onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: 0, ref: '' }] })); setFocusPartial(true); }}>ชำระบางส่วน — กรอกยอด</button>
                   <button className="btn sm" type="button" onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [] })); }}>ยังไม่รับเงิน (เครดิต)</button>
                 </div>
               </div>

@@ -1,3 +1,4 @@
+import { addrLineOf } from '@/lib/contacts';
 import Link from 'next/link';
 import { PrintReport } from '@/components/print-report';
 import { RowLink } from '@/components/row-link';
@@ -63,22 +64,7 @@ export default async function CustomersPage({
       current="/customers"
       title="ข้อมูลลูกค้า / ผู้ขาย"
       sub={`${total.toLocaleString('en-US')} ราย`}
-      actions={<><PrintReport />{" "}<Link className="btn" href="/settings/import#contacts">นำเข้า / ส่งออก CSV</Link>{" "}
-        <div className="tag-row">
-          <Link className="btn" href={`/customers/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายชื่อ</Link>
-          {/* ปุ่มตามแท็บ — อยู่หน้าทะเบียนผู้ขายแล้วกดเพิ่ม ควรได้ฟอร์มผู้ขาย
-              ไม่ใช่ฟอร์มลูกค้าที่ต้องมาสลับชนิดเองอีกที */}
-          {sp.kind === 'vendor' ? (
-            <Link className="btn primary" href="/customers/new?kind=vendor">
-              <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>02.2</span>+ เพิ่มผู้ขาย
-            </Link>
-          ) : (
-            <Link className="btn primary" href="/customers/new?kind=customer">
-              <span className="mono" style={{ opacity: 0.6, marginRight: 5 }}>02.1</span>+ เพิ่มลูกค้า
-            </Link>
-          )}
-        </div>
-      </>}
+      actions={<PrintReport />}
     >
       <SubNav menu="customer" current={sp.kind === 'vendor' ? 'vendor' : 'customer'}>
       <div className="card">
@@ -110,12 +96,12 @@ export default async function CustomersPage({
             {/* ตารางพอดีหน้า ตัวอักษร 14px (ผู้ใช้กำหนด): รหัส · ชื่อ(ที่เหลือ) · โทร · ทะเบียนรถ/เลขภาษี · เครดิต · ยอดสะสม · คงค้าง · ปุ่ม */}
             <table className="tbl hist fit cust">
               <colgroup>
-                <col style={{ width: 92 }} /><col /><col style={{ width: 112 }} /><col style={{ width: 140 }} />
-                <col style={{ width: 64 }} /><col className="opt" style={{ width: 92 }} /><col style={{ width: 92 }} /><col style={{ width: 160 }} />
+                <col style={{ width: 92 }} /><col style={{ width: '24%' }} /><col style={{ width: 112 }} /><col style={{ width: 120 }} /><col />
+                <col style={{ width: 60 }} /><col className="opt" style={{ width: 92 }} /><col style={{ width: 92 }} /><col style={{ width: 176 }} />
               </colgroup>
               <thead>
                 <tr>
-                  <th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>{sp.kind === 'vendor' ? 'เลขผู้เสียภาษี' : 'ทะเบียนรถ / ภาษี'}</th>
+                  <th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>{sp.kind === 'vendor' ? 'เลขผู้เสียภาษี' : 'ทะเบียนรถ / ภาษี'}</th><th>ที่อยู่</th>
                   <th className="num">เครดิต</th><th className="num opt">ยอดสะสม</th><th className="num">คงค้าง</th>
                   <th />
                 </tr>
@@ -126,18 +112,19 @@ export default async function CustomersPage({
                     <td className="mono"><b>{c.code}</b></td>
                     <td className="wrap">
                       <b>{c.displayName || <span style={{ color: 'var(--ink-3)' }}>ไม่ระบุชื่อ</span>}</b>
-                      <div className="subtle" style={{ fontSize: 12.5 }}>
+                      <div className="subtle fs-12">
                         {c.type === 'company' ? 'นิติบุคคล' : 'บุคคลธรรมดา'}{c.email ? ` · ${c.email}` : ''}
                       </div>
                     </td>
                     <td className="mono">{c.tel || '-'}</td>
                     <td className="mono" style={{ color: 'var(--ink-2)' }}>
                       {c.kind === 'customer' ? (c.vehicleCount ? `รถ ${c.vehicleCount} คัน` : '-') : (c.taxId || '-')}
-                      {c.kind === 'customer' && c.taxId ? <div className="subtle" style={{ fontSize: 12 }}>{c.taxId}</div> : null}
+                      {c.kind === 'customer' && c.taxId ? <div className="subtle fs-12">{c.taxId}</div> : null}
                     </td>
+                    <td className="wrap subtle fs-13">{addrLineOf(c) || '-'}</td>
                     <td className="num">{c.creditDays ? `${c.creditDays} วัน` : '-'}</td>
                     <td className="num mono opt">{c.spent > 0.004 ? baht(c.spent) : '-'}</td>
-                    <td className="num mono" style={{ color: c.owe > 0.004 ? 'var(--due)' : 'var(--ink-3)' }}>
+                    <td className={c.owe > 0.004 ? 'num mono due-text' : 'num mono muted-text'}>
                       {c.owe > 0.004 ? baht(c.owe) : '-'}
                     </td>
                     <td>

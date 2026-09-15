@@ -1,5 +1,6 @@
 'use server';
 
+import { kitLineName, searchKits } from '@/lib/kits';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
@@ -81,7 +82,13 @@ function describe(err: unknown, fallback: string): string {
 }
 
 export async function searchProductsAction(q: string): Promise<PickedProduct[]> {
-  return searchProducts(q);
+  /* ชุดอะไหล่ซ่อมบำรุงค้นเจอในช่องเดียวกับสินค้า — ขึ้นก่อน มีป้าย "ชุด" */
+  const [kits, products] = await Promise.all([searchKits(q), searchProducts(q)]);
+  const kitRows: PickedProduct[] = kits.map((k) => ({
+    kitId: k.id, id: `kit:${k.id}`, code: k.code, oem: '', name: kitLineName(k.name, k.items), unit: 'ชุด',
+    priceA: k.price, priceB: k.priceB || k.price, priceC: k.priceC || k.price, qtyOnHand: 0, shelfLifeMonths: null, nearestExpiry: null,
+  }));
+  return [...kitRows, ...products];
 }
 
 /**

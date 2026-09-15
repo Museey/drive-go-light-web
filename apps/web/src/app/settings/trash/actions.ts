@@ -37,19 +37,19 @@ export async function restoreTrashAction(source: Source, id: string): Promise<Tr
 }
 
 /**
- * ลบถาวร — ยืนยันสองชั้นตามที่เจ้าของกิจการเลือก (14 ก.ย. 2569)
+ * ลบถาวร — เฉพาะเจ้าของกิจการ + รหัสผ่านของตัวเอง (ชุดแก้ 14 ก.ย. 2569 22:37)
  *
- * ชั้นที่หนึ่งคือแผงยืนยัน ชั้นที่สองคือช่อง "เข้าใจแล้วว่ากู้คืนไม่ได้" ที่ต้องติ๊กก่อนปุ่มจะกดได้
- * ฝั่งเซิร์ฟเวอร์รับ understood แยกด้วย — ปุ่มที่ถูกเรียกตรง ๆ โดยไม่ผ่านแผงจะไม่ลบอะไร
+ * แผงยืนยันคือชั้นแรก รหัสผ่านคือชั้นที่สอง ตรวจที่ lib/trash.ts ในทรานแซกชันเดียวกับที่ลบ
+ * ปุ่มที่ถูกเรียกตรง ๆ โดยไม่มีรหัสผ่านจะไม่ลบอะไร
  */
 export async function purgeTrashAction(
-  source: Source, id: string, understood: boolean,
+  source: Source, id: string, password: string,
 ): Promise<TrashActionResult> {
   await requirePerm('settings');
-  if (understood !== true) return { error: 'ต้องติ๊กยืนยันว่าเข้าใจว่ากู้คืนไม่ได้ก่อน' };
+  if (typeof password !== 'string' || !password) return { error: 'ใส่รหัสผ่านของเจ้าของกิจการก่อนลบถาวร' };
   if (!isSource(source) || !isUuid(id)) return { error: 'ข้อมูลที่ส่งมาไม่ถูกต้อง — ลองโหลดหน้าใหม่' };
   try {
-    await purgeFromTrash(source, id);
+    await purgeFromTrash(source, id, password);
   } catch (err) {
     return { error: describe(err, 'ลบถาวรไม่สำเร็จ') };
   }

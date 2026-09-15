@@ -252,6 +252,34 @@ comment on column products.last_cost is
 -- ต้องอ่านข้ามชนิดอยู่แล้ว การรวมทำให้มีระบบออกเลขที่เดียว ตารางชำระเงินเดียว
 -- ราคาที่จ่าย: ต้องมี CHECK ต่อ kind กำกับ ไม่งั้นกลายเป็นตารางอะไรก็ได้
 -- ---------------------------------------------------------------------
+-- ชุดอะไหล่ซ่อมบำรุง (029): รวมวัสดุหลายรายการเป็นชุดเดียว ตั้งราคาขายชุด
+create table kits (
+  id          uuid primary key default gen_random_uuid(),
+  tenant_id   uuid not null references tenants(id) on delete cascade,
+  code        text not null,
+  name        text not null,
+  price       numeric(14,2) not null default 0,   -- ราคา A
+  price_b     numeric(14,2) not null default 0,   -- (030)
+  price_c     numeric(14,2) not null default 0,   -- (030)
+  note        text not null default '',
+  active      boolean not null default true,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  unique (tenant_id, code)
+);
+create table kit_items (
+  id          uuid primary key default gen_random_uuid(),
+  tenant_id   uuid not null references tenants(id) on delete cascade,
+  kit_id      uuid not null references kits(id) on delete cascade,
+  product_id  uuid references products(id) on delete set null,
+  name        text not null,
+  unit        text not null default '',
+  qty         numeric(14,3) not null default 1,
+  unit_cost   numeric(14,2) not null default 0,
+  sort_order  int not null default 0
+);
+create index on kit_items (tenant_id, kit_id, sort_order);
+
 create table documents (
   id              uuid primary key default gen_random_uuid(),
   tenant_id       uuid        not null references tenants(id) on delete cascade,
@@ -364,6 +392,7 @@ create table doc_items (
   doc_id          uuid        not null references documents(id) on delete cascade,
   line_no         integer     not null,
   product_id      uuid        references products(id) on delete set null,  -- null = พิมพ์ชื่อเอง (รายการค้างทำ)
+  kit_id          uuid        references kits(id) on delete set null,      -- บรรทัดชุดอะไหล่ซ่อมบำรุง (029)
   code            text        not null default '',
   oem             text        not null default '',
   name            text        not null,
@@ -962,6 +991,7 @@ create trigger documents_stamp_edit
   for each row execute function stamp_doc_edit();
 
 
+
 do $$
 declare t text;
 begin
@@ -971,7 +1001,7 @@ begin
                            'billnotes','billnote_docs','billnote_sequences',
                            'claims','claim_items','claim_sequences',
                            'stock_counts','stock_count_items','stock_count_sequences',
-                           'doc_edits','product_pics']
+                           'doc_edits','product_pics','kits','kit_items']
   loop
     execute format('alter table %I enable row level security', t);
     /**

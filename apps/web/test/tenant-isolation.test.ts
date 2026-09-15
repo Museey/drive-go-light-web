@@ -130,6 +130,17 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
         `insert into stock_count_sequences (tenant_id, period, last_no) values ($1,'',1)
          on conflict (tenant_id, period) do update set last_no = 1`, [t],
       );
+
+      /* ชุดอะไหล่ซ่อมบำรุง (ไมเกรชัน 029) — ไฟล์ชุดทดสอบของรุ่น 6.4 ไม่มีข้อมูลนี้ ตารางว่างพิสูจน์อะไรไม่ได้ */
+      const kit = await admin.query(
+        `insert into kits (tenant_id, code, name, price, price_b, price_c)
+         values ($1, 'KIT-001', 'ชุดถ่ายน้ำมันเครื่อง', 900, 850, 800) returning id`, [t],
+      );
+      await admin.query(
+        `insert into kit_items (tenant_id, kit_id, product_id, name, qty, unit_cost)
+         values ($1,$2,$3,'น้ำมันเครื่อง',4,120), ($1,$2,null,'ค่าแรง',1,0)`,
+        [t, kit.rows[0].id, someProduct.rows[0].id],
+      );
     }
 
     /* ทุกตารางที่มีคอลัมน์ tenant_id — ไล่เอาจากฐานข้อมูลจริง ไม่ใช่รายชื่อที่พิมพ์ไว้ */

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { RowLink } from '@/components/row-link';
 import { baht, thDate } from '@/lib/format';
 import type { listIncomeDocs } from '@/lib/queries';
+import { RowPay } from './row-pay';
 
 type IncomeRow = Awaited<ReturnType<typeof listIncomeDocs>>['rows'][number];
 
@@ -11,10 +12,12 @@ type IncomeRow = Awaited<ReturnType<typeof listIncomeDocs>>['rows'][number];
  * แยกออกมาเพราะหน้าขายหน้าร้านต้องมีตารางเดียวกันทุกคอลัมน์ (ต้นแบบใช้ histTable ตัวเดียวกัน)
  * ถ้าคัดลอกไปวางสองที่ วันหนึ่งแก้ที่หนึ่งแล้วอีกที่หนึ่งจะเพี้ยนไปเงียบ ๆ
  */
-export function IncomeHistoryTable({ rows, todayIso, mayEdit }: {
+export function IncomeHistoryTable({ rows, todayIso, mayEdit, banks }: {
   rows: IncomeRow[];
   todayIso: string;
   mayEdit: boolean;
+  /** บัญชีรับโอนของร้าน — ป๊อปอัปรับชำระตรงแถวให้เลือก */
+  banks: { bank: string; no: string; name: string }[];
 }) {
   return (
     <div className="tablewrap">
@@ -68,8 +71,10 @@ export function IncomeHistoryTable({ rows, todayIso, mayEdit }: {
                 <td>
                   {/* ปุ่มสองบรรทัด: รับชำระ(เขียว) แก้ไข(แดงอ่อน) / พิมพ์(เทา) ลบ(แดงเข้ม) — มี 3 ปุ่ม = บน 2 ล่าง 1 (ผู้ใช้กำหนด) */}
                   <span className="row-acts grid2">
-                    {canPay ? <Link className="btn sm act-pay" href={`/income/${r.id}#pay`}>รับชำระ</Link> : null}
-                    {!r.voided && mayEdit ? <Link className="btn sm act-edit" href={`/income/${r.id}/edit`}>แก้ไข</Link> : null}
+                    {canPay ? <RowPay docId={r.id} docNo={r.docNo} outstanding={r.outstanding} today={todayIso} banks={banks} /> : null}
+                    {/* กติกา (ผู้ใช้กำหนด): ใบที่ตัดสต๊อก/รับเงินแล้วแก้ไม่ได้ — ให้ยกเลิกแล้วออกใหม่ · ปุ่มจางพร้อมเหตุผล */}
+                    {!r.voided && mayEdit && r.kind !== 'RC' && r.paid <= 0.004 ? <Link className="btn sm act-edit" href={`/income/${r.id}/edit`}>แก้ไข</Link>
+                      : !r.voided && mayEdit ? <span className="btn sm act-edit off" title="ใบที่ตัดสต๊อก/รับเงินแล้วแก้ไม่ได้ — ยกเลิกแล้วออกใหม่">แก้ไข</span> : null}
                     <Link className="btn sm act-print" href={`/income/${r.id}/print`}>พิมพ์</Link>
                     {!r.voided && mayEdit ? <Link className="btn sm act-del" href={`/income/${r.id}?void=1`}>ลบ</Link> : null}
                   </span>

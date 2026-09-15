@@ -71,17 +71,17 @@ export const MENU: MenuItem[] = [
     key: 'customer', no: '02', label: 'ข้อมูลลูกค้า / ผู้ขาย', desc: 'ทะเบียนลูกค้าและผู้ขาย',
     icon: 'people', color: '#5B3FBF', href: '/customers', perm: 'customer',
     actions: [
-      { no: '02.0', label: '+ เพิ่มผู้ติดต่อ', href: '/customers/new?kind=customer', icon: 'addUser' },
-      { no: '02.3', label: 'นำเข้า / ส่งออก CSV', href: '/settings/import#contacts', icon: 'folder', tone: 'neutral' },
+      { no: '02.1', label: '+ เพิ่มผู้ติดต่อ', href: '/customers/new?kind=customer', icon: 'addUser' },
+      { no: '02.4', label: 'นำเข้า / ส่งออก CSV', href: '/settings/import#contacts', icon: 'folder', tone: 'neutral' },
     ],
     actionsFirst: true,
     subs: [
       {
-        key: 'customer', no: '02.1', label: 'ทะเบียนลูกค้า', desc: 'ผู้นำรถเข้าซ่อม',
+        key: 'customer', no: '02.2', label: 'ทะเบียนลูกค้า', desc: 'ผู้นำรถเข้าซ่อม',
         icon: 'seeUser', color: '#5B3FBF', href: '/customers?kind=customer',
       },
       {
-        key: 'vendor', no: '02.2', label: 'ทะเบียนผู้ขาย', desc: 'ร้านอะไหล่ / ผู้จำหน่าย',
+        key: 'vendor', no: '02.3', label: 'ทะเบียนผู้ขาย', desc: 'ร้านอะไหล่ / ผู้จำหน่าย',
         icon: 'seeShop', color: '#C25A18', href: '/customers?kind=vendor',
       },
     ],
@@ -102,22 +102,22 @@ export const MENU: MenuItem[] = [
       {
         /* เอกสารเดียวกับ 03.2 แต่ไม่มี VAT — sales-rules บังคับ vatMode 'none' ให้เอง
            ชนิด IV ทำเสร็จตั้งแต่แรกแล้ว แท็บนี้แค่เปิดทางเข้าให้ ไม่ใช่ของใหม่ */
-        key: 'ivnovat', no: '03.2.1', label: 'ใบส่งมอบงาน/ใบแจ้งหนี้ (ไม่มีVAT)',
+        key: 'ivnovat', no: '03.3', label: 'ใบส่งมอบงาน/ใบแจ้งหนี้ (ไม่มีVAT)',
         desc: 'ส่งมอบงานแบบไม่คิดภาษีมูลค่าเพิ่ม',
         icon: 'truck', color: '#2F7D5C', href: '/income?kind=IV', parent: 'invoice',
       },
       {
-        key: 'receipt', no: '03.3', label: 'ใบเสร็จรับเงิน', desc: 'รับเงินและปิดยอดลูกหนี้',
+        key: 'receipt', no: '03.4', label: 'ใบเสร็จรับเงิน', desc: 'รับเงินและปิดยอดลูกหนี้',
         icon: 'receipt', color: '#C25A18', href: '/income?kind=RC',
       },
       {
-        key: 'billing', no: '03.4', label: 'ใบวางบิล', desc: 'รวมใบค้างชำระแจ้งเก็บเงิน',
+        key: 'billing', no: '03.5', label: 'ใบวางบิล', desc: 'รวมใบค้างชำระแจ้งเก็บเงิน',
         icon: 'bill', color: '#B4720B', href: '/income/billing',
       },
       {
         /* ผู้ใช้ขอเป็นเมนูย่อยของตัวเอง: หน้าเดียวจบ — สร้างใบเสร็จขายหน้าร้าน + ประวัติขายหน้าร้านด้านบน
            (ขายหน้าร้าน = ใบเสร็จที่ไม่มีใบเสนอราคา/ใบส่งมอบอ้างอิง) */
-        key: 'walkin', no: '03.5', label: 'ขายหน้าร้าน', desc: 'ลูกค้าเดินเข้ามาซื้อของจ่ายสด — ออกใบเสร็จทันที',
+        key: 'walkin', no: '03.6', label: 'ขายหน้าร้าน', desc: 'ลูกค้าเดินเข้ามาซื้อของจ่ายสด — ออกใบเสร็จทันที',
         icon: 'receipt', color: '#B4720B', href: '/income/walkin',
       },
     ],
@@ -144,9 +144,10 @@ export const MENU: MenuItem[] = [
     key: 'stock', no: '05', label: 'สินค้า', desc: 'สต๊อกและเตือนจุดสั่งซื้อ',
     icon: 'box', color: '#2E8B3D', href: '/stock', perm: 'stock',
     actions: [
-      { no: '05.6', label: '+ เพิ่มรายการสินค้าใหม่', href: '/stock/new', icon: 'addBox' },
-      { no: '05.7', label: 'ตั้งค่าการแสดงผลรายการ', href: '/stock?cols=1', icon: 'gear', tone: 'neutral' },
-      { no: '05.9', label: 'นำเข้า / ส่งออก CSV', href: '/settings/import#products', icon: 'folder', tone: 'neutral' },
+      { no: '05.11', label: '+ เพิ่มรายการสินค้าใหม่', href: '/stock/new', icon: 'addBox' },
+      { no: '05.8', label: 'ตั้งค่าการแสดงผลรายการ', href: '/stock?cols=1', icon: 'gear', tone: 'neutral' },
+      { no: '05.9', label: 'พิมพ์ฉลากบาร์โค้ด', href: '/stock/barcodes', icon: 'tags', tone: 'neutral' },
+      { no: '05.10', label: 'นำเข้า / ส่งออก CSV', href: '/settings/import#products', icon: 'folder', tone: 'neutral' },
     ],
     subs: [
       {
@@ -161,24 +162,29 @@ export const MENU: MenuItem[] = [
          * และถ้าให้เป็นแท็บใหม่ที่มีสิทธิ์ของตัวเอง พนักงานทุกคนที่เจ้าของเคยติ๊กสิทธิ์
          * รายแท็บไว้จะมองไม่เห็นหน้านี้ทันทีโดยไม่มีอะไรบอก — ดู canTab ใน perms.ts
          */
-        key: 'expiry', no: '05.1.1', label: 'ของใกล้หมดอายุ', desc: 'ของที่ใกล้หมดอายุและหมดอายุแล้ว',
+        key: 'expiry', no: '05.2', label: 'ของใกล้หมดอายุ', desc: 'ของที่ใกล้หมดอายุและหมดอายุแล้ว',
         icon: 'pending', color: '#B3382C', href: '/stock/expiry', parent: 'list',
       },
       {
-        key: 'pending', no: '05.2', label: 'รายการค้างทำ', desc: 'รายการที่ยังไม่ลงทะเบียน',
+        key: 'pending', no: '05.3', label: 'รายการค้างทำ', desc: 'รายการที่ยังไม่ลงทะเบียน',
         icon: 'pending', color: '#B4720B', href: '/stock/pending',
       },
       {
-        key: 'claim', no: '05.3', label: 'ใบเคลมสินค้า (ลูกค้า)', desc: 'จ่ายของออกให้ลูกค้าฟรี',
+        key: 'claim', no: '05.4', label: 'ใบเคลมสินค้า (ลูกค้า)', desc: 'จ่ายของออกให้ลูกค้าฟรี',
         icon: 'claim', color: '#B3382C', href: '/stock/claim',
       },
       {
-        key: 'vclaim', no: '05.4', label: 'เคลมสินค้า (ผู้ขาย)', desc: 'ส่งของชำรุดคืนผู้ขาย',
+        key: 'vclaim', no: '05.5', label: 'เคลมสินค้า (ผู้ขาย)', desc: 'ส่งของชำรุดคืนผู้ขาย',
         icon: 'buy', color: '#C25A18', href: '/stock/vclaim',
       },
       {
-        key: 'count', no: '05.5', label: 'ตรวจนับสต๊อก', desc: 'นับของจริงแล้วปรับยอดให้ตรง',
+        key: 'count', no: '05.6', label: 'ตรวจนับสต๊อก', desc: 'นับของจริงแล้วปรับยอดให้ตรง',
         icon: 'tally', color: '#1F5FBF', href: '/stock/count',
+      },
+      {
+        /* ชุดอะไหล่ซ่อมบำรุง: รวมวัสดุสิ้นเปลืองเป็นชุด ตั้งราคาชุด ใช้บนเอกสารเป็นบรรทัดเดียว (ผู้ใช้กำหนด) */
+        key: 'kits', no: '05.7', label: 'สร้างชุดอะไหล่ซ่อมบำรุง', desc: 'รวมวัสดุเป็นชุด ตั้งราคาชุด',
+        icon: 'kit', color: '#1D8A5F', href: '/stock/kits',
       },
     ],
   },
@@ -208,7 +214,7 @@ export const MENU: MenuItem[] = [
     key: 'settings', no: '07', label: 'ตั้งค่าร้าน', desc: 'ข้อมูลร้านและผู้ใช้งาน',
     icon: 'gear', color: '#5A6B76', href: '/settings', perm: 'settings',
     actions: [
-      { no: '07.4', label: '+ เพิ่มพนักงาน', href: '/settings/users?new=1', icon: 'addUser' },
+      { no: '07.5', label: '+ เพิ่มพนักงาน', href: '/settings/users?new=1', icon: 'addUser' },
     ],
     subs: [
       {
@@ -225,7 +231,7 @@ export const MENU: MenuItem[] = [
       },
       {
         /* ถังขยะ: เอกสารที่ลบ/ยกเลิกทุกชนิด ค้นตามช่วงเวลาเท่านั้น กู้คืนได้ · ลบถาวรจากที่นี่กู้ไม่ได้ (ผู้ใช้กำหนด) */
-        key: 'trash', no: '07.5', label: 'เอกสารที่ลบ/ยกเลิก', desc: 'สำรองไว้ กู้คืนหรือลบถาวร',
+        key: 'trash', no: '07.4', label: 'เอกสารที่ลบ/ยกเลิก', desc: 'สำรองไว้ กู้คืนหรือลบถาวร',
         icon: 'trash', color: '#B3382C', href: '/settings/trash',
       },
     ],

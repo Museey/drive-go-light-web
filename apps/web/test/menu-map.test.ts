@@ -60,6 +60,7 @@ const menuDesc = Object.fromEntries(
  * ใส่ชื่อไว้แล้วแต่ค่าดันเหมือนต้นฉบับ = เทสต์แดง (บรรทัดค้างที่ควรลบ)
  */
 const DIVERGE: { menu: string; tab: string; why: string }[] = [
+  { menu: 'stock', tab: 'kits', why: 'แท็บใหม่ 05.10 ชุดอะไหล่ซ่อมบำรุง — ไม่มีในรุ่น 6.4' },
   {
     menu: 'settings', tab: 'trash',
     why: 'แท็บใหม่ 07.5 เอกสารที่ลบ/ยกเลิก (ถังขยะ) — ไม่มีในรุ่น 6.4',
@@ -116,15 +117,16 @@ describe('ผังเมนูเทียบกับรุ่น 6.4', () => 
     }
   });
 
-  it('เลขกำกับและชื่อแท็บย่อยตรงกับชุดแท็บของต้นฉบับ', () => {
+  it('ชื่อแท็บย่อยตรงกับชุดแท็บของต้นฉบับ (เลขกำกับเรียงใหม่แล้ว)', () => {
     for (const [menuKey, setName] of Object.entries(TAB_SETS)) {
       const ours = (MENU.find((m) => m.key === menuKey)?.subs ?? [])
         .filter((s) => !diverged.has(`${menuKey}:${s.key}`));
       const theirs = tabs(setName)
         .filter(([k]) => !diverged.has(`${menuKey}:${k}`));
 
-      expect(ours.map((s) => [s.key, s.no, s.label]), `แท็บของเมนู ${menuKey}`)
-        .toEqual(theirs);
+      /* เลขกำกับเรียงใหม่ทั้งระบบไม่ให้ข้ามเลข (ผู้ใช้กำหนด) — เทียบเฉพาะคีย์กับชื่อแท็บ ไม่เทียบเลข */
+      expect(ours.map((s) => [s.key, s.label]), `แท็บของเมนู ${menuKey}`)
+        .toEqual(theirs.map(([k, , label]) => [k, label]));
     }
   });
 

@@ -4,7 +4,6 @@ import { SubNav } from '@/components/sub-nav';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
 import { baht, thDate } from '@/lib/format';
 import { listTrash } from '@/lib/trash';
-import { copyHrefFor, isRestorable } from '@/lib/trash-rules';
 import { TrashActions } from './trash-actions';
 
 export const dynamic = 'force-dynamic';
@@ -15,9 +14,9 @@ const KIND_NAME: Record<string, string> = {
 };
 
 /**
- * 07.5 เอกสารที่ลบ/ยกเลิก — ตามต้นแบบ (pageTrash)
+ * 07.4 เอกสารที่ลบ/ยกเลิก — ตามต้นแบบ (pageTrash)
  *
- * ค้นได้เฉพาะช่วงเวลาที่ยกเลิก · กู้คืนได้ · ลบถาวรจากที่นี่แล้วกู้ไม่ได้
+ * ค้นได้เฉพาะช่วงเวลาที่ยกเลิก · กู้คืนได้ทุกชนิด · ลบถาวรเฉพาะเจ้าของ + รหัสผ่าน แล้วกู้ไม่ได้
  * สิทธิ์ตรงกับที่ lib/trash.ts ตรวจตอนเขียน (ตั้งค่าร้าน · ข้อมูลร้าน)
  */
 export default async function TrashPage({
@@ -25,7 +24,8 @@ export default async function TrashPage({
 }: {
   searchParams: Promise<{ from?: string; to?: string; month?: string; year?: string }>;
 }) {
-  await requireTab('settings', 'shop');
+  const session = await requireTab('settings', 'shop');
+  const mayPurge = session.role === 'owner';
   const sp = await searchParams;
   const { from, to } = rangeFromParams(sp);
   const rows = await listTrash({ from, to });
@@ -51,8 +51,7 @@ export default async function TrashPage({
                 <colgroup>
                   <col style={{ width: 150 }} /><col style={{ width: 150 }} /><col style={{ width: 90 }} />
                   <col /><col style={{ width: 110 }} /><col style={{ width: 130 }} />
-                  {/* ปุ่ม "คัดลอกเป็นใบใหม่" + "ลบถาวร" กว้างกว่ากู้คืน — 170px ตัดปุ่มลบถาวรที่ 1280px */}
-                  <col style={{ width: 250 }} />
+                  <col style={{ width: 190 }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -75,7 +74,7 @@ export default async function TrashPage({
                       <td>
                         <TrashActions source={r.source} id={r.id} docNo={r.docNo}
                                       kindName={KIND_NAME[r.kind] ?? r.kind}
-                                      restorable={isRestorable(r.kind)} copyHref={copyHrefFor(r.kind, r.id)} />
+                                      mayPurge={mayPurge} />
                       </td>
                     </tr>
                   ))}
@@ -85,8 +84,8 @@ export default async function TrashPage({
           )}
 
           <p className="hint" style={{ padding: '8px 12px' }}>
-            กู้คืนได้เฉพาะใบเสนอราคา ใบวางบิล ใบซื้อ และค่าใช้จ่าย (ใบซื้อรับของกลับเข้าสต๊อก) ·
-            ใบส่งมอบ ใบกำกับภาษี และใบเสร็จที่ยกเลิกแล้วคัดลอกเป็นใบใหม่ · ลบถาวรแล้วหายจากทุกหน้า กู้ไม่ได้
+            กู้คืนได้ทุกชนิด (ใบเสร็จตัดสต๊อกใหม่ รวมชิ้นส่วนชุดอะไหล่ · ใบซื้อรับของกลับเข้าสต๊อก) ·
+            ลบถาวรได้เฉพาะเจ้าของกิจการและต้องใส่รหัสผ่าน · ลบแล้วหายจากทุกหน้า กู้ไม่ได้
           </p>
         </div>
       </SubNav>

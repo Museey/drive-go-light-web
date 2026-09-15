@@ -7,7 +7,7 @@ import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { SavedBanner } from '@/components/saved-banner';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
-import { PageSize, pageSizeOf } from '@/components/page-size';
+import { HIST_DEFAULT_PAGE_SIZE, HIST_PAGE_SIZES, PageSize, pageSizeOf } from '@/components/page-size';
 import { getShop, listIncomeDocs } from '@/lib/queries';
 import {
   WALK_IN_CUSTOMER, blankSalesDoc, getDefaultNote, getDefaultWarranty, lotExpiryOf, peekDocSeq,
@@ -18,7 +18,7 @@ import { IncomeHistoryTable } from '../history-table';
 export const dynamic = 'force-dynamic';
 
 /**
- * 03.5 ขายหน้าร้าน — ลูกค้าเดินเข้ามาซื้อของจ่ายสด ออกใบเสร็จทันที ไม่ต้องมีใบเสนอราคา
+ * 03.6 ขายหน้าร้าน — ลูกค้าเดินเข้ามาซื้อของจ่ายสด ออกใบเสร็จทันที ไม่ต้องมีใบเสนอราคา
  *
  * ตามต้นแบบ (pageWalkin) และ SUMMARY ข้อ 3:
  * - เปิดมาเป็นฟอร์มใบเสร็จ ลูกค้า "ลูกค้าขาจร (เงินสด)" รับเงินสดเต็มจำนวนไว้ให้ แก้ได้ทุกช่อง
@@ -45,7 +45,7 @@ export default async function WalkinPage({
 
   const { from, to } = rangeFromParams(sp);
   const page = Number(sp.page ?? '1') || 1;
-  const pageSize = pageSizeOf(sp.size);
+  const pageSize = pageSizeOf(sp.size, HIST_PAGE_SIZES, HIST_DEFAULT_PAGE_SIZE);
   const range = { ...(from ? { from } : {}), ...(to ? { to } : {}) };
 
   const history = hist
@@ -54,6 +54,7 @@ export default async function WalkinPage({
       includeVoid: false, openOnly: false, walkinOnly: true,
     })
     : null;
+  const shopBanks = hist ? (await getShop()).bankAccounts ?? [] : [];
 
   const form = hist ? null : await (async () => {
     const [shop, warranty, noteDefault] = await Promise.all([getShop(), getDefaultWarranty(), getDefaultNote()]);
@@ -119,11 +120,11 @@ export default async function WalkinPage({
             {history.rows.length === 0 ? (
               <div className="empty">ยังไม่มีการขายหน้าร้านในช่วงนี้</div>
             ) : (
-              <IncomeHistoryTable rows={history.rows} todayIso={todayIso} mayEdit={mayEdit} />
+              <IncomeHistoryTable rows={history.rows} todayIso={todayIso} mayEdit={mayEdit} banks={shopBanks} />
             )}
             <div className="pager">
               <span>หน้า {page} จาก {lastPage}</span>
-              <PageSize base="/income/walkin" size={pageSize} keep={{ hist: '1', ...range }} />
+              <PageSize base="/income/walkin" size={pageSize} keep={{ hist: '1', ...range }} sizes={HIST_PAGE_SIZES} defaultSize={HIST_DEFAULT_PAGE_SIZE} />
               <div className="spacer" />
               {page > 1 ? <Link className="btn" href={pageHref(page - 1)}>ก่อนหน้า</Link> : null}
               {page < lastPage ? <Link className="btn" href={pageHref(page + 1)}>ถัดไป</Link> : null}

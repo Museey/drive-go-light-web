@@ -70,17 +70,17 @@ export interface NewDocBtn {
 export const NEW_BTNS: Record<string, NewDocBtn[]> = {
   all: [
     { no: '03.1', kind: 'QT', label: '+ ใบเสนอราคา' },
-    { no: '03.3', kind: 'RC', label: '+ ใบเสร็จ', primary: true },
-    { no: '03.3', kind: 'RC', label: '+ ขายหน้าร้าน', walkin: true },
+    { no: '03.4', kind: 'RC', label: '+ ใบเสร็จ', primary: true },
+    { no: '03.6', kind: 'RC', label: '+ ขายหน้าร้าน', walkin: true },
   ],
   quote: [{ no: '03.1', kind: 'QT', label: '+ ใบเสนอราคา', primary: true }],
   invoice: [
     { no: '03.2', kind: 'IVT', label: '+ ใบส่งมอบ + ใบกำกับภาษี', primary: true },
-    { no: '03.2.1', kind: 'IV', label: '+ ใบส่งมอบ (ไม่มี VAT)' },
+    { no: '03.3', kind: 'IV', label: '+ ใบส่งมอบ (ไม่มี VAT)' },
   ],
   receipt: [
-    { no: '03.3', kind: 'RC', label: '+ ใบเสร็จ', primary: true },
-    { no: '03.3', kind: 'RC', label: '+ ขายหน้าร้าน', walkin: true },
+    { no: '03.4', kind: 'RC', label: '+ ใบเสร็จ', primary: true },
+    { no: '03.6', kind: 'RC', label: '+ ขายหน้าร้าน', walkin: true },
   ],
 };
 

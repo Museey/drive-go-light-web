@@ -22,20 +22,8 @@ function Submit({ label }: {
   );
 }
 
-/**
- * ช่องชื่อหมวดใหม่ — โผล่เมื่อเลือก "+ เพิ่มหมวดหมู่…" ในช่องหมวด
- * ฟังการเปลี่ยนของ select ข้างบนผ่าน DOM เพราะฟอร์มนี้เป็น uncontrolled (defaultValue)
- */
-function NewCategoryBox() {
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    const sel = document.getElementById('categoryId') as HTMLSelectElement | null;
-    if (!sel) return;
-    const sync = () => setShow(sel.value === '__new__');
-    sync();
-    sel.addEventListener('change', sync);
-    return () => sel.removeEventListener('change', sync);
-  }, []);
+/** ช่องชื่อหมวดใหม่ — โผล่เมื่อเลือก "+ เพิ่มหมวดหมู่…" (ควบคุมด้วย state ของฟอร์ม ไม่อ่าน DOM) */
+function NewCategoryBox({ show }: { show: boolean }) {
   if (!show) return null;
   return (
     <input className="in" name="newCategory" placeholder="ชื่อหมวดหมู่ใหม่" autoFocus
@@ -122,6 +110,9 @@ export function ProductForm({
   /* บาร์โค้ดที่ยิงมาจากหน้าออกเอกสารแล้วไม่เจอ — เติมให้เลยจะได้ไม่ต้องพิมพ์ซ้ำ
      และไม่ต้องเสี่ยงพิมพ์ผิดจนยิงกลับไปแล้วยังไม่เจออีก */
   const [barcode, setBarcode] = useState(v('barcode', product?.barcode ?? presetBarcode));
+  /* รหัสสินค้าเป็น state เพื่อสร้าง Code 128 จากรหัสโดยไม่อ่าน DOM */
+  const [code, setCode] = useState<string>(String(v('code', product?.code) ?? ''));
+  const [categoryId, setCategoryId] = useState<string>(String(v('categoryId', product?.categoryId ?? '') ?? ''));
   const [bType, setBType] = useState<BarcodeType | 'AUTO'>((product?.barcodeType as BarcodeType | undefined) ?? 'AUTO');
   const bcheck = validateBarcode(barcode, bType);
 
@@ -131,57 +122,47 @@ export function ProductForm({
 
       {state.error ? <div className="err">{state.error}</div> : null}
 
-      <div className="row-fields f3">
+      {/* โครงเดียวกับต้นแบบ: บรรทัด 1 รหัส | บาร์โค้ด | หน่วย · ชื่อ · หมวด | ราคาซื้อล่าสุด | ราคาขาย A/B/C · วิธีคิดต้นทุน · อายุการเก็บ · รายละเอียดเพิ่มเติม */}
+      <div className="row-fields pf-top">
         <div className={bad('code')}>
           <label htmlFor="code">รหัสสินค้า *</label>
           <input className="in mono" id="code" name="code" required
-                 defaultValue={v('code', product?.code)} placeholder="เช่น BRK-001" />
+                 value={code} onChange={(e) => setCode(e.target.value)} placeholder="เช่น BRK-001" />
         </div>
-        <div className="field">
-          <label htmlFor="oem">รหัส OEM</label>
-          <input className="in mono" id="oem" name="oem" defaultValue={v('oem', product?.oem)}
-                 placeholder="รหัสของผู้ผลิต" />
-        </div>
-        <div className="field">
-          <label htmlFor="unit">หน่วยนับ</label>
-          <input className="in" id="unit" name="unit" defaultValue={v('unit', product?.unit)}
-                 placeholder="ชิ้น · ชุด · ลิตร" />
-        </div>
-      </div>
-
-      {/* ---------- บาร์โค้ด: รองรับ UPC-A · EAN-13/8 · Code 39 · Code 128 ----------
-          ยิงจากเครื่องอ่านลงช่องนี้ได้ตรง ๆ (สินค้ามีบาร์โค้ดจากโรงงานอยู่แล้ว)
-          หรือกด "สร้างให้" ระบบออก EAN-13 ใช้ในร้าน (นำหน้า 20) / Code 128 จากรหัสสินค้า
-          ตรวจเลขตรวจสอบทันทีตอนพิมพ์ — ผิดตั้งแต่ตรงนี้ดีกว่าไปรู้ตอนยิงไม่ติดหน้าร้าน */}
-      <div className={bad('barcode')} style={{ gridColumn: '1 / -1' }}>
-        <label htmlFor="barcode">บาร์โค้ด</label>
-        <div className="row-fields f3">
-          <select className="in" name="barcodeType" value={bType} onChange={(e) => setBType(e.target.value as typeof bType)}>
-            <option value="AUTO">ระบบ: ตรวจให้อัตโนมัติ</option>
-            {BARCODE_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label} — {t.desc}</option>)}
-          </select>
-          <input className="in mono" id="barcode" name="barcode" value={barcode} inputMode="text"
-                 style={{ borderColor: barcode && !bcheck.ok ? 'var(--due)' : barcode && bcheck.ok ? 'var(--ok)' : undefined }}
-                 onChange={(e) => setBarcode(e.target.value)}
-                 placeholder="ยิงจากเครื่องอ่าน หรือพิมพ์ — ว่างได้" />
-          <div className="tag-row">
-            <button className="btn" type="button" title="EAN-13 ใช้ในร้าน นำหน้า 20 พร้อมเลขตรวจสอบ"
-                    onClick={() => { setBarcode(genEan13()); setBType('EAN13'); }}>สร้าง EAN-13</button>
-            <button className="btn" type="button" title="Code 128 จากรหัสสินค้า ยิงแล้วได้รหัสร้านตรง ๆ"
-                    onClick={() => { const el = document.getElementById('code') as HTMLInputElement | null; setBarcode(genCode128FromCode(el?.value || product?.code || '')); setBType('CODE128'); }}>สร้างจากรหัส</button>
+        <div className={bad('barcode')}>
+          <label htmlFor="barcode">บาร์โค้ด <span className="hint">UPC-A · EAN-13/8 · Code 39 · Code 128</span></label>
+          <div className="row-fields pf-bc">
+            <select className="in" name="barcodeType" value={bType} onChange={(e) => setBType(e.target.value as typeof bType)}>
+              <option value="AUTO">ตรวจให้อัตโนมัติ</option>
+              {BARCODE_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+            <input className="in mono" id="barcode" name="barcode" value={barcode} inputMode="text"
+                   style={{ borderColor: barcode && !bcheck.ok ? 'var(--due)' : barcode && bcheck.ok ? 'var(--ok)' : undefined }}
+                   onChange={(e) => setBarcode(e.target.value)}
+                   placeholder="ยิงเครื่องอ่าน หรือพิมพ์ — ว่างได้" />
           </div>
+          <div className="tag-row mt-6">
+            <button className="btn sm" type="button" title="EAN-13 ใช้ในร้าน นำหน้า 20 พร้อมเลขตรวจสอบ"
+                    onClick={() => { setBarcode(genEan13()); setBType('EAN13'); }}>สร้าง EAN-13 (ใช้ในร้าน)</button>
+            <button className="btn sm" type="button" title="Code 128 จากรหัสสินค้า ยิงแล้วได้รหัสร้านตรง ๆ"
+                    onClick={() => { setBarcode(genCode128FromCode(code || product?.code || '')); setBType('CODE128'); }}>สร้าง Code 128 จากรหัส</button>
+          </div>
+          <span className="hint" style={{ color: barcode && !bcheck.ok ? 'var(--due)' : undefined }}>
+            {barcode
+              ? (bcheck.ok
+                  ? <>ตรวจแล้ว: <b>{BARCODE_TYPES.find((t) => t.key === bcheck.type)?.label}</b>{bcheck.type === 'CODE39' ? ' (ตัวพิมพ์ใหญ่)' : ''}
+                      {product ? <> · <a href={`/stock/${product.id}/barcode`} className="link">พิมพ์ฉลากบาร์โค้ด</a></> : null}</>
+                  : bcheck.error)
+              : ''}
+          </span>
+          {barcode && bcheck.ok ? (
+            <div className="bc-preview" dangerouslySetInnerHTML={{ __html: barcodeSVGFor(barcode, bcheck.type, 220, 40) }} />
+          ) : null}
         </div>
-        <span className="hint" style={{ color: barcode && !bcheck.ok ? 'var(--due)' : undefined }}>
-          {barcode
-            ? (bcheck.ok
-                ? <>ตรวจแล้ว: <b>{BARCODE_TYPES.find((t) => t.key === bcheck.type)?.label}</b>{bcheck.type === 'CODE39' ? ' (ตัวพิมพ์ใหญ่)' : ''}
-                    {product ? <> · <a href={`/stock/${product.id}/barcode`} style={{ textDecoration: 'underline' }}>พิมพ์ฉลากบาร์โค้ด</a></> : null}</>
-                : bcheck.error)
-            : 'ยิงเข้าใบขาย/ใบซื้อ/ใบตรวจนับได้ทันทีเมื่อมีบาร์โค้ด'}
-        </span>
-        {barcode && bcheck.ok ? (
-          <div style={{ maxWidth: 260, marginTop: 6 }} dangerouslySetInnerHTML={{ __html: barcodeSVGFor(barcode, bcheck.type, 240, 46) }} />
-        ) : null}
+        <div className="field">
+          <label htmlFor="unit">หน่วย</label>
+          <input className="in" id="unit" name="unit" defaultValue={v('unit', product?.unit)} placeholder="ชิ้น" />
+        </div>
       </div>
 
       <div className={bad('name')}>
@@ -189,100 +170,94 @@ export function ProductForm({
         <input className="in" id="name" name="name" required defaultValue={v('name', product?.name)} />
       </div>
 
-      <div className="row-fields f2">
+      <div className="row-fields pf-price">
         <div className="field">
           <label htmlFor="categoryId">หมวดหมู่</label>
-          <select className="in" id="categoryId" name="categoryId" defaultValue={v('categoryId', product?.categoryId ?? '')}>
+          <select className="in" id="categoryId" name="categoryId" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">— ไม่ระบุหมวดหมู่ —</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            {/* บรรทัดสุดท้ายเสมอ — เพิ่มหมวดใหม่ได้ตรงนี้ ไม่ต้องออกไปหน้าจัดการหมวด (เจ๊ก ข้อ 11) */}
             <option value="__new__">+ เพิ่มหมวดหมู่อะไหล่…</option>
           </select>
-          <NewCategoryBox />
-          <span className="hint">จัดการหมวดหมู่ได้ที่หน้าทะเบียนสินค้า</span>
+          <NewCategoryBox show={categoryId === '__new__'} />
         </div>
         <div className="field">
           <label htmlFor="lastCost">ราคาซื้อล่าสุด (บาท)</label>
           <input className="in mono" id="lastCost" name="lastCost" inputMode="decimal"
                  defaultValue={v('lastCost', product?.lastCost ?? 0)} />
-          <span className="hint">อัปเดตอัตโนมัติเมื่อบันทึกใบซื้อ</span>
+          <span className="hint">"ราคาซื้อครั้งนี้" กรอกที่ใบซื้อ</span>
         </div>
-        <div className="field" style={{ gridColumn: '1 / -1' }}>
-          <label>วิธีคิดต้นทุนของสินค้านี้</label>
-          <div className="tag-row" role="radiogroup" aria-label="วิธีคิดต้นทุน" style={{ gap: 10 }}>
-            {COST_METHODS.map((m) => (
-              <label key={m.key} className="chip" title={m.desc} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <input type="radio" name="costMethod" value={m.key}
-                       defaultChecked={v('costMethod', product?.costMethod ?? 'FEFO') === m.key} />
-                {m.label}
-              </label>
-            ))}
+        <div className="field">
+          <label>ราคาขาย A / B / C</label>
+          <div className="row-fields f3 gap-6">
+            <input className="in mono" id="priceA" name="priceA" inputMode="decimal" aria-label="ราคาขาย A" defaultValue={v('priceA', product?.priceA ?? 0)} />
+            <input className="in mono" id="priceB" name="priceB" inputMode="decimal" aria-label="ราคาขาย B" defaultValue={v('priceB', product?.priceB ?? 0)} />
+            <input className="in mono" id="priceC" name="priceC" inputMode="decimal" aria-label="ราคาขาย C" defaultValue={v('priceC', product?.priceC ?? 0)} />
           </div>
-          <span className="hint">ตั้งตั้งแต่ตอนเพิ่มสินค้า · FEFO = ของใกล้หมดอายุตัดก่อน (ค่าเริ่มต้น) · FIFO = เข้าก่อนออกก่อน · AVG = ถัวเฉลี่ย</span>
         </div>
       </div>
 
-      <div className="row-fields f3">
-        <div className="field">
-          <label htmlFor="priceA">ราคาขาย A (บาท)</label>
-          <input className="in mono" id="priceA" name="priceA" inputMode="decimal"
-                 defaultValue={v('priceA', product?.priceA ?? 0)} />
+      <div className="field">
+        <label>วิธีคิดต้นทุนของสินค้านี้</label>
+        <div className="tiles" role="radiogroup" aria-label="วิธีคิดต้นทุน">
+          {COST_METHODS.map((m) => (
+            <label key={m.key} className="tile radio" title={m.desc}>
+              <input type="radio" name="costMethod" value={m.key}
+                     defaultChecked={v('costMethod', product?.costMethod ?? 'FEFO') === m.key} />
+              {m.label}{m.key === 'FEFO' ? ' (ค่าเริ่มต้น)' : ''}
+            </label>
+          ))}
         </div>
-        <div className="field">
-          <label htmlFor="priceB">ราคาขาย B</label>
-          <input className="in mono" id="priceB" name="priceB" inputMode="decimal"
-                 defaultValue={v('priceB', product?.priceB ?? 0)} />
-        </div>
-        <div className="field">
-          <label htmlFor="priceC">ราคาขาย C</label>
-          <input className="in mono" id="priceC" name="priceC" inputMode="decimal"
-                 defaultValue={v('priceC', product?.priceC ?? 0)} />
-        </div>
+        <span className="hint">ตั้งตั้งแต่ตอนเพิ่มสินค้า ใช้ตัดต้นทุนตอนออกใบเสร็จและคิดมูลค่าสต๊อก</span>
       </div>
 
-      <div className="row-fields f3">
+      <div className="row-fields f2">
         <div className="field">
-          <label htmlFor="qtyMin">จุดสั่งซื้อ</label>
-          <input className="in mono" id="qtyMin" name="qtyMin" inputMode="decimal"
-                 defaultValue={v('qtyMin', product?.qtyMin ?? 0)} />
-          <span className="hint">คงเหลือต่ำกว่านี้จะขึ้นเตือนที่หน้าแรก</span>
-        </div>
-        <div className="field">
-          <label htmlFor="qtyMax">เก็บสูงสุด</label>
-          <input className="in mono" id="qtyMax" name="qtyMax" inputMode="decimal"
-                 defaultValue={v('qtyMax', product?.qtyMax ?? 0)} />
-        </div>
-        {/* อายุการเก็บเป็นตัวช่วยกรอก ไม่ได้ใช้ตัดสินอะไรตอนตัดสต๊อก
-            ตัวที่ใช้จริงคือวันหมดอายุของแต่ละล็อตที่รับเข้า */}
-        <div className="field">
-          <label htmlFor="shelfLifeMonths">อายุการเก็บ (เดือน)</label>
-          <input className="in mono" id="shelfLifeMonths" name="shelfLifeMonths"
-                 inputMode="numeric"
-                 defaultValue={v('shelfLifeMonths', product?.shelfLifeMonths ?? '')} />
-          <span className="hint">
-            เว้นว่างถ้าของไม่มีวันหมดอายุ · ใส่แล้วระบบเติมวันหมดอายุให้ตอนรับของ
-          </span>
+          <label htmlFor="shelfLifeMonths">วันหมดอายุ / อายุการเก็บ (เดือน)</label>
+          <input className="in mono" id="shelfLifeMonths" name="shelfLifeMonths" inputMode="numeric"
+                 defaultValue={v('shelfLifeMonths', product?.shelfLifeMonths ?? '')} placeholder="ว่าง = ไม่มีวันหมดอายุ" />
+          <span className="hint">ใส่แล้วระบบเติมวันหมดอายุให้ตอนรับของเข้า</span>
         </div>
         {isNew ? (
           <div className="field">
-            <label htmlFor="openingQty">ยอดยกมา</label>
-            <input className="in mono" id="openingQty" name="openingQty" inputMode="decimal" defaultValue={v('openingQty', 0)} />
-            <span className="hint">จำนวนที่มีอยู่ในร้านตอนนี้</span>
-            <label htmlFor="openingExpiresOn" style={{ marginTop: 8 }}>วันหมดอายุของยอดยกมา</label>
-            <input className="in mono" id="openingExpiresOn" name="openingExpiresOn" type="date"
-                   defaultValue={v('openingExpiresOn', '')} />
-            <span className="hint">เว้นว่างได้ถ้าของไม่มีวันหมดอายุ</span>
+            <label htmlFor="openingQty">ยอดยกมา (จำนวนที่มีอยู่ตอนนี้)</label>
+            <div className="row-fields f2 gap-6">
+              <input className="in mono" id="openingQty" name="openingQty" inputMode="decimal" defaultValue={v('openingQty', 0)} />
+              <input className="in mono" id="openingExpiresOn" name="openingExpiresOn" type="date" title="วันหมดอายุของยอดยกมา" defaultValue={v('openingExpiresOn', '')} />
+            </div>
+            <span className="hint">ช่องขวา = วันหมดอายุของยอดยกมา เว้นว่างได้</span>
           </div>
         ) : (
           <div className="field">
             <label>คงเหลือปัจจุบัน</label>
-            <div className="in mono" style={{ background: 'var(--bg)', color: 'var(--ink-2)' }}>
+            <div className="in mono ro">
               {product.qtyOnHand.toLocaleString('en-US')} {product.unit}
             </div>
             <span className="hint">แก้ได้ที่ช่องปรับยอดด้านล่าง</span>
           </div>
         )}
       </div>
+
+      {/* รายละเอียดเพิ่มเติม — พับไว้ไม่ให้ฟอร์มยาว (OEM จุดสั่งซื้อ เก็บสูงสุด) */}
+      <details className="card details-card mt-12">
+        <summary className="body">รายละเอียดเพิ่มเติม (รหัส OEM · จุดสั่งซื้อ · เก็บสูงสุด)</summary>
+        <div className="body tight">
+          <div className="row-fields f3">
+            <div className="field">
+              <label htmlFor="oem">รหัส OEM</label>
+              <input className="in mono" id="oem" name="oem" defaultValue={v('oem', product?.oem)} placeholder="รหัสของผู้ผลิต" />
+            </div>
+            <div className="field">
+              <label htmlFor="qtyMin">จุดสั่งซื้อ</label>
+              <input className="in mono" id="qtyMin" name="qtyMin" inputMode="decimal" defaultValue={v('qtyMin', product?.qtyMin ?? 0)} />
+              <span className="hint">คงเหลือต่ำกว่านี้จะขึ้นเตือนที่หน้าแรก</span>
+            </div>
+            <div className="field">
+              <label htmlFor="qtyMax">เก็บสูงสุด</label>
+              <input className="in mono" id="qtyMax" name="qtyMax" inputMode="decimal" defaultValue={v('qtyMax', product?.qtyMax ?? 0)} />
+            </div>
+          </div>
+        </div>
+      </details>
 
       {/* ผู้ขายของสินค้า — ใต้บรรทัดวันหมดอายุ */}
       <SupplierPicker initial={suppliers ?? []} />
@@ -293,7 +268,8 @@ export function ProductForm({
       </label>
 
       <div className="formbar">
-        <Submit label={isNew ? 'เพิ่มสินค้า' : 'บันทึกการแก้ไข'} />
+        <Submit label={isNew ? 'บันทึกสินค้า' : 'บันทึกการแก้ไข'} />
+        {product ? <Link className="btn" href={`/stock/${product.id}/barcode`}>🏷 พิมพ์บาร์โค้ด</Link> : <button className="btn" type="button" disabled title="บันทึกสินค้าก่อน">🏷 พิมพ์บาร์โค้ด</button>}
         <Link className="btn" href="/stock">ยกเลิก</Link>
       </div>
     </form>

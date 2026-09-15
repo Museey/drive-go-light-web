@@ -10,7 +10,7 @@ import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listIncomeDocs, getShop } from '@/lib/queries';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
-import { PageSize, pageSizeOf } from '@/components/page-size';
+import { HIST_DEFAULT_PAGE_SIZE, HIST_PAGE_SIZES, PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, KIND_SHORT, payLabel, thDate } from '@/lib/format';
 import { canEdit, canTab } from '@/lib/perms';
 import { TodoCell } from './todo-cell';
@@ -68,7 +68,8 @@ export default async function IncomePage({
   const search = sp.q ?? '';
   const kind = sp.kind ?? '';
   const { from, to } = rangeFromParams(sp);
-  const pageSize = pageSizeOf(sp.size);
+  /* ประวัติ 10 / 20 / 30 ต่อหน้า (ผู้ใช้กำหนด) */
+  const pageSize = pageSizeOf(sp.size, HIST_PAGE_SIZES, HIST_DEFAULT_PAGE_SIZE);
 
   const includeVoid = sp.voided === '1';
   /* งานค้างส่งมอบ — ใบเสนอราคาที่ยังไม่ออกใบต่อ (ลิงก์มาจากการ์ดหน้าแรก) */
@@ -84,6 +85,7 @@ export default async function IncomePage({
   const { rows, total } = await listIncomeDocs({
     search, kind, page, from, to, pageSize, includeVoid, openOnly, vat,
   });
+  const shopBanks = (await getShop()).bankAccounts ?? [];
 
   /* ข้อมูลสำหรับฟอร์มสร้างใหม่ (ชุดเดียวกับ /income/new) */
   const form = formKind ? await (async () => {
@@ -189,12 +191,12 @@ export default async function IncomePage({
         {rows.length === 0 ? (
           <div className="empty">ไม่พบเอกสารที่ตรงกับเงื่อนไข</div>
         ) : (
-          <IncomeHistoryTable rows={rows} todayIso={todayIso} mayEdit={mayEdit} />
+          <IncomeHistoryTable rows={rows} todayIso={todayIso} mayEdit={mayEdit} banks={shopBanks} />
         )}
 
         <div className="pager">
           <span>หน้า {page} จาก {lastPage}</span>
-          <PageSize base="/income" size={pageSize} keep={filters} />
+          <PageSize base="/income" size={pageSize} keep={filters} sizes={HIST_PAGE_SIZES} defaultSize={HIST_DEFAULT_PAGE_SIZE} />
           <div className="spacer" />
           {page > 1 ? <Link className="btn" href={linkTo({ page: page - 1 })}>ก่อนหน้า</Link> : null}
           {page < lastPage ? <Link className="btn" href={linkTo({ page: page + 1 })}>ถัดไป</Link> : null}

@@ -30,6 +30,7 @@ export async function recordPaymentAction(_prev: FormResult, fd: FormData): Prom
 
   revalidatePath('/finance/ar');
   revalidatePath(`/income/${docId}`);
+  revalidatePath('/income');
   revalidatePath('/');
   return { ok: true };
 }
@@ -42,6 +43,7 @@ export async function deletePaymentAction(paymentId: string, docId: string): Pro
   }
   revalidatePath('/finance/ar');
   revalidatePath(`/income/${docId}`);
+  revalidatePath('/income');
   revalidatePath('/');
   return { ok: true };
 }

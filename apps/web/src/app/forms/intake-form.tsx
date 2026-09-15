@@ -12,7 +12,7 @@ const Box = ({ w = 22, n = 1 }: { w?: number; n?: number }) => (
 );
 const Line = ({ flex = 1, w }: { flex?: number; w?: number }) => <span className="fline" style={w ? { width: w, flex: 'none' } : { flex }} />;
 const Chk = ({ label, tail }: { label: string; tail?: React.ReactNode }) => (
-  <div className="fchk"><span className="cb" /><span>{label}</span>{tail ?? null}</div>
+  <span className="fchk"><span className="cb" /><span>{label}</span>{tail ?? null}</span>
 );
 const Sig = ({ a = 'ผู้ปฏิบัติงาน', b = 'ผู้ตรวจสอบ' }: { a?: string; b?: string }) => (
   <div className="fsig"><span className="tag">{a}</span><Line /><span className="tag">{b}</span><Line /></div>
@@ -56,7 +56,7 @@ function FuelGauge() {
 
 export function IntakeForm({ shop }: { shop: Pick<ShopInfo, 'name' | 'addrText' | 'tel' | 'tel2' | 'taxId'> }) {
   return (
-    <div className="paper intake">
+    <div className="paper intake doc2">
       {/* หัว: ชื่อร้าน | ใบรับรถ | วันเดือนปี */}
       <div className="ihead">
         <div className="co"><b>{shop.name}</b><div>{shop.addrText}</div><div>โทร {shop.tel}{shop.tel2 ? ` / ${shop.tel2}` : ''} · เลขประจำตัวผู้เสียภาษี {shop.taxId || '-'}</div></div>
@@ -78,7 +78,7 @@ export function IntakeForm({ shop }: { shop: Pick<ShopInfo, 'name' | 'addrText' 
             <li>ผู้ให้บริการจะไม่รับผิดชอบต่อความเสียหายที่เกิดจากการซ่อมนอกศูนย์บริการ หรือใช้อะไหล่ที่ไม่ได้ซื้อจากผู้ให้บริการ</li>
             <li>ลูกค้าตกลงยินยอมให้ผู้ให้บริการเก็บและใช้ข้อมูลส่วนบุคคลเพื่อการให้บริการ การตลาด และการแจ้งข่าวสาร</li>
           </ol>
-          <div className="frow" style={{ justifyContent: 'flex-end' }}><Line w={160} /> <span>ลูกค้าลงชื่อรับทราบ</span></div>
+          <div className="frow end"><Line w={160} /> <span>ลูกค้าลงชื่อรับทราบ</span></div>
         </div>
         <div className="icar">
           <CarViews />
@@ -96,10 +96,12 @@ export function IntakeForm({ shop }: { shop: Pick<ShopInfo, 'name' | 'addrText' 
       {/* สองคอลัมน์งาน */}
       <div className="icols">
         <div>
+          {/* ทุกช่องติ๊กอยู่ในแถว .frow ของตัวเองตามต้นแบบ — วางลอยนอกแถวแล้วช่องไหลต่อกันเป็นแถวเดียว
+              (ระบบแอร์หกข้อเรียงเป็นสองแถวแทนที่จะลงทีละข้อ) */}
           <section><h5>ยาง</h5>
             <div className="frow">ขนาดยาง <Line /></div>
-            <Chk label="ยี่ห้อ/รุ่น" tail={<><Line /> ราคาต่อเส้น <Line w={60} /> บาท</>} />
-            <Chk label="จำนวน" tail={<><Line w={40} /> เส้น Serial Number <Line /></>} />
+            <div className="frow"><Chk label="ยี่ห้อ/รุ่น" tail={<><Line /> ราคาต่อเส้น <Line w={60} /> บาท</>} /></div>
+            <div className="frow"><Chk label="จำนวน" tail={<><Line w={40} /> เส้น Serial Number <Line /></>} /></div>
             <div className="frow"><Chk label="ยางอะไหล่" /><Chk label="มี" /><Chk label="ไม่มี" /><Chk label="ตั้งศูนย์" /><Chk label="ถ่วงล้อ" tail={<><Line w={30} /> ล้อ</>} /></div>
             <div className="frow"><Chk label="สลับยาง" /><Chk label="ปะยาง" tail={<><Line w={30} /> ล้อ</>} /><Chk label="ถอด/ใส่ยาง" tail={<><Line w={30} /> ล้อ</>} /></div>
             <div className="frow"><Chk label="ปอนด์ล้อ 4 ล้อ" /> พนักงานปอนด์ล้อ <Line /></div>
@@ -109,39 +111,39 @@ export function IntakeForm({ shop }: { shop: Pick<ShopInfo, 'name' | 'addrText' 
             <div className="frow">ชนิด <Chk label="แกลลอน" /><Chk label="Super Set" /><Chk label="MP" /></div>
             <table className="lub"><thead><tr><th>รายการ</th><th>ชนิด</th><th>จำนวนลิตรที่เติม</th><th>จำนวนเบิกสินค้า G</th><th>L</th></tr></thead>
               <tbody>{['น้ำมันเครื่อง', 'น้ำมันเกียร์', 'น้ำมันเฟืองท้าย', 'Flushing Oil'].map((r) => <tr key={r}><td>{r}</td><td /><td /><td /><td /></tr>)}</tbody></table>
-            <Chk label="กรองน้ำมันเครื่อง No." tail={<><Line /> <Chk label="แท้" /><Chk label="Value" /></>} />
-            <Chk label="กรองอากาศ No." tail={<><Line /> <Chk label="แท้" /><Chk label="Value" /></>} />
-            <Chk label="กรองน้ำมันเชื้อเพลิง No." tail={<Line />} />
-            <Chk label="ประเก็น No." tail={<><Line /> <Chk label="ติด Lube Tag พร้อมรายละเอียด" /></>} />
+            <div className="frow"><Chk label="กรองน้ำมันเครื่อง No." tail={<><Line /><Chk label="แท้" /><Chk label="Value" /></>} /></div>
+            <div className="frow"><Chk label="กรองอากาศ No." tail={<><Line /><Chk label="แท้" /><Chk label="Value" /></>} /></div>
+            <div className="frow"><Chk label="กรองน้ำมันเชื้อเพลิง No." tail={<Line />} /></div>
+            <div className="frow"><Chk label="ประเก็น No." tail={<><Line /><Chk label="ติด Lube Tag พร้อมรายละเอียด" /></>} /></div>
             <Sig />
           </section>
           <section><h5>แบตเตอรี่</h5>
             <div className="frow">ยี่ห้อ <Line /></div>
-            <Chk label="รุ่น" tail={<><Line /> ประเภท <Chk label="น้ำกลั่น" /><Chk label="MF" /></>} />
-            <Chk label="เลขที่รับประกัน" tail={<Line />} />
+            <div className="frow"><Chk label="รุ่น" tail={<><Line /> ประเภท <Chk label="น้ำกลั่น" /><Chk label="MF" /></>} /></div>
+            <div className="frow"><Chk label="เลขที่รับประกัน" tail={<Line />} /></div>
             <Sig />
           </section>
           <section><h5>เบรก</h5>
             <div className="frow">ยี่ห้อ <Line /></div>
-            <Chk label="ดิสเบรก" tail={<>หน้ารุ่น <Line /> หลังรุ่น <Line /></>} />
-            <Chk label="ก้ามเบรก No." tail={<Line />} />
-            <Chk label="น้ำมันเบรก : Dot" tail={<><Line w={40} /> จำนวน <Line w={40} /> ลิตร</>} />
-            <Chk label="น้ำยาทำความสะอาดเบรก" />
+            <div className="frow"><Chk label="ดิสเบรก" tail={<>หน้ารุ่น <Line /> หลังรุ่น <Line /></>} /></div>
+            <div className="frow"><Chk label="ก้ามเบรก No." tail={<Line />} /></div>
+            <div className="frow"><Chk label="น้ำมันเบรก : Dot" tail={<><Line w={40} /> จำนวน <Line w={40} /> ลิตร</>} /></div>
+            <div className="frow"><Chk label="น้ำยาทำความสะอาดเบรก" /></div>
             <Sig />
           </section>
           <section><h5>โช้คอัพ</h5>
             <div className="frow">ยี่ห้อ หน้า <Line /> หลัง <Line /></div>
-            <Chk label="โช้คอัพหน้า" tail={<><Line w={30} /> ตัว No. <Line /></>} />
-            <Chk label="โช้คอัพหลัง" tail={<><Line w={30} /> ตัว No. <Line /></>} />
+            <div className="frow"><Chk label="โช้คอัพหน้า" tail={<><Line w={30} /> ตัว No. <Line /></>} /></div>
+            <div className="frow"><Chk label="โช้คอัพหลัง" tail={<><Line w={30} /> ตัว No. <Line /></>} /></div>
             <Sig />
           </section>
         </div>
         <div>
           <section><h5>รายการอื่นๆ</h5>
             <div className="frow"><Chk label="เติมลมไนโตรเจน" tail={<><Line w={30} /> ล้อ</>} /><Chk label="เปลี่ยนลมไนโตรเจน" tail={<><Line w={30} /> ล้อ</>} /></div>
-            <Chk label="สติกเกอร์ไนโตรเจน" />
-            <Chk label="ใบปัดน้ำฝน" tail={<>ยี่ห้อ <Line /> รุ่น <Line w={60} /> ขนาด <Line w={60} /></>} />
-            <Chk label="ล้อแม็กซ์" tail={<>รุ่น <Line /></>} />
+            <div className="frow"><Chk label="สติกเกอร์ไนโตรเจน" /></div>
+            <div className="frow"><Chk label="ใบปัดน้ำฝน" tail={<>ยี่ห้อ <Line /> รุ่น <Line w={60} /> ขนาด <Line w={60} /></>} /></div>
+            <div className="frow"><Chk label="ล้อแม็กซ์" tail={<>รุ่น <Line /></>} /></div>
             <div className="frow">ขนาด <Line /> จำนวน <Line w={60} /> วง</div>
             <Sig />
           </section>
@@ -149,17 +151,17 @@ export function IntakeForm({ shop }: { shop: Pick<ShopInfo, 'name' | 'addrText' 
             {[0, 1, 2, 3, 4].map((i) => <div key={i} className="frow"><Line /></div>)}
           </section>
           <section><h5>ระบบแอร์</h5>
-            <Chk label="ล้างแผงแอร์" />
-            <Chk label="ตรวจสอบระบบ" />
-            <Chk label="เปลี่ยนแผ่นกรองแอร์" />
-            <Chk label="ฟลัชชิ่งระบบ" />
-            <Chk label="แอร์ไม่เย็น" tail={<Line />} />
-            <Chk label="อื่นๆ" tail={<Line />} />
-            <div className="frow" style={{ marginTop: 6 }}>ข้อเสนอแนะ <Line /></div>
+            <div className="frow"><Chk label="ล้างแผงแอร์" /></div>
+            <div className="frow"><Chk label="ตรวจสอบระบบ" /></div>
+            <div className="frow"><Chk label="เปลี่ยนแผ่นกรองแอร์" /></div>
+            <div className="frow"><Chk label="ฟลัชชิ่งระบบ" /></div>
+            <div className="frow"><Chk label="แอร์ไม่เย็น" tail={<Line />} /></div>
+            <div className="frow"><Chk label="อื่นๆ" tail={<Line />} /></div>
+            <div className="frow mt-6">ข้อเสนอแนะ <Line /></div>
             {[0, 1].map((i) => <div key={i} className="frow"><Line /></div>)}
             <Sig />
           </section>
-          <div className="frow" style={{ marginTop: 8 }}>ลงชื่อลูกค้า <Line /></div>
+          <div className="frow mt-8">ลงชื่อลูกค้า <Line /></div>
           <div className="itotal"><span>รวมราคาประเมิน</span><span className="amt" /><span>บาท</span></div>
         </div>
       </div>

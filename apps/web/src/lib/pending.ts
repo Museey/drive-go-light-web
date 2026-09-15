@@ -1,6 +1,7 @@
 import 'server-only';
 import { query } from './auth';
 import { mutate } from './mutate';
+import { linkPendingWith, listPendingItemsWith, type PendingItem } from './pending-core';
 
 /**
  * รายการค้างทำ — ชื่อสินค้าที่พนักงานพิมพ์ลงเอกสารเองโดยไม่ได้เลือกจากทะเบียน
@@ -8,69 +9,14 @@ import { mutate } from './mutate';
  * รายการพวกนี้ไม่มีรหัสสินค้า จึงไม่ถูกตัดสต๊อกและไม่เข้าการคำนวณต้นทุน
  * เมนูนี้มีไว้ให้ตามเก็บทีหลัง — ผูกเข้าทะเบียนที่มีอยู่ หรือสั่งข้ามถ้าเป็นของที่ไม่ต้องมีรหัส
  * (เช่น ค่าส่ง ค่าทำสี ที่ไม่ใช่อะไหล่ในสต๊อก)
+ *
+ * คำสั่ง SQL อยู่ใน pending-core.ts (รับ client — เทสต์เรียกได้) ตัวนี้ผูก session และสิทธิ์
  */
 
-const normName = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase();
-
-export interface PendingItem {
-  nameNorm: string;
-  /** ชื่อที่พบล่าสุด ใช้แสดงผล */
-  name: string;
-  lineCount: number;
-  totalQty: number;
-  lastUsedOn: string;
-  lastDocNo: string;
-  /**
-   * ราคาต่อหน่วยของบรรทัดล่าสุดที่พูดถึงชื่อนี้
-   *
-   * ใช้ตอนตั้งราคาขายให้สินค้าตัวนี้ตอนลงทะเบียนจริง — ไม่มีคอลัมน์นี้
-   * ต้องเปิดเอกสารย้อนไปดูเองว่าครั้งก่อนขายไปเท่าไหร่
-   */
-  lastPrice: number;
-}
+export type { PendingItem };
 
 export async function listPendingItems(): Promise<PendingItem[]> {
-  return query(async (c) => {
-    const { rows } = await c.query(
-      `with lines as (
-         select i.name,
-                lower(regexp_replace(btrim(i.name), '\\s+', ' ', 'g')) as name_norm,
-                i.qty, i.unit_price, d.doc_date, d.doc_no,
-                row_number() over (
-                  partition by lower(regexp_replace(btrim(i.name), '\\s+', ' ', 'g'))
-                  order by d.doc_date desc, d.doc_no desc
-                ) as rn
-         from doc_items i
-         join documents d on d.id = i.doc_id
-         where i.product_id is null
-           and d.status <> 'void'
-           and btrim(i.name) <> ''
-           and i.code <> 'LAB'
-           and not i.is_service
-       )
-       select name_norm,
-              max(name) filter (where rn = 1) as name,
-              count(*)::int as line_count,
-              sum(qty) as total_qty,
-              max(doc_date) filter (where rn = 1) as last_used_on,
-              max(doc_no) filter (where rn = 1) as last_doc_no,
-              max(unit_price) filter (where rn = 1) as last_price
-       from lines
-       where name_norm not in (select name_norm from ignored_item_names)
-       group by name_norm
-       order by count(*) desc, name_norm`,
-    );
-
-    return rows.map((r) => ({
-      nameNorm: r.name_norm,
-      name: r.name,
-      lineCount: r.line_count,
-      totalQty: Number(r.total_qty),
-      lastUsedOn: r.last_used_on,
-      lastDocNo: r.last_doc_no,
-      lastPrice: Number(r.last_price ?? 0),
-    }));
-  });
+  return query((c) => listPendingItemsWith(c));
 }
 
 export async function countIgnoredItems(): Promise<number> {
@@ -80,29 +26,9 @@ export async function countIgnoredItems(): Promise<number> {
   });
 }
 
-/**
- * ผูกชื่อที่ค้างอยู่เข้ากับสินค้าในทะเบียน
- *
- * แก้เฉพาะ product_id ของบรรทัด ไม่แตะชื่อหรือราคาที่พิมพ์ไว้บนเอกสาร
- * เอกสารที่ออกไปแล้วต้องหน้าตาเหมือนเดิมเสมอ
- *
- * ไม่ย้อนไปตัดสต๊อกให้ด้วย เพราะยอดคงเหลือปัจจุบันนับจากของที่มีอยู่จริงอยู่แล้ว
- * การตัดย้อนหลังจะทำให้ยอดติดลบโดยไม่มีเหตุผล
- */
+/** ผูกชื่อที่ค้างอยู่เข้ากับสินค้าในทะเบียน — ดู linkPendingWith */
 export async function linkPendingToProduct(nameNorm: string, productId: string): Promise<number> {
-  return mutate('stock', async (c) => {
-    const { rowCount } = await c.query(
-      `update doc_items i
-          set product_id = $2
-         from documents d
-        where d.id = i.doc_id
-          and i.product_id is null
-          and d.status <> 'void'
-          and lower(regexp_replace(btrim(i.name), '\\s+', ' ', 'g')) = $1`,
-      [nameNorm, productId],
-    );
-    return rowCount ?? 0;
-  }, { sub: 'pending' });
+  return mutate('stock', (c) => linkPendingWith(c, nameNorm, productId), { sub: 'pending' });
 }
 
 /** สั่งข้ามชื่อนี้ ไม่ต้องเตือนอีก */
@@ -135,18 +61,7 @@ export async function createProductFromPending(
       [code, name, unit, cost, priceA],
     );
     const productId = rows[0].id;
-
-    const { rowCount } = await c.query(
-      `update doc_items i
-          set product_id = $2
-         from documents d
-        where d.id = i.doc_id
-          and i.product_id is null
-          and d.status <> 'void'
-          and lower(regexp_replace(btrim(i.name), '\\s+', ' ', 'g')) = $1`,
-      [nameNorm, productId],
-    );
-
-    return { productId, linked: rowCount ?? 0 };
+    const linked = await linkPendingWith(c, nameNorm, productId);
+    return { productId, linked };
   }, { sub: 'pending' });
 }

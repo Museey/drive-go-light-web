@@ -11,7 +11,7 @@ import { getDefaultNote, peekDocSeq } from '@/lib/sales';
 import { BuyEditor } from './buy-editor';
 import { SavedBanner } from '@/components/saved-banner';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
-import { PageSize, pageSizeOf } from '@/components/page-size';
+import { HIST_DEFAULT_PAGE_SIZE, HIST_PAGE_SIZES, PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, payLabel, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -19,8 +19,8 @@ export const dynamic = 'force-dynamic';
 /** เลขกำกับยกมาจากเมนูของรุ่น 3.6 — หน้ารายการที่บันทึกแล้วคือ 04.2 และ 04.4 */
 const TABS = [
   { key: '', no: '', label: 'ทั้งหมด' },
-  { key: 'PO', no: '04.2', label: 'ใบซื้อสินค้า' },
-  { key: 'EX', no: '04.4', label: 'ค่าใช้จ่าย' },
+  { key: 'PO', no: '04.1', label: 'ใบซื้อสินค้า' },
+  { key: 'EX', no: '04.2', label: 'ค่าใช้จ่าย' },
 ];
 
 const CAT_LABEL = Object.fromEntries(EXPENSE_CATS.map((c) => [c.key, c.label]));
@@ -39,7 +39,7 @@ export default async function ExpensePage({
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
   const { from, to } = rangeFromParams(sp);
-  const pageSize = pageSizeOf(sp.size);
+  const pageSize = pageSizeOf(sp.size, HIST_PAGE_SIZES, HIST_DEFAULT_PAGE_SIZE);
 
   const { rows, total } = await listBuyDocs({
     kind: sp.kind, cat: sp.cat, search: sp.q, page, from, to, pageSize,
@@ -210,7 +210,7 @@ export default async function ExpensePage({
 
         <div className="pager">
           <span>หน้า {page} จาก {lastPage}</span>
-          <PageSize base="/expense" size={pageSize} keep={filters} />
+          <PageSize base="/expense" size={pageSize} keep={filters} sizes={HIST_PAGE_SIZES} defaultSize={HIST_DEFAULT_PAGE_SIZE} />
           <div className="spacer" />
           {page > 1 ? <Link className="btn" href={{ pathname: '/expense', query: { ...keep, page: page - 1 } }}>ก่อนหน้า</Link> : null}
           {page < lastPage ? <Link className="btn" href={{ pathname: '/expense', query: { ...keep, page: page + 1 } }}>ถัดไป</Link> : null}

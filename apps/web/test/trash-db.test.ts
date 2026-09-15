@@ -13,7 +13,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { importBackup } from '@drivegolight/importer';
 import { freshSchema } from '../../../tools/test-schema.mjs';
-import { listTrashWith, purgeFromTrashWith, restoreFromTrashWith } from '../src/lib/trash-core';
+import { assertOwnerPasswordWith, listTrashWith, purgeFromTrashWith, restoreFromTrashWith } from '../src/lib/trash-core';
+import { hashPassword } from '../src/lib/password';
 import { voidSalesDocWith } from '../src/lib/sales-void';
 import { voidBuyDocWith } from '../src/lib/buy-void';
 import { openInvoices, saveBillnote, voidBillnote } from '../src/lib/billnotes';
@@ -131,24 +132,117 @@ describe.skipIf(!DB_URL)('ถังขยะ', () => {
     await admin?.end();
   });
 
-  /**
-   * ใบเสร็จ ใบกำกับภาษี และใบส่งมอบที่ยกเลิกแล้ว กู้คืนไม่ได้ ต้องคัดลอกเป็นใบใหม่
-   * อาจส่งให้ลูกค้าหรือยื่นภาษีไปแล้ว — ตัดสินใจร่วมกับเจ้าของกิจการ 14 ก.ย. 2569
-   * (ถังขยะในชุดแก้เดิมให้กู้คืนใบเสร็จได้ ดู lib/trash-rules.ts)
-   */
-  it('ใบเสร็จที่ยกเลิกขึ้นในถังขยะ แต่กู้คืนไม่ได้ — สถานะและสต๊อกไม่ขยับ', async () => {
+  /** กู้คืนได้ทุกชนิด — ชุดแก้ 14 ก.ย. 2569 22:37 เจ้าของกิจการเลือกตามต้นฉบับ */
+  it('ใบเสร็จที่ยกเลิก กู้คืนแล้วตัดสต๊อกกลับเท่าก่อนยกเลิก', async () => {
     await as(mine);
     const rc = await pickReceipt();
+    const beforeVoid = await stockOf(rc.id);
     await voidSale(rc.id, 'ลูกค้าคืนของ');
-    const afterVoid = await stockOf(rc.id);
+    expect(await stockOf(rc.id), 'ยกเลิกแล้วของต้องกลับเข้าสต๊อก').not.toEqual(beforeVoid);
 
     const listed = await listTrashWith(app, {});
     expect(listed.find((r) => r.id === rc.id)).toMatchObject({ source: 'doc', kind: 'RC', reason: 'ลูกค้าคืนของ' });
 
-    await expect(restore('doc', rc.id, null)).rejects.toThrow('คัดลอกเป็นใบใหม่');
-    const doc = (await app.query(`select status::text as s from documents where id = $1`, [rc.id])).rows[0];
-    expect(doc.s, 'ถูกปฏิเสธแล้วต้องยังอยู่ในถังขยะ').toBe('void');
-    expect(await stockOf(rc.id), 'ต้องไม่ตัดสต๊อกซ้ำ').toEqual(afterVoid);
+    await restore('doc', rc.id, null);
+    const doc = (await app.query(`select status::text as s, voided_at from documents where id = $1`, [rc.id])).rows[0];
+    expect(doc).toEqual({ s: 'issued', voided_at: null });
+    expect(await stockOf(rc.id), 'ตัดสต๊อกกลับเท่าเดิม').toEqual(beforeVoid);
+
+    /* ยกเลิก → กู้ อีกรอบต้องยังสมดุล (ไม่นับแถวคืนของรอบแรกซ้ำ) */
+    await voidSale(rc.id, 'รอบสอง');
+    await restore('doc', rc.id, null);
+    expect(await stockOf(rc.id), 'รอบที่สองต้องตรงเหมือนกัน').toEqual(beforeVoid);
+  });
+
+  /**
+   * ต้นฉบับตัดสต๊อกตอนกู้จากบรรทัดสินค้าเท่านั้น — ชิ้นส่วนของชุดอะไหล่ที่ใบเสร็จตัดไปตอนขายไม่ถูกตัดกลับ
+   * สร้างใบเสร็จที่มีบรรทัดชุด แล้วตัดชิ้นส่วนแบบเดียวกับ sales.ts ตอนบันทึก
+   */
+  it('ใบเสร็จที่มีชุดอะไหล่ กู้คืนแล้วชิ้นส่วนถูกตัดกลับด้วย', async () => {
+    await as(mine);
+    const parts = (await app.query(
+      `select p.id from products p join product_stock s on s.product_id = p.id
+        where s.qty_on_hand >= 10 order by p.code limit 2`)).rows.map((r) => r.id as string);
+    expect(parts).toHaveLength(2);
+    const kit = (await app.query(
+      `insert into kits (tenant_id, code, name, price) values (current_tenant_id(), 'KIT-ทดสอบ', 'ชุดถ่ายน้ำมันเครื่อง', 900)
+       returning id`)).rows[0].id as string;
+    await app.query(
+      `insert into kit_items (tenant_id, kit_id, product_id, name, qty) values
+         (current_tenant_id(), $1, $2, 'ชิ้น 1', 2), (current_tenant_id(), $1, $3, 'ชิ้น 2', 1),
+         (current_tenant_id(), $1, null, 'ค่าแรง (พิมพ์เอง)', 1)`, [kit, parts[0], parts[1]]);
+
+    const cols = (await admin.query(
+      `select column_name from information_schema.columns
+        where table_schema = 'public' and table_name = 'documents' and is_generated = 'NEVER'
+          and column_name not in ('id', 'doc_no', 'status', 'parent_doc_id', 'legacy_id',
+                                  'voided_at', 'voided_reason', 'purged_at')
+        order by ordinal_position`)).rows.map((r) => r.column_name as string);
+    const list = cols.join(', ');
+    const src = (await app.query(`select id from documents where kind = 'RC' order by doc_no limit 1`)).rows[0];
+    const rc = (await app.query(
+      `insert into documents (${list}, doc_no, status)
+       select ${list}, 'RC-ทดสอบชุดอะไหล่', 'issued' from documents where id = $1 returning id`, [src.id])).rows[0].id as string;
+    await app.query(
+      `insert into doc_items (tenant_id, doc_id, line_no, product_id, code, oem, name, unit, qty, unit_price, is_service, disc_pct, kit_id)
+       values (current_tenant_id(), $1, 1, null, '', '', 'ชุดอะไหล่ซ่อมบำรุง ชุดถ่ายน้ำมันเครื่อง', 'ชุด', 3, 900, false, 0, $2)`,
+      [rc, kit]);
+
+    const onHand = async () => (await app.query(
+      `select product_id, qty_on_hand from product_stock where product_id = any($1::uuid[]) order by product_id`,
+      [parts])).rows.map((r) => [r.product_id, n(r.qty_on_hand)]);
+    await tx(async () => {
+      await consumeStock(app, { productId: parts[0], qty: 6, movedOn: '2026-08-28', reason: 'sale', docId: rc, userId: null } as never);
+      await consumeStock(app, { productId: parts[1], qty: 3, movedOn: '2026-08-28', reason: 'sale', docId: rc, userId: null } as never);
+    });
+    const sold = await onHand();
+
+    await voidSale(rc, 'ทดสอบชุด');
+    const back = await onHand();
+    expect(back.map(([, q]) => q), 'ยกเลิกคืนชิ้นส่วน 2×3 และ 1×3').toEqual(sold.map(([p, q]) => q as number + (p === parts[0] ? 6 : 3)));
+
+    await restore('doc', rc, null);
+    expect(await onHand(), 'กู้คืนแล้วชิ้นส่วนต้องถูกตัดกลับเท่าตอนขาย').toEqual(sold);
+  });
+
+  it('ใบส่งมอบที่ไม่เคยตัดสต๊อก กู้คืนแล้วไม่ตัดอะไรเพิ่ม', async () => {
+    await as(mine);
+    const iv = (await app.query(
+      `select d.id from documents d
+        where d.kind in ('IV', 'IVT') and d.status = 'issued'
+          and not exists (select 1 from documents x where x.parent_doc_id = d.id and x.status <> 'void')
+          and not exists (select 1 from billnote_docs b where b.doc_id = d.id and not b.voided)
+          and exists (select 1 from doc_items i where i.doc_id = d.id and i.product_id is not null)
+        order by d.doc_no limit 1`)).rows[0];
+    expect(iv, 'ชุดทดสอบต้องมีใบส่งมอบที่ยกเลิกได้').toBeTruthy();
+    const before = await stockOf(iv.id);
+    await voidSale(iv.id, 'ทดสอบใบส่งมอบ');
+    await restore('doc', iv.id, null);
+    const d = (await app.query(`select status::text as s from documents where id = $1`, [iv.id])).rows[0];
+    expect(d.s).toBe('issued');
+    expect(await stockOf(iv.id)).toEqual(before);
+  });
+
+  it('ลบถาวร: พนักงานลบไม่ได้ · เจ้าของใส่รหัสผ่านผิดไม่ได้ · รหัสถูกผ่าน', async () => {
+    await as(mine);
+    /* การนำเข้าไม่สร้างผู้ใช้ — สร้างเจ้าของทดสอบเองผ่าน admin */
+    const u = (await admin.query(
+      `insert into users (tenant_id, code, name, password_hash, role)
+       values ($1, 'U-ถังขยะ', 'เจ้าของทดสอบถังขยะ', $2, 'owner') returning id`,
+      [mine, await hashPassword('รหัสที่ถูก-1234')])).rows[0];
+
+    await expect(assertOwnerPasswordWith(app, { userId: u.id, role: 'staff' }, 'รหัสที่ถูก-1234'))
+      .rejects.toThrow('เฉพาะเจ้าของกิจการ');
+    await expect(assertOwnerPasswordWith(app, { userId: u.id, role: 'owner' }, 'ผิด'))
+      .rejects.toThrow('รหัสผ่านไม่ถูกต้อง');
+    await expect(assertOwnerPasswordWith(app, { userId: u.id, role: 'owner' }, ''))
+      .rejects.toThrow('รหัสผ่านไม่ถูกต้อง');
+    await expect(assertOwnerPasswordWith(app, { userId: u.id, role: 'owner' }, 'รหัสที่ถูก-1234')).resolves.toBeUndefined();
+
+    /* ผู้ใช้ของอู่อื่นมองไม่เห็น — รหัสถูกก็ผ่านไม่ได้ */
+    await as(theirs);
+    await expect(assertOwnerPasswordWith(app, { userId: u.id, role: 'owner' }, 'รหัสที่ถูก-1234'))
+      .rejects.toThrow('รหัสผ่านไม่ถูกต้อง');
   });
 
   it('ใบเสนอราคาที่ยกเลิก กู้คืนได้', async () => {
