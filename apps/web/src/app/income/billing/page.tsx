@@ -51,7 +51,8 @@ export default async function BillingPage({
     <div className="card" id="new-bill">
       <header><h2>สร้างใบวางบิล{vat === 'yes' ? ' (IVT)' : vat === 'no' ? ' (IV)' : ''}</h2><div className="spacer" /><span className="subtle">{open.length} ใบส่งมอบที่ยังไม่รับเงิน</span></header>
       <div className="body">
-        <BillForm billDate={today()} dueDate="" byWhom="" note="" parties={parties} invoices={open} selected={[]} initialPartyKey="" returnTo={`/income/billing${vat ? `?vat=${vat}` : ''}`} />
+        {/* key = vat — สลับ IVT ↔ IV ไม่มี key ลูกค้าและใบที่ติ๊กไว้ค้างจากอีกชนิด */}
+        <BillForm key={vat ?? 'all'} billDate={today()} dueDate="" byWhom="" note="" parties={parties} invoices={open} selected={[]} initialPartyKey="" returnTo={`/income/billing${vat ? `?vat=${vat}` : ''}`} />
       </div>
     </div>
   ) : null;
@@ -111,18 +112,19 @@ export default async function BillingPage({
               {mayEdit ? <Link className="tile act" href="/income/billing?vat=yes">+ ใบวางบิล (IVT)</Link> : null}
               {mayEdit ? <Link className="tile act" href="/income/billing?vat=no">+ ใบวางบิล (IV)</Link> : null}
             </div>
-            <form autoComplete="off" action="/income/billing" method="get" style={{ display: 'flex', gap: 6 }}>
+            {/* data-enter="own": ไม่มีปุ่มค้นหาแล้ว Enter ต้องส่งฟอร์ม — ไม่ให้ EnterToNext ดักทิ้ง */}
+            <form autoComplete="off" action="/income/billing" method="get" data-enter="own" style={{ display: 'flex', gap: 6 }}>
             <input type="hidden" name="hist" value="1" />
               <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
                      placeholder="กรอกคำค้นหา — เลขที่ใบวางบิล หรือชื่อลูกค้า" style={{ width: 260 }} />
-              <button className="btn" type="submit">ค้นหา</button>
+              {/* ไม่มีปุ่มค้นหา (ผู้ใช้กำหนด) — พิมพ์แล้ว Enter ส่งฟอร์มเอง */}
             </form>
           </div>
         </div>
         {!histFirst ? formBlock : null}
         {histFirst ? (<div className="card">
 
-          <DocDateFilter base="/income/billing" from={from} to={to}
+          <DocDateFilter base="/income/billing" from={from} to={to} monthPicker={false}
                          keep={sp.q ? { q: sp.q } : {}} />
 
           {rows.length === 0 ? (

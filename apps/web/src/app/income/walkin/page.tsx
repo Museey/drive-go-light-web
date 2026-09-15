@@ -116,7 +116,7 @@ export default async function WalkinPage({
                 {history.total.toLocaleString('en-US')} ใบ{from || to ? ' ในช่วงที่เลือก' : ''}
               </span>
             </header>
-            <DocDateFilter base="/income/walkin" from={from} to={to} keep={{ hist: '1' }} />
+            <DocDateFilter base="/income/walkin" from={from} to={to} keep={{ hist: '1' }} monthPicker={false} />
             {history.rows.length === 0 ? (
               <div className="empty">ยังไม่มีการขายหน้าร้านในช่วงนี้</div>
             ) : (

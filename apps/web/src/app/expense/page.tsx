@@ -57,7 +57,9 @@ export default async function ExpensePage({
   })() : null;
   const formBlock = form && formKind ? (
     <div id="new-buy" style={{ marginBottom: 14 }}>
-      <BuyEditor initial={form.initial} vatRate={form.shop.vatRate} mode="new" returnTo={returnTo}
+      {/* key = ชนิด — กดใบซื้อ ↔ ค่าใช้จ่ายเป็นหน้าเดียวกันแค่ ?kind= เปลี่ยน ไม่มี key ฟอร์มค้างเป็นใบซื้อ
+          ขณะที่ช่องซ่อนส่งชนิดใหม่ไปแล้ว — ข้อมูลที่เห็นกับชนิดที่บันทึกไม่ตรงกัน */}
+      <BuyEditor key={formKind} initial={form.initial} vatRate={form.shop.vatRate} mode="new" returnTo={returnTo}
                  docNoPreview={{ seq: form.seq, month: form.initial.docDate.slice(0, 7) }} />
     </div>
   ) : null;

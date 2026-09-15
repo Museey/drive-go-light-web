@@ -151,7 +151,10 @@ export default async function NewDocPage({
         </div>
       ) : null}
 
-      <DocEditor initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="new"
+      {/* key = สิ่งที่ทำให้เป็นใบใหม่คนละใบ — เปลี่ยนแค่ query ในหน้าเดียวกัน (ใบส่งมอบ → ใบเสร็จจากใบต้นทางเดิม)
+          React ใช้ฟอร์มตัวเดิมต่อ ค่าตั้งต้นใหม่ไม่ถูกใช้ ฟอร์มค้างเป็นชนิดเดิมจนกว่าจะรีเฟรช */}
+      <DocEditor key={`${kind}:${resolved.sourceId}:${copying ? 'copy' : ''}:${sp.party ?? ''}:${walkin ? 'walkin' : ''}`}
+                 initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="new"
                  docNoPreview={{ seq: await peekDocSeq(kind, initial.docDate), month: initial.docDate.slice(0, 7) }}
                  lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
                  cashOnOpen={walkin} banks={shop.bankAccounts} />

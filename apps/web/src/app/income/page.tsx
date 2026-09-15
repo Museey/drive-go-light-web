@@ -158,7 +158,8 @@ export default async function IncomePage({
 
           <div className="spacer" />
 
-          <form autoComplete="off" action="/income" method="get" style={{ display: 'flex', gap: 6 }}>
+          {/* data-enter="own": ไม่มีปุ่มค้นหาแล้ว Enter ต้องส่งฟอร์ม — ไม่ให้ EnterToNext ดักไปโฟกัสช่องติ๊กถัดไป */}
+          <form autoComplete="off" action="/income" method="get" data-enter="own" style={{ display: 'flex', gap: 6 }}>
             <input type="hidden" name="hist" value="1" />
             {kind ? <input type="hidden" name="kind" value={kind} /> : null}
             {from ? <input type="hidden" name="from" value={from} /> : null}
@@ -178,14 +179,14 @@ export default async function IncomePage({
                 เฉพาะงานค้างส่งมอบ
               </label>
             ) : null}
-            <button className="btn" type="submit">ค้นหา</button>
+            {/* ไม่มีปุ่มค้นหา (ผู้ใช้กำหนด: ซ้ำซ้อน) — ฟอร์มมีช่องข้อความช่องเดียว พิมพ์แล้ว Enter ส่งฟอร์มเอง */}
             <PrintReport />
           </form>
         </div>
       </div>
       {form && !histFirst ? <FormBlock form={form} kind={formKind!} returnTo={returnTo} /> : null}
       {histFirst ? (<div className="card">
-        <DocDateFilter base="/income" from={from} to={to}
+        <DocDateFilter base="/income" from={from} to={to} monthPicker={false}
                        keep={{ ...(search ? { q: search } : {}), ...(kind ? { kind } : {}) }} />
 
         {rows.length === 0 ? (
@@ -217,7 +218,9 @@ function FormBlock({ form, kind, returnTo }: {
 }) {
   return (
     <div id="new-doc" style={{ marginBottom: 14 }}>
-      <DocEditor initial={form.initial} vatRate={form.shop.vatRate} shopWhtRate={form.shop.whtRate} mode="new"
+      {/* key = ชนิดเอกสาร — กดแท็บ 03.1 → 03.2 → 03.4 เป็นหน้าเดียวกันแค่ ?kind= เปลี่ยน
+          ไม่มี key React ใช้ฟอร์มตัวเดิม (ค่าตั้งต้นอยู่ใน useState ครั้งแรก) ฟอร์มค้างเป็นใบเสนอราคาจนกว่าจะรีเฟรช */}
+      <DocEditor key={kind} initial={form.initial} vatRate={form.shop.vatRate} shopWhtRate={form.shop.whtRate} mode="new"
                  docNoPreview={{ seq: form.seq, month: form.initial.docDate.slice(0, 7) }}
                  lotExpiry={form.lotExpiry} expiryWarnDays={form.shop.expiryWarnDays} today={today()}
                  cashOnOpen={kind === 'RC'} banks={form.shop.bankAccounts} returnTo={returnTo} />

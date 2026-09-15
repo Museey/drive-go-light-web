@@ -2,11 +2,13 @@
 
 import { BARCODE_TYPES, COST_METHODS, barcodeSVGFor, genCode128FromCode, genEan13, validateBarcode, type BarcodeType } from '@drivegolight/core';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import { saveProductAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
+import { PIC_EDGE } from '@/lib/pics-core';
+import { shrinkInto } from '@/components/pic-shrink';
 import type { Category, ProductRow, ProductSupplier } from '@/lib/products';
 import { useLiveSearch } from '@/components/use-live-search';
 import { searchVendorsAction } from '../expense/actions';
@@ -87,6 +89,74 @@ function SupplierPicker({ initial }: { initial: ProductSupplier[] }) {
         ) : null}
         <span className="hint">ชื่อที่พิมพ์เองไม่เข้าทะเบียนผู้ขาย — ถ้าจะซื้อประจำให้เพิ่มที่ 02.0 + เพิ่มผู้ติดต่อ</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * รูปสินค้าในฟอร์มเพิ่มสินค้าใหม่ (ผู้ใช้กำหนด) — ไม่ต้องบันทึกสินค้าก่อนแล้วค่อยไปใส่รูปที่หน้าสินค้า
+ *
+ * ย่อด้วยตัวเดียวกับกล่องรูปหน้าสินค้า แล้วส่งเฉพาะรูปที่ย่อแล้วในช่องซ่อน picFull / picThumb
+ * ช่องเลือกไฟล์ที่มองเห็นไม่มี name — ไฟล์ต้นฉบับ (อาจหลาย MB) จึงไม่วิ่งขึ้นเซิร์ฟเวอร์
+ */
+function NewProductPic({ state }: { state: FormResult }) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fullRef = useRef<HTMLInputElement>(null);
+  const thumbRef = useRef<HTMLInputElement>(null);
+  const hadPic = useRef(false);
+
+  /* บันทึกไม่ผ่าน → React ล้างช่องไฟล์ของฟอร์มไปแล้ว รูปตัวอย่างที่ค้างอยู่จะหลอกว่ายังแนบอยู่ */
+  useEffect(() => {
+    if (!state.error || !hadPic.current) return;
+    hadPic.current = false;
+    setPreview((old) => { if (old) URL.revokeObjectURL(old); return null; });
+    setErr('บันทึกไม่ผ่าน — เลือกรูปใหม่อีกครั้งก่อนกดบันทึก');
+  }, [state]);
+
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      const url = await shrinkInto(file, fullRef.current, thumbRef.current);
+      hadPic.current = true;
+      setPreview((old) => { if (old) URL.revokeObjectURL(old); return url; });
+    } catch {
+      /* ข้อความจากเบราว์เซอร์เป็นภาษาอังกฤษ ("source image could not be decoded") — แปลเป็นสิ่งที่ผู้ใช้ทำต่อได้ */
+      setErr('เปิดไฟล์นี้เป็นรูปไม่ได้ — เลือกไฟล์รูป JPG หรือ PNG');
+    } finally {
+      setBusy(false);
+      e.target.value = '';
+    }
+  }
+
+  function clear() {
+    for (const r of [fullRef, thumbRef]) if (r.current) r.current.value = '';
+    hadPic.current = false;
+    setPreview((old) => { if (old) URL.revokeObjectURL(old); return null; });
+  }
+
+  return (
+    <div className={state.field === 'pic' ? 'field bad' : 'field'}>
+      <label htmlFor="picPick">รูปสินค้า <span className="hint">ไม่บังคับ</span></label>
+      <input ref={fullRef} type="file" name="picFull" hidden />
+      <input ref={thumbRef} type="file" name="picThumb" hidden />
+      {err ? <div className="err">{err}</div> : null}
+      {preview ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img src={preview} alt="รูปสินค้าที่เลือก"
+             style={{ display: 'block', maxWidth: 200, width: '100%', borderRadius: 6, border: '1px solid var(--line)', marginBottom: 8 }} />
+      ) : null}
+      <div className="tag-row">
+        <input className="in" id="picPick" type="file" accept="image/*" onChange={onPick} disabled={busy} />
+        {preview ? <button className="btn sm" type="button" onClick={clear}>เอารูปออก</button> : null}
+      </div>
+      <span className="hint">
+        {busy ? 'กำลังย่อรูป…' : `ย่อให้อัตโนมัติที่ด้านยาว ${PIC_EDGE} จุด · เปลี่ยนรูปภายหลังได้ที่หน้าสินค้า`}
+      </span>
     </div>
   );
 }
@@ -273,6 +343,9 @@ export function ProductForm({
         )}
       </div>
 
+      {/* สินค้าที่มีอยู่แล้วแก้รูปที่กล่องรูปหน้าสินค้า (PicPanel) — ฟอร์มนี้มีช่องรูปเฉพาะตอนเพิ่มใหม่ */}
+      {isNew ? <NewProductPic state={state} /> : null}
+
       {/* รายละเอียดเพิ่มเติม — พับไว้ไม่ให้ฟอร์มยาว (OEM จุดสั่งซื้อ เก็บสูงสุด) */}
       <details className="card details-card mt-12">
         <summary className="body">รายละเอียดเพิ่มเติม (รหัส OEM · จุดสั่งซื้อ · เก็บสูงสุด)</summary>
@@ -298,10 +371,13 @@ export function ProductForm({
       {/* ผู้ขายของสินค้า — ใต้บรรทัดวันหมดอายุ */}
       <SupplierPicker initial={suppliers ?? []} />
 
-      <label className="tag-row" style={{ fontSize: 14 }}>
-        <input type="checkbox" name="active" defaultChecked={state.values ? state.values.active === 'on' : (product?.active ?? true)} />
-        เปิดใช้งาน — สินค้าที่ปิดจะไม่ขึ้นในรายการให้เลือกตอนออกเอกสาร
-      </label>
+      {/* กดติดเฉพาะที่ช่องสี่เหลี่ยม (ผู้ใช้กำหนด) — เดิมทั้งบรรทัดเป็น <label> คลิกข้อความก็สลับเผลอปิดสินค้า
+          ติ๊ก = เปิดใช้ · ไม่ติ๊ก = บันทึก active=false แล้วสินค้าไม่ขึ้นในช่องค้นหาของทุกเอกสาร (ตรวจแล้ว) */}
+      <div className="tag-row" style={{ fontSize: 14 }}>
+        <input type="checkbox" name="active" aria-label="เปิดใช้งานสินค้านี้"
+               defaultChecked={state.values ? state.values.active === 'on' : (product?.active ?? true)} />
+        <span>เปิดใช้งาน — สินค้าที่ปิดจะไม่ขึ้นในรายการให้เลือกตอนออกเอกสาร</span>
+      </div>
 
       <div className="formbar">
         <Submit label={isNew ? 'บันทึกสินค้า' : 'บันทึกการแก้ไข'} />
