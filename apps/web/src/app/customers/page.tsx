@@ -69,14 +69,17 @@ export default async function CustomersPage({
       <SubNav menu="customer" current={sp.kind === 'vendor' ? 'vendor' : 'customer'}>
       <div className="card">
         <div className="toolbar">
-          <span style={{ color: 'var(--line)' }}>|</span>
-          {TYPE_TABS.map((t) => (
-            <Link key={t.key || 'all'} className="chip"
-                  href={{ pathname: '/customers', query: { ...(sp.q ? { q: sp.q } : {}), ...(sp.kind ? { kind: sp.kind } : {}), ...(t.key ? { type: t.key } : {}) } }}
-                  style={chipStyle((sp.type ?? '') === t.key)}>
-              {t.label}
-            </Link>
-          ))}
+          {/* ชิปกลุ่มเดียวกันต้องอยู่ใน .tag-row — ลูกตรงของ .toolbar บนมือถือยืดเต็มจอเรียงลงทีละปุ่ม */}
+          <div className="tag-row">
+            <span style={{ color: 'var(--line)' }}>|</span>
+            {TYPE_TABS.map((t) => (
+              <Link key={t.key || 'all'} className="chip"
+                    href={{ pathname: '/customers', query: { ...(sp.q ? { q: sp.q } : {}), ...(sp.kind ? { kind: sp.kind } : {}), ...(t.key ? { type: t.key } : {}) } }}
+                    style={chipStyle((sp.type ?? '') === t.key)}>
+                {t.label}
+              </Link>
+            ))}
+          </div>
 
           <div className="spacer" />
 

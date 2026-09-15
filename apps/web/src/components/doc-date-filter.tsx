@@ -59,15 +59,17 @@ export function DocDateFilter({
 
   return (
     <div className="toolbar" style={{ borderTop: '1px solid var(--line)' }}>
-      <span className="subtle">ช่วงวันที่</span>
-
-      {presets.map((p) => (
-        <Link key={p.label} className="chip"
-              href={{ pathname: base, query: { ...keep, ...(p.from ? { from: p.from, to: p.to } : {}) } }}
-              style={on(p) ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
-          {p.label}
-        </Link>
-      ))}
+      {/* .tag-row — ลูกตรงของ .toolbar บนมือถือยืดเต็มจอ ชิปเรียงลงทีละปุ่ม */}
+      <div className="tag-row">
+        <span className="subtle">ช่วงวันที่</span>
+        {presets.map((p) => (
+          <Link key={p.label} className="chip"
+                href={{ pathname: base, query: { ...keep, ...(p.from ? { from: p.from, to: p.to } : {}) } }}
+                style={on(p) ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
+            {p.label}
+          </Link>
+        ))}
+      </div>
 
       <div className="spacer" />
 

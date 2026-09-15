@@ -80,10 +80,13 @@ export function MenuBar({ session, current, license }: {
 
         <div className="spacer" />
 
+        {/* กล่องขวาแสดงลิขสิทธิ์แบบสั้นอย่างเดียว — ชื่อ · บทบาท และข้อความเต็มอยู่ใน title
+            วัดที่ 1280: ชื่อ + ข้อความเต็ม (nowrap) กว้าง 188px ดันเมนูให้ล้นทับกล่องนี้ 158px
+            ชื่อผู้ใช้ยังอยู่ในลิ้นชักเมนู (มือถือ) และ aria-label */}
         <div className="foot">
-          <span className="who">
-            <span>{session.name} · {role}</span>
-            {lic ? <span className={`lic ${lic.tone}`}>{lic.text}</span> : null}
+          <span className="who" title={`${session.name} · ${role}${lic ? `\n${lic.text}` : ''}`}
+                aria-label={`${session.name} · ${role}${lic ? ` · ${lic.text}` : ''}`}>
+            {lic ? <span className={`lic ${lic.tone}`}>{lic.short}</span> : null}
           </span>
           <form action="/logout" method="post">
             <button type="submit" className="signout">ออกจากระบบ</button>

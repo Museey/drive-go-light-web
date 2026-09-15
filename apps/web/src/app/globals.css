@@ -259,7 +259,7 @@ a { color: inherit; text-decoration: none; }
   .rail .spacer { display: none; }   /* railnav ยืดเต็มแล้ว ดันส่วนท้ายไปขวาเอง */
   /* แท็บเล็ต — ที่แคบ โชว์เลข+ไอคอนพอ ชื่อเต็มอยู่ที่ title ทุกตัวพอดีในจอ ไม่ต้องปัด */
   .rail .navbtn .lbl { display: none; }
-  .rail .navbtn { padding: 9px 10px; }
+  .rail .navbtn { padding: 9px 8px; }   /* 10px ล้นกล่องเมนู 5px ที่ 768 */
   .rail .brand .shop { display: none; }
   .rail .foot .who { display: none; }
 }
@@ -268,11 +268,13 @@ a { color: inherit; text-decoration: none; }
 /* แถบหลักยังเป็นแถบบนแนวนอน (ต่อจากแท็บเล็ต) — แค่กว้างพอจะโชว์ชื่อเมนูเต็ม
    จึงไม่ต้องมีคอลัมน์ซ้ายของแถบหลักอีก เมนูย่อยเท่านั้นที่อยู่ซ้าย */
 @media (min-width: 1280px) {
-  .rail { padding: 8px 18px; gap: 10px; }
+  /* ที่ 1280 เมนูเก้าตัวชื่อเต็มกว้าง 991px ในกล่อง 823px ล้นทับกล่องขวา 158px
+     แก้ด้วยกล่องขวาแสดงลิขสิทธิ์แบบสั้น (menu-bar.tsx) + ระยะรอบเมนูแคบลงเล็กน้อย — ไม่เพิ่มจุดตัด */
+  .rail { padding: 8px 14px; gap: 8px; }
   /* ชื่อร้านไม่อยู่ในแถวเมนูของเดสก์ท็อป (สเปก §3 A) — ที่ 1280px ไม่พอให้เมนูครบเก้าตัว */
   .rail .brand .shop { display: none; }
   .rail .navbtn .lbl { display: inline; }
-  .rail .navbtn { padding: 9px 8px; }
+  .rail .navbtn { padding: 9px 7px; gap: 5px; }
   .rail .foot .who { display: flex; }
 }
 
@@ -559,7 +561,10 @@ a.chip.ok:hover { background: #E3F3EA; border-color: #9FD1B6; }
 .in:focus { outline: 2px solid #C9D6E2; outline-offset: -1px; }
 
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.pager { display: flex; gap: 6px; align-items: center; padding: 12px 16px; color: var(--ink-3); font-size: 13px; }
+.pager { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 12px 16px; color: var(--ink-3); font-size: 13px; }
+/* ตัวแบ่งหน้า/หัวหน้า/แถบพิมพ์ต้องตัดแถวได้ — ไม่งั้น flex บีบปุ่มคำสั้นจนตกบรรทัด
+   วัดที่ 390px: "ถัดไป" ถูกบีบเหลือ 55px สองบรรทัด · "🖨 พิมพ์รายงาน" · "← กลับทะเบียนผู้ติดต่อ" สามบรรทัด
+   ตัดแถวได้แล้วปุ่มย้ายลงแถวใหม่ทั้งปุ่มเอง (ลองใส่ nowrap เพิ่ม — วัดทุกหน้าไม่ต่าง จึงไม่ใส่) */
 
 .note {
   background: #FCF7EC;
@@ -641,11 +646,14 @@ table.doc td.blank { height: 22px; }
 
 /* แถบเครื่องมือเหนือกระดาษ — ไม่ต้องติดไปกับกระดาษตอนพิมพ์ */
 .printbar {
-  display: flex; gap: 10px; align-items: center;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: var(--z-sticky);
 }
 .printview { background: #DFE6EA; padding: 20px; min-height: 100vh; }
+/* บนจอแคบ ตารางในกระดาษกว้างกว่าจอ (รายงานการเงิน 873px ที่มือถือ) — เลื่อนในกรอบกระดาษ ไม่ใช่ทั้งหน้า
+   เฉพาะบนจอ: ตอนพิมพ์ overflow ของกล่องแม่ตัดกระดาษหน้าสองทิ้งได้ */
+@media screen { .printview { overflow-x: auto; } }
 /* พิมพ์หลายชุดในครั้งเดียว — บนจอเว้นระยะให้เห็นว่าเป็นคนละแผ่น */
 .printview .paper + .paper { margin-top: 20px; }
 
@@ -757,7 +765,12 @@ textarea.in { font-family: inherit; resize: vertical; min-height: 60px; }
 /* ---------- ฐาน: มือถือ ---------- */
 body { font-size: 15px; }
 .wrap { padding: 11px; padding-bottom: calc(var(--h-tabbar) + 22px); }
-.topbar { padding: 12px 14px; }
+/* มือถือ: ปุ่มหัวหน้าลงแถวใหม่ทั้งก้อนเมื่อไม่พอ (แท็บเล็ตขึ้นไปกลับเป็นแถวเดียวที่กฎแถบเมนูย่อยในหัวหน้า) */
+.topbar { padding: 12px 14px; flex-wrap: wrap; }
+/* ตัวดันขวา (flex: 1) ขึ้นแถวว่างของตัวเองเมื่อชื่อหน้าเต็มแถว — แถวว่าง + ช่องไฟ 12px ทำให้หัวหน้าสูงเกิน
+   ชื่อค้างขอบบน (ขายหน้าร้าน 375px: ว่างบน 0 ล่าง 12) · ใช้ margin-left: auto ดันปุ่มขวาแทน (≥ 768 ซ่อนตัวดันอยู่แล้ว) */
+.topbar > .spacer { display: none; }
+.topbar > .spacer + * { margin-left: auto; }
 .topbar h1 { font-size: 16px; }
 
 .grid.g2, .grid.g4 { grid-template-columns: minmax(0, 1fr); }
@@ -848,9 +861,11 @@ input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px;
 }
 .backfab:hover { background: rgba(255,191,0,.92); color: #1F1600; }
 /* มือถือ: แถบล่าง 58 + ระยะ 14 + ปุ่ม 44 + ระยะ 14 — ของชิ้นสุดท้ายในหน้าต้องเลื่อนพ้นทั้งสองอย่างได้ */
-.main .wrap { padding-bottom: calc(var(--h-tabbar) + 72px); }
+/* ลูกตรงเท่านั้น (กรอบหน้าใน shell.tsx) — เดิม .main .wrap โดนช่องตาราง td.wrap ทั้ง 40 จุดด้วย
+   ช่องชื่อได้ padding ล่าง 80px แถวทะเบียนสินค้าสูง 111px ชื่อค้างขอบบน */
+.main > .wrap { padding-bottom: calc(var(--h-tabbar) + 72px); }
 @media (min-width: 768px) {
-  .main .wrap { padding-bottom: 80px; }
+  .main > .wrap { padding-bottom: 80px; }
 }
 
 /* ---------- บรรทัดสองใต้ชื่อผู้ใช้ · บทบาท: นับถอยหลังวันหมดอายุการใช้งาน ---------- */
@@ -885,6 +900,9 @@ table.lines .del {
   min-width: 44px; min-height: 44px;
 }
 table.lines .del:hover { border-color: var(--due); color: var(--due); }
+/* ปุ่ม × ลบบรรทัดในตารางใบเคลม — เดิมสูง 21px บนจอสัมผัส · เดสก์ท็อปเมาส์กดแม่นกลับขนาดเดิม */
+td > button.lnk { min-width: 44px; min-height: 44px; }
+@media (min-width: 1280px) { td > button.lnk { min-width: 0; min-height: 0; } }
 /* ผลค้นหาของบรรทัด — เป็นแถวใต้บรรทัดนั้น ไม่ลอย ไม่ถูกตัดด้วย overflow ของตาราง */
 table.lines tr.hitrow > td { padding: 0 6px 8px 42px; background: var(--bg); }
 table.lines tr.hitrow .hits5 { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
@@ -969,14 +987,51 @@ table.tbl tr.pick.voided { opacity: .55; }
 }
 .tile[aria-current='true'] .k, .tile.on .k { color: #BFE3D6; }
 /* มือถือ: สองคอลัมน์เต็มแถว ตัวเล็กลงนิด */
-.tiles .tile { flex: 1 1 calc(50% - 10px); justify-content: center; font-size: 15px; padding: 10px 12px; }
-@media (min-width: 768px) { .tiles .tile { flex: 0 1 auto; justify-content: flex-start; font-size: 15px; padding: 10px 18px; } }
+/* ไทล์ครึ่งแถว 129–182px — ไทล์เป็น inline-flex เลขเมนู (.k) ช่องติ๊ก และข้อความจึงเป็นคนละก้อน
+   ข้อความเหลือ 51–75px ขึ้นสองบรรทัด แล้ว .k ลอยกลางระหว่างสองบรรทัดเป็นแถวที่สาม
+   ("05.11 + เพิ่มรายการสินค้าใหม่" · "รหัสสินค้า เสมอ") — ลดตัวอักษร/ระยะอย่างเดียววัดแล้วยัง 3 บรรทัด
+   → บนมือถือไทล์เป็นบล็อก ตัวหนังสือกลาง ทุกชิ้นไหลในบรรทัดเดียวกัน
+   align-content: center จัดกลางแนวตั้ง — ไทล์บรรทัดเดียวที่ถูกยืดสูงเท่าเพื่อนสองบรรทัด (74px) ไม่งั้นตัวหนังสือค้างบน 21px */
+.tiles .tile {
+  flex: 1 1 calc(50% - 10px); display: block; text-align: center; align-content: center;
+  font-size: 14px; line-height: 1.5; padding: 15px 10px;
+}
+.tiles .tile .k, .tiles .tile input { vertical-align: middle; margin: 0 4px 0 0; }
+/* ตัวเลือกข้อความยาว (วิธีคิดต้นทุน) — ครึ่งแถว 147px ขึ้น 4 บรรทัดที่ 360px จึงเต็มแถวบนมือถือ */
+.tiles .tile.radio { flex-basis: 100%; justify-content: flex-start; }
+@media (min-width: 768px) {
+  /* แท็บเล็ตขึ้นไปกลับเป็นไทล์ inline-flex แบบเดิมทุกค่า */
+  .tiles .tile {
+    flex: 0 1 auto; display: inline-flex; text-align: left; line-height: normal; align-content: normal;
+    justify-content: flex-start; font-size: 15px; padding: 10px 18px; gap: 10px;
+  }
+  .tiles .tile .k, .tiles .tile input { vertical-align: revert; margin: revert; }
+  .tiles .tile.radio { flex-basis: auto; }
+}
 
 /* เมนูย่อยคอลัมน์ซ้าย — ปรับเป็นไทล์เดียวกัน ตัวใหญ่ขึ้น */
 .subnav a, .subnav .item { background: #F4F6F5; border: 1.5px solid var(--line); border-radius: 10px; padding: 13px 14px; font-size: 15px; }
 .subnav .sl { font-size: 15px; font-weight: 600; }
 .subnav a[aria-current='true'] { background: var(--steel-dk); border-color: var(--steel-dk); color: #fff; padding: 13px 14px; border-width: 1.5px; }
 .subnav a[aria-current='true'] .sl, .subnav a[aria-current='true'] .sd, .subnav a[aria-current='true'] u { color: #fff; }
+/* มือถือ: ไทล์สองคอลัมน์กว้าง 165px (จอ 360) — ไอคอน 30 + เลขเมนูข้างขวา + ระยะ กินที่จนชื่อเหลือราว 57px
+   "ใบส่งมอบงาน/ใบแจ้งหนี้/ใบกำกับภาษี" ขึ้น 5 บรรทัด · เลขเมนูลงบรรทัดใต้ชื่อ ไอคอนเล็กลง ชื่อได้ราว 116px (ไม่เกินสองบรรทัด) */
+.subnav a, .subnav .item {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 6px; row-gap: 1px;
+  align-items: center; align-content: center; padding: 8px;
+}
+.subnav a[aria-current='true'] { padding: 8px; }
+.subnav .si { width: 24px; min-width: 24px; height: 24px; grid-row: 1 / span 2; }
+.subnav .si svg { width: 24px; height: 24px; }
+.subnav .sl { font-size: 13.5px; line-height: 1.3; }
+.subnav u { grid-column: 2; line-height: 1.2; }
+/* แท็บเล็ตขึ้นไปกลับเป็นแบบเดิมทุกค่า (ระยะในไทล์คุมที่กฎแถบเมนูย่อยด้านล่าง) */
+@media (min-width: 768px) {
+  .subnav a, .subnav .item { display: flex; gap: 10px; }
+  .subnav a[aria-current='true'] { padding: 13px 14px; }
+  .subnav .si svg { width: 28px; height: 28px; }
+  .subnav .sl { font-size: 15px; line-height: 1.35; }
+}
 .subnav a[aria-current='true'] .sd { color: #BFE3D6; }
 
 /* =====================================================================
@@ -1081,11 +1136,15 @@ table.hist .kindchip { display: inline-block; padding: 2px 8px; border-radius: 6
 table.hist .kindchip.k-QT { background: #FFF3CC; color: #7A4E00; }
 table.hist .kindchip.k-RC { background: #E6EEF9; color: #1F4E8C; }
 table.hist tfoot td { border-top: 2px solid var(--line); background: #FAFBFC; }
-table.hist .row-acts { display: inline-flex; gap: 4px; white-space: nowrap; }
+/* :not(.grid2) — เดิมกฎนี้ความจำเพาะสูงกว่า .row-acts.grid2 ปุ่มสี่ปุ่มที่ออกแบบเป็น 2×2 จึงเรียงแถวเดียว
+   ที่ 1280 "ใบเสนอราคา" ถูกบีบเหลือ 41px สามบรรทัด ปุ่มที่เหลือล้นขอบการ์ด */
+table.hist .row-acts:not(.grid2) { display: inline-flex; gap: 4px; white-space: nowrap; }
 
 /* ---------- ปุ่มในแถวประวัติ: สองบรรทัด รับชำระ/แก้ไข · พิมพ์/ลบ (เขียว · แดงอ่อน · เทา · แดงเข้ม) ---------- */
-.row-acts.grid2 { display: grid; grid-template-columns: repeat(2, minmax(64px, 1fr)); gap: 4px; width: 148px; }
-.row-acts.grid2 .btn { justify-content: center; min-height: 34px; padding: 4px 8px; font-weight: 600; border-width: 1px; }
+/* คอลัมน์กว้างตามปุ่มที่ยาวที่สุด ปุ่มไม่ตัดบรรทัด · เป้ากด 44px บนจอสัมผัส เดสก์ท็อปเตี้ยลงให้ตารางแน่น */
+.row-acts.grid2 { display: grid; grid-template-columns: repeat(2, max-content); gap: 4px; }
+.row-acts.grid2 .btn { justify-content: center; min-height: 44px; padding: 4px 8px; font-weight: 600; border-width: 1px; white-space: nowrap; }
+@media (min-width: 1280px) { .row-acts.grid2 .btn { min-height: 34px; } }
 .btn.act-pay { background: var(--ok); border-color: var(--ok); color: #fff; }
 .btn.act-edit { background: #FBE3E3; border-color: #EEB8B8; color: #8A2626; }
 .btn.act-print { background: #EDEFF1; border-color: #D5DDE2; color: var(--ink-2); }
@@ -1107,8 +1166,16 @@ table.hist.fit td.wrap { white-space: normal; word-break: break-word; overflow-w
   table.hist.fit th, table.hist.fit td { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
 }
 /* ปุ่มในแถวต้องอยู่ในคอลัมน์ของมัน ไม่ดันตารางให้กว้างจนต้องเลื่อน */
-table.hist.fit .row-acts.grid2 { width: 100%; max-width: 156px; }
-table.hist.fit .row-acts.grid2 .btn { white-space: normal; line-height: 1.2; font-size: 12.5px; padding: 4px 6px; min-height: 32px; }
+table.hist.fit .row-acts.grid2 { width: max-content; }
+/* ปุ่มในแถวแบบไม่ใช่ 2×2 (รายจ่าย ใบวางบิล ชุดอะไหล่ ถังขยะ) — ≥ 1280 ตารางเป็น fixed คอลัมน์ปุ่มได้เท่าที่เหลือ
+   วัดที่ประวัติรายจ่าย 1280: ช่อง 112px ปุ่ม เปิด/พิมพ์/ยกเลิก เรียงแถวเดียว 150px — "ยกเลิก" ถูกช่อง overflow: hidden ตัดหาย
+   ให้ปุ่มขึ้นบรรทัดสองได้ทั้งปุ่ม (ตัวหนังสือในปุ่มยังบรรทัดเดียว)
+   เฉพาะ ≥ 1280 — < 1280 ตาราง auto ให้คอลัมน์กว้างเท่า min-content ถ้าตัดได้ปุ่มจะเรียงลงทีละปุ่ม แถวสูง 153px (เดิม 58px) */
+@media (min-width: 1280px) {
+  table.hist.fit .row-acts:not(.grid2) { flex-wrap: wrap; justify-content: flex-end; }
+}
+table.hist.fit .row-acts.grid2 .btn { white-space: nowrap; line-height: 1.2; font-size: 12.5px; padding: 4px 6px; min-height: 44px; }
+@media (min-width: 1280px) { table.hist.fit .row-acts.grid2 .btn { min-height: 32px; } }
 table.hist.fit th { font-size: 12.5px; }
 table.hist.fit td.wrap { min-width: 160px; }
 @media (min-width: 1280px) { table.hist.fit td.wrap { min-width: 0; } }
@@ -1119,7 +1186,12 @@ table.hist.fit td.party > b { font-size: 16px; line-height: 1.3; }
 table.hist.fit .kindchip { padding: 2px 6px; font-size: 11.5px; }
 table.hist.fit .chip { padding: 2px 7px; font-size: 11.5px; white-space: nowrap; }
 table.hist.fit .opt { display: none; }
-@media (min-width: 1280px) { table.hist.fit .opt { display: table-cell; } }
+/* ≥ 1280 คืนคอลัมน์เสริม — แยก col ออกจาก td/th: col ที่ได้ display: table-cell ไม่ใช่คอลัมน์แล้ว
+   ความกว้างใน colgroup เลื่อนไปหนึ่งช่องทุกคอลัมน์หลังมัน (ลูกค้า 1280: คงค้างได้ 176 ของปุ่ม ปุ่มกับที่อยู่เหลือ 143 แถวสูง 147px) */
+@media (min-width: 1280px) {
+  table.hist.fit th.opt, table.hist.fit td.opt { display: table-cell; }
+  table.hist.fit col.opt { display: table-column; }
+}
 
 /* =====================================================================
    แท็บเล็ต/เดสก์ท็อป: เมนูย่อยเป็นแถบไทล์ใต้เมนูหลัก (ไม่ใช่คอลัมน์ซ้าย) — เนื้อหาเต็มความกว้าง (ผู้ใช้กำหนด)

@@ -23,4 +23,11 @@ describe('licenseLine', () => {
     expect(r.text).toContain('หมดอายุแล้ว 12 วัน');
     expect(r.text).toContain('08 ลิขสิทธิ์');
   });
+  it('ข้อความสั้นบนแถบบน — บอกจำนวนวันครบ ไม่มีวันที่ (ข้อความเต็มอยู่ใน title)', () => {
+    expect(licenseLine({ mode: 'trial', until: '2026-09-29', daysLeft: 14 }).short).toBe('เหลือ 14 วัน');
+    expect(licenseLine({ mode: 'active', until: '2027-09-15', daysLeft: 365 }).short).toBe('เหลือ 365 วัน');
+    const x = licenseLine({ mode: 'expired', until: '2026-09-01', daysLeft: -12 });
+    expect(x.short).toBe('หมดอายุ 12 วัน');
+    expect(x.tone).toBe('due');   /* ยังแดงกะพริบเหมือนข้อความเต็ม */
+  });
 });

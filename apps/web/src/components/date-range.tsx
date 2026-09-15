@@ -34,13 +34,16 @@ export function DateRange({
 
   return (
     <div className="toolbar">
-      {presets.map((p) => (
-        <Link key={p.label} className="chip"
-              href={{ pathname: base, query: p.from ? { from: p.from, to: p.to } : {} }}
-              style={on(p) ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
-          {p.label}
-        </Link>
-      ))}
+      {/* .tag-row — ลูกตรงของ .toolbar บนมือถือยืดเต็มจอ ชิปห้าปุ่มเรียงลงกินครึ่งจอ */}
+      <div className="tag-row">
+        {presets.map((p) => (
+          <Link key={p.label} className="chip"
+                href={{ pathname: base, query: p.from ? { from: p.from, to: p.to } : {} }}
+                style={on(p) ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
+            {p.label}
+          </Link>
+        ))}
+      </div>
 
       <div className="spacer" />
 

@@ -9,6 +9,15 @@
         "dev:safe"
       ],
       "port": 3100
+    },
+    {
+      "name": "web-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start:safe"
+      ],
+      "port": 3100
     }
   ]
 }
