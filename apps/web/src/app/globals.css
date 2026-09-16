@@ -973,6 +973,11 @@ table.lines tr.hitrow table.tbl td { padding: 6px 10px; }
 .confirm dd { font-weight: 600; text-align: right; }
 .confirm .acts { display: flex; gap: 10px; margin-top: auto; }
 .confirm .acts .btn { flex: 1; justify-content: center; min-height: 48px; font-size: 15px; }
+/* popup "เอกสารได้บันทึกเรียบร้อยแล้ว" (app/income/edit-gate.tsx) — สามปุ่มเรียงลง ข้อความไม่ถูกบีบในแผง 380px */
+.confirm .acts.gate-acts { flex-direction: column; margin-top: 0; }
+.edit-gate .gate-q { margin: 0; font-size: 16px; font-weight: 600; }
+/* ปุ่มแก้ไขในแถวของใบที่แก้ไม่ได้ — ยังกดเปิด popup ได้ (บอกเหตุผล + ทางยกเลิก) จึงจางแค่ครึ่งเดียว */
+.btn.act-edit.dim { opacity: .6; }
 
 /* การ์ดบันทึกแล้ว — ขนาดนามบัตรกลางจอ (ผู้ใช้เลือก 16 ก.ย. 2569 · components/saved-card.tsx)
    2 วินาทีแรกมีแค่ ✓ กับข้อความ แล้วการ์ดเดิมแสดงเลขที่ ชื่อ ยอด และปุ่ม — ความสูงขั้นต่ำคงไว้ไม่ให้การ์ดกระโดด */
@@ -1184,6 +1189,8 @@ button.tile { font-family: inherit; cursor: pointer; }
 /* ปุ่มย้อนกลับมีที่เดียวทั้งระบบ = ปุ่มอำพันล่างขวา — มือถือก็เห็น (ลอยเหนือแถบล่าง) */
 .backfab { display: inline-flex; bottom: calc(58px + 14px); right: 12px; }
 @media (min-width: 1280px), print { .backfab { bottom: 18px; right: 18px; } }
+/* หน้าพิมพ์ไม่มีแถบล่างของมือถือ — ปุ่มชิดล่าง ไม่ลอยค้างกลางอากาศ */
+.backfab.solo { bottom: 18px; }
 
 /* ---------- ตัวเลื่อนหน้าแบบตัวเลข ‹ 1 2 3 › ---------- */
 .pagenav { display: inline-flex; align-items: center; gap: 4px; }

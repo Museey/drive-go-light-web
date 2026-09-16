@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isUuid } from '@/lib/ids';
-import { bahttext } from '@drivegolight/core';
+import { bahttext, today } from '@drivegolight/core';
 import { can, requireTab } from '@/lib/auth';
 import { DocSteps } from '@/components/doc-steps';
 import { Shell } from '@/components/shell';
@@ -10,7 +10,8 @@ import { canEdit, childOf } from '@/lib/sales';
 import { listPayments } from '@/lib/receivables';
 import { PaymentsPanel } from '../../finance/payments-panel';
 import { DocActions } from '../doc-actions';
-import { baht, KIND_LABEL, payLabel, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
+import { baht, KIND_LABEL, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
+import { incomeStatus } from '@/lib/doc-card';
 import { DocHistory } from '@/components/doc-history';
 import { SavedNotice } from '@/components/saved-notice';
 
@@ -35,7 +36,13 @@ export default async function DocPage({
 
   const paid = doc.payments.reduce((s, p) => s + p.amount, 0);
   const outstanding = Math.round((doc.payable - paid) * 100) / 100;
-  const status = payLabel(outstanding, paid);
+  /* ชิปเดียวกับตารางประวัติและการ์ด (lib/doc-card.ts) — หน้าเอกสารต้องไม่พูดคนละเรื่องกับรายการ */
+  const status = incomeStatus({
+    kind: doc.kind, outstanding, dueDate: doc.dueDate,
+    invoice: child && child.kind !== 'RC' ? child : null,
+    receipt: child && child.kind === 'RC' ? child : null,
+    voided: doc.status === 'void',
+  }, today());
 
   return (
     <Shell doc
@@ -68,8 +75,9 @@ export default async function DocPage({
         </>
       ) : (
         <div style={{ marginBottom: 16 }}>
-          <DocActions id={doc.id} kind={doc.kind} canEdit={editable.ok} editReason={editable.reason}
-                      startVoiding={sp.void === '1' && editable.ok} />
+          <DocActions id={doc.id} kind={doc.kind} docNo={doc.docNo} partyName={doc.partyName}
+                      canEdit={editable.ok} editReason={editable.reason} hasChild={!!child}
+                      startVoiding={sp.void === '1'} />
         </div>
       )}
 
@@ -91,7 +99,7 @@ export default async function DocPage({
             {doc.missing.length ? (
               <span className="chip warn" title={doc.missing.join(' · ')}>ข้อมูลไม่ครบ</span>
             ) : null}
-            <span className={`chip ${status.tone}`}>{status.text}</span>
+            <span className={status.tone === 'plain' ? 'chip doc-status' : `chip doc-status ${status.tone}`}>{status.label}</span>
           </header>
           <div className="body">
             <dl className="kv">

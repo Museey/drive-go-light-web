@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { today } from '@drivegolight/core';
 import { isUuid } from '@/lib/ids';
 import { safeBack } from '@/lib/saved-target';
 import { SavedNotice } from '@/components/saved-notice';
@@ -124,7 +125,7 @@ export default async function ContactPage({
               <>
               {/* จอแคบเป็นการ์ดเอกสารของเฟส 2 · เดสก์ท็อปและตอนพิมพ์เป็นตารางเดิม */}
               <DocCards title="เอกสารของผู้ติดต่อ"
-                        cards={history.docs.map((d) => contactHistoryCard(d, contact.displayName || contact.code))} />
+                        cards={history.docs.map((d) => contactHistoryCard(d, contact.displayName || contact.code, today()))} />
               <div className="tablewrap doc-table">
                 <table className="tbl">
                   <thead>

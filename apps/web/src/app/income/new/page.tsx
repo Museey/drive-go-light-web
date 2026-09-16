@@ -5,7 +5,8 @@ import { today } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
-import { blankSalesDoc,
+import { childTakenMessage } from '@/lib/doc-lock';
+import { blankSalesDoc, childOf, docNoOf,
   getDefaultNote, getDefaultWarranty, loadDocForCopy, lotExpiryOf, openDocsFor, pickContactById, resolveSourceForNew,
   WALK_IN_CUSTOMER, type SalesDocInput, type SalesKind, peekDocSeq } from '@/lib/sales';
 import { PickSource } from './pick-source';
@@ -68,6 +69,27 @@ export default async function NewDocPage({
   const resolved = sp.from && !copying
     ? await resolveSourceForNew(sp.from, kind)
     : { sourceId: sp.from ?? '', movedTo: null };
+
+  /* ใบต้นทางออกใบต่อไปแล้ว — บอกตั้งแต่เปิดฟอร์ม ไม่ใช่ให้กรอกทั้งใบแล้วค่อยพังตอนบันทึก (ต้นแบบ: ทำขั้นถัดไปได้เฉพาะใบที่ยังไม่มีใบต่อ) */
+  const sourceId = resolved.sourceId || sp.from;
+  const taken = sourceId && !copying ? await childOf(sourceId) : null;
+  if (taken) {
+    const parentNo = (await docNoOf(sourceId!)) ?? '';
+    return (
+      <Shell doc current="/income" title={`ออก${KIND_LABEL[kind]}`}>
+        <div className="err chain-taken" style={{ marginBottom: 16 }}>
+          <b>{childTakenMessage(parentNo, taken)}</b>
+          <div style={{ marginTop: 6 }}>
+            ใบหนึ่งออกใบต่อได้ใบเดียว — ถ้าต้องการออกใหม่ ให้ยกเลิก {taken.docNo} ก่อน
+          </div>
+        </div>
+        <div className="tag-row">
+          <Link className="btn primary" href={`/income/${taken.id}`}>เปิด {taken.docNo}</Link>
+          <Link className="btn" href={`/income/${sourceId}`}>กลับไป {parentNo}</Link>
+        </div>
+      </Shell>
+    );
+  }
 
   const [shop, warranty, noteDefault, source, party] = await Promise.all([
     getShop(),

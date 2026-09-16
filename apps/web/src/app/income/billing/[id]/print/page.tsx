@@ -5,6 +5,7 @@ import { BankLine } from '@/components/bank-line';
 import { query, requireTab } from '@/lib/auth';
 import { getBillnote } from '@/lib/billnotes';
 import { getShop } from '@/lib/queries';
+import { BackFab } from '@/components/back-fab';
 import { PrintButton } from '../../../[id]/print/print-button';
 import { baht, KIND_SHORT, thDate, thDateLong } from '@/lib/format';
 
@@ -39,6 +40,8 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
         </span>
         <PrintButton />
       </div>
+
+      <BackFab solo fallbackHref={`/income/billing/${id}`} />
 
       <div className="printview">
         {pages.map((chunk, pi) => { const start = runningIndex; runningIndex += chunk.length; return (

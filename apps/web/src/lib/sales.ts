@@ -13,6 +13,7 @@ import { addrLineOf } from './contacts';
 import { consumeStock, returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
 import { voidSalesDocWith } from './sales-void';
+import { activeChildWith, claimParentWith, editRuleWith, markParentBilledWith, type ChildRef } from './doc-lock';
 import { REMAINING_LOTS_SQL } from './expiry';
 import { findByScanWith, parseScan } from './scan';
 
@@ -176,6 +177,9 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
         userId,
       });
     } else {
+      /* ใบต้นทางต้องยังไม่มีใบต่อ — ล็อกแถวต้นทางก่อน กันสองเครื่องออกใบต่อพร้อมกัน (doc-lock.ts) */
+      if (input.parentDocId) await claimParentWith(c, input.parentDocId);
+
       const seq = await c.query(
         `select next_doc_no(current_tenant_id(), $1, $2) as no`,
         [input.kind, docNoPeriod(input.docDate)],
@@ -275,11 +279,7 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
 
     /* ใบเสนอราคาที่ถูกนำไปออกเอกสารต่อ ให้ทำเครื่องหมายว่าออกบิลแล้ว */
     if (input.parentDocId && input.kind !== 'QT') {
-      await c.query(
-        `update documents set status = 'billed'
-         where id = $1 and kind = 'QT' and status <> 'void'`,
-        [input.parentDocId],
-      );
+      await markParentBilledWith(c, input.parentDocId);
     }
 
     return { id: id!, docNo };
@@ -566,14 +566,8 @@ export async function peekDocSeq(kind: string, iso: string): Promise<number> {
 }
 
 /** ใบที่ออกต่อจากใบนี้ (ไม่นับที่ยกเลิก) — ไว้วาดขั้นตอน A→B→C */
-export async function childOf(id: string): Promise<{ id: string; docNo: string; kind: string } | null> {
-  return query(async (c) => {
-    const { rows } = await c.query(
-      `select id, doc_no, kind::text as kind from documents
-       where parent_doc_id = $1 and status <> 'void' order by doc_date desc limit 1`, [id],
-    );
-    return rows[0] ? { id: rows[0].id, docNo: rows[0].doc_no, kind: rows[0].kind } : null;
-  });
+export async function childOf(id: string): Promise<ChildRef | null> {
+  return query((c) => activeChildWith(c, id));
 }
 
 /** ใบเปล่าตามชนิด — ใช้ทั้งหน้าออกเอกสารและหน้าขายหน้าร้าน */
@@ -666,27 +660,9 @@ export async function loadDocForCopy(
 }
 
 /** เอกสารนี้แก้ไขได้ไหม */
+/** แก้ในใบเดิมได้ไหม — กติกาตามต้นแบบอยู่ที่ doc-lock.ts */
 export async function canEdit(id: string): Promise<{ ok: boolean; reason?: string }> {
-  return query(async (c) => {
-    const { rows } = await c.query(
-      `select d.status::text as status, d.kind::text as kind,
-              (select doc_no from documents x
-               where x.parent_doc_id = d.id and x.status <> 'void' limit 1) as child_no,
-              (select coalesce(sum(p.amount), 0) from payments p where p.doc_id = d.id) as paid
-       from documents d where d.id = $1`,
-      [id],
-    );
-    const d = rows[0];
-    if (!d) return { ok: false, reason: 'ไม่พบเอกสาร' };
-    if (d.status === 'void') return { ok: false, reason: 'เอกสารนี้ถูกยกเลิกแล้ว' };
-    if (d.child_no) {
-      return { ok: false, reason: `แก้ไม่ได้เพราะมีเอกสาร ${d.child_no} ออกต่อจากใบนี้แล้ว` };
-    }
-    /* กติกา (ผู้ใช้กำหนด): ใบที่ตัดสต๊อกแล้ว (ใบเสร็จ) หรือรับเงินแล้ว แก้ไม่ได้ — ให้ยกเลิกแล้วออกใหม่ */
-    if (d.kind === 'RC') return { ok: false, reason: 'ใบเสร็จตัดสต๊อกแล้ว แก้ไม่ได้ — ให้ยกเลิกใบนี้แล้วออกใบใหม่' };
-    if (Number(d.paid) > 0.004) return { ok: false, reason: 'ใบนี้รับเงินแล้ว แก้ไม่ได้ — ให้ยกเลิกใบนี้แล้วออกใบใหม่' };
-    return { ok: true };
-  });
+  return query((c) => editRuleWith(c, id));
 }
 
 /** ข้อความรับประกันตั้งต้นของร้าน */

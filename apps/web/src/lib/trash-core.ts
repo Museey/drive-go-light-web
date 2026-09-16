@@ -12,6 +12,7 @@
 import type pg from 'pg';
 import { today } from '@drivegolight/core';
 import { unvoidBuyDocWith } from './buy-void';
+import { childTakenMessage, claimParentWith, DocChainTakenError, markParentBilledWith } from './doc-lock';
 import { consumeStock } from './stock-cost';
 import { verifyPassword } from './password';
 
@@ -93,13 +94,26 @@ export async function restoreFromTrashWith(
   }
 
   const { rows } = await c.query(
-    `select direction::text as direction from documents
+    `select direction::text as direction, parent_doc_id from documents
       where id = $1 and status = 'void' and purged_at is null for update`, [id]);
   const d = rows[0];
   if (!d) throw new Error('ไม่พบเอกสารในถังขยะ — อาจถูกกู้คืนหรือลบถาวรไปแล้ว');
   if (d.direction === 'buy') { await unvoidBuyDocWith(c, id, userId); return; }
 
+  /* ใบต่อที่ถูกยกเลิก ระหว่างนั้นใบต้นทางอาจออกใบต่อใบใหม่ไปแล้ว — กู้คืนทับจะได้ใบต่อสองใบ */
+  if (d.parent_doc_id) {
+    try {
+      await claimParentWith(c, d.parent_doc_id, id);
+    } catch (err) {
+      if (err instanceof DocChainTakenError) {
+        throw new Error(`กู้คืนไม่ได้ — ${childTakenMessage(err.parentNo, err.child)}`);
+      }
+      throw err;
+    }
+  }
+
   await c.query(`update documents set status = 'issued', voided_at = null, voided_reason = null where id = $1`, [id]);
+  if (d.parent_doc_id) await markParentBilledWith(c, d.parent_doc_id);
 
   /*
    * ตัดสต๊อกกลับ **เท่ากับที่การยกเลิกครั้งล่าสุดคืนไป** ไม่ใช่อ่านจากบรรทัดเอกสาร

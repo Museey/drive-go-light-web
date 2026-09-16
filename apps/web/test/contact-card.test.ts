@@ -114,4 +114,18 @@ describe('contactHistoryCard — เอกสารในประวัติ�
     expect(c.outstanding).toBe(3000);
     expect(c.status).toEqual({ label: 'ชำระบางส่วน', tone: 'warn' });
   });
+
+  /* ใบส่งมอบใช้ชิปเดียวกับหน้ารายรับ (ผู้ใช้กำหนด 17 ก.ย. 2569) — บันทึกแล้ว "เรียบร้อย" · เลยครบกำหนดยังค้าง "เกินกำหนด" */
+  it.each(['IV', 'IVT'])('%s — เรียบร้อย · เกินกำหนดยังเตือน · มีใบเสร็จแล้วไม่เตือน · ยอดคงค้างยังโชว์', (kind) => {
+    const today = '2026-09-17';
+    const fresh = contactHistoryCard(doc({ kind, paid: 0, outstanding: 5000, dueDate: '2026-10-01', hasReceipt: false }), 'x', today);
+    expect(fresh.status).toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+    expect(fresh.outstanding).toBe(5000);
+
+    const late = contactHistoryCard(doc({ kind, paid: 0, outstanding: 5000, dueDate: '2026-09-01', hasReceipt: false }), 'x', today);
+    expect(late.status).toEqual({ label: 'เกินกำหนด', tone: 'due' });
+
+    const billed = contactHistoryCard(doc({ kind, paid: 0, outstanding: 5000, dueDate: '2026-09-01', hasReceipt: true }), 'x', today);
+    expect(billed.status).toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+  });
 });

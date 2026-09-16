@@ -9,17 +9,13 @@ import type pg from 'pg';
 import { today } from '@drivegolight/core';
 import { returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
+import { releaseParentWith } from './doc-lock';
 
 export async function voidSalesDocWith(
   c: pg.PoolClient | pg.Client, id: string, reason: string, userId: string | null,
 ): Promise<void> {
   {
-    const child = await c.query(
-      `select doc_no from documents where parent_doc_id = $1 and status <> 'void' limit 1`, [id],
-    );
-    if (child.rows[0]) {
-      throw new Error(`ยกเลิกไม่ได้เพราะมีเอกสาร ${child.rows[0].doc_no} ออกต่อจากใบนี้แล้ว`);
-    }
+    /* ยกเลิกได้แม้มีใบต่อ — ใบต่อยังอยู่และนับยอดตามเดิม (ต้นแบบ voidDoc · ผู้ใช้เลือก 17 ก.ย. 2569) */
 
     /* ใบที่ถูกวางบิลไปแล้วยกเลิกไม่ได้ — ลูกค้าถือใบวางบิลที่มีเลขใบนี้อยู่ในมือ
        ถ้าหายไปเฉย ๆ ยอดบนกระดาษกับในระบบจะไม่ตรงกันโดยไม่มีใครอธิบายได้ */
@@ -41,5 +37,8 @@ export async function voidSalesDocWith(
       `update documents set status='void', voided_at=now(), voided_reason=$2 where id=$1`,
       [id, reason || 'ยกเลิกโดยผู้ใช้'],
     );
+
+    /* ใบเสนอราคาที่ไม่เหลือใบต่อ กลับเป็นค้างส่งมอบ — ไม่งั้นหน้าแรกนับงานค้างขาดไปตลอด */
+    await releaseParentWith(c, id);
   }
 }

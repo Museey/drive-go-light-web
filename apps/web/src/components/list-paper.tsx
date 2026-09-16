@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { getShop } from '@/lib/queries';
 import { thDateLong } from '@/lib/format';
 import { PrintButton } from '@/app/income/[id]/print/print-button';
+import { BackFab } from './back-fab';
 
 /**
  * กระดาษสำหรับพิมพ์ "รายการ" — ทะเบียนผู้ติดต่อ สต๊อก รายการค้างทำ ค่าใช้จ่าย
@@ -36,6 +37,8 @@ export async function ListPaper({
         </span>
         <PrintButton />
       </div>
+
+      <BackFab solo fallbackHref={backHref} />
 
       <div className="printview">
         <div className="paper">

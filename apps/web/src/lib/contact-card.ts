@@ -1,5 +1,5 @@
 import { payLabel } from './format';
-import type { CardStatus, DocCard } from './doc-card';
+import { incomeStatus, type CardStatus, type DocCard } from './doc-card';
 
 /**
  * ผู้ติดต่อ → การ์ด (จอต่ำกว่า 1280 · ต้นแบบของทีม `a.mparty` / `.mdetail`)
@@ -83,10 +83,23 @@ export function contactDetailRows(c: {
 
 /** เอกสารหนึ่งใบในประวัติซื้อขาย → การ์ดเอกสารของเฟส 2 */
 export function contactHistoryCard(
-  d: { id: string; kind: string; docNo: string; docDate: string; payable: number; paid: number; outstanding: number },
+  d: {
+    id: string; kind: string; docNo: string; docDate: string; payable: number; paid: number; outstanding: number;
+    dueDate?: string | null; hasReceipt?: boolean;
+  },
   partyName: string,
+  todayIso = '',
 ): DocCard {
-  const pay = payLabel(d.outstanding, d.paid);
+  /* ใบส่งมอบ: ชิปเดียวกับหน้ารายรับ (incomeStatus) — ใบอื่นบอกสถานะการชำระเหมือนเดิม */
+  const pay = d.kind === 'IV' || d.kind === 'IVT'
+    ? (() => {
+        const s = incomeStatus({
+          kind: d.kind, outstanding: d.outstanding, dueDate: d.dueDate ?? null,
+          invoice: null, receipt: d.hasReceipt ? true : null, voided: false,
+        }, todayIso);
+        return { text: s.label, tone: s.tone as 'ok' | 'warn' | 'due' };
+      })()
+    : payLabel(d.outstanding, d.paid);
   return {
     /* ประวัติของผู้ขายเป็นใบซื้อ/ค่าใช้จ่าย — อยู่ที่หน้ารายจ่าย ไม่ใช่รายรับ */
     href: d.kind === 'PO' || d.kind === 'EX' ? `/expense/${d.id}` : `/income/${d.id}`,

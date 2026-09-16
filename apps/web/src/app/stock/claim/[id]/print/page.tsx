@@ -3,6 +3,7 @@ import { isUuid } from '@/lib/ids';
 import { query, requireTab } from '@/lib/auth';
 import { CLAIM_SIDE, getClaim, kindLabel } from '@/lib/claims';
 import { getShop } from '@/lib/queries';
+import { BackFab } from '@/components/back-fab';
 import { PrintButton } from '../../../../income/[id]/print/print-button';
 import { baht, thDateLong } from '@/lib/format';
 
@@ -35,6 +36,8 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
         </span>
         <PrintButton />
       </div>
+
+      <BackFab solo fallbackHref={`/stock/claim/${id}`} />
 
       <div className="printview">
         <div className="paper">

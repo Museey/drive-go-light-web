@@ -5,18 +5,26 @@ import Link from 'next/link';
 import { voidDocAction } from './actions';
 import { nextKinds, type SalesKind } from '@/lib/sales-rules';
 import { KIND_LABEL } from '@/lib/format';
+import { EditGate } from './edit-gate';
 
 /**
  * ปุ่มบนหน้าเอกสาร — ออกใบต่อ แก้ไข และยกเลิก
  * ปุ่มที่ทำอะไรย้อนกลับไม่ได้ต้องยืนยันสองจังหวะและต้องบอกเหตุผล
+ *
+ * ใบที่ออกใบต่อไปแล้ว ไม่มีปุ่มออกใบต่อซ้ำ (ต้นแบบ — แถบขั้นตอนพาไปใบต่อที่มีอยู่)
+ * แก้ไขผ่าน popup "เอกสารได้บันทึกเรียบร้อยแล้ว" · ยกเลิกได้ทุกใบที่ยังไม่ยกเลิก (ต้นแบบ voidDoc)
  */
 export function DocActions({
-  id, kind, canEdit, editReason, startVoiding = false,
+  id, kind, docNo, partyName, canEdit, editReason, hasChild, startVoiding = false,
 }: {
   id: string;
   kind: string;
+  docNo: string;
+  partyName: string;
   canEdit: boolean;
   editReason?: string;
+  /** มีใบต่อที่ยังไม่ยกเลิกแล้ว */
+  hasChild: boolean;
   /**
    * เปิดแผงยืนยันการยกเลิกไว้เลยตั้งแต่เข้าหน้า
    *
@@ -28,7 +36,7 @@ export function DocActions({
   const [voiding, setVoiding] = useState(startVoiding);
   const [reason, setReason] = useState('');
 
-  const next = nextKinds(kind as SalesKind);
+  const next = hasChild ? [] : nextKinds(kind as SalesKind);
 
   if (voiding) {
     return (
@@ -63,15 +71,10 @@ export function DocActions({
           ออก{KIND_LABEL[k]}
         </Link>
       ))}
-      {canEdit ? (
-        <Link className="btn" href={`/income/${id}/edit`}>แก้ไข</Link>
-      ) : (
-        <span className="subtle" title={editReason}>แก้ไขไม่ได้</span>
-      )}
+      <EditGate id={id} kind={kind} docNo={docNo} partyName={partyName}
+                editable={canEdit} reason={editReason} onVoid={() => setVoiding(true)} />
       <Link className="btn" href={`/income/${id}/print`}>พิมพ์เอกสาร</Link>
-      {canEdit ? (
-        <button className="btn danger" type="button" onClick={() => setVoiding(true)}>ยกเลิกเอกสาร</button>
-      ) : null}
+      <button className="btn danger" type="button" onClick={() => setVoiding(true)}>ยกเลิกเอกสาร</button>
     </div>
   );
 }

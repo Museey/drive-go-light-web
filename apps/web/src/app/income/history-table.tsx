@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { DocCards } from '@/components/doc-cards';
 import { RowLink } from '@/components/row-link';
 import { incomeDocCard, incomeStatus } from '@/lib/doc-card';
+import { EditGate } from './edit-gate';
 import { baht, thDate } from '@/lib/format';
 import type { listIncomeDocs } from '@/lib/queries';
 import { RowPay } from './row-pay';
@@ -81,9 +82,17 @@ export function IncomeHistoryTable({ rows, todayIso, mayEdit, banks, cardTitle =
                   {/* ปุ่มสองบรรทัด: รับชำระ(เขียว) แก้ไข(แดงอ่อน) / พิมพ์(เทา) ลบ(แดงเข้ม) — มี 3 ปุ่ม = บน 2 ล่าง 1 (ผู้ใช้กำหนด) */}
                   <span className="row-acts grid2">
                     {canPay ? <RowPay docId={r.id} docNo={r.docNo} outstanding={r.outstanding} today={todayIso} banks={banks} /> : null}
-                    {/* กติกา (ผู้ใช้กำหนด): ใบที่ตัดสต๊อก/รับเงินแล้วแก้ไม่ได้ — ให้ยกเลิกแล้วออกใหม่ · ปุ่มจางพร้อมเหตุผล */}
-                    {!r.voided && mayEdit && r.kind !== 'RC' && r.paid <= 0.004 ? <Link className="btn sm act-edit" href={`/income/${r.id}/edit`}>แก้ไข</Link>
-                      : !r.voided && mayEdit ? <span className="btn sm act-edit off" title="ใบที่ตัดสต๊อก/รับเงินแล้วแก้ไม่ได้ — ยกเลิกแล้วออกใหม่">แก้ไข</span> : null}
+                    {/* แก้ไขถามก่อนทุกครั้ง (popup "เอกสารได้บันทึกเรียบร้อยแล้ว" — ผู้ใช้กำหนด 17 ก.ย. 2569)
+                        กติกาตามต้นแบบ: ใบที่ตัดสต๊อก/รับเงินแล้วแก้ไม่ได้ — popup บอกเหตุผล เหลือทางยกเลิกแล้วออกใหม่
+                        ตรงกับ editRuleWith ใน lib/doc-lock.ts ที่หน้าแก้ไขตรวจซ้ำฝั่งเซิร์ฟเวอร์ */}
+                    {!r.voided && mayEdit ? (
+                      <EditGate id={r.id} kind={r.kind} docNo={r.docNo} partyName={r.partyName}
+                                editable={r.kind !== 'RC' && r.paid <= 0.004}
+                                reason={r.kind === 'RC'
+                                  ? 'ใบเสร็จตัดสต๊อกแล้ว แก้ไม่ได้ — ให้ยกเลิกใบนี้แล้วออกใบใหม่'
+                                  : 'ใบนี้รับเงินแล้ว แก้ไม่ได้ — ให้ยกเลิกใบนี้แล้วออกใบใหม่'}
+                                buttonClass={r.kind !== 'RC' && r.paid <= 0.004 ? 'btn sm act-edit' : 'btn sm act-edit dim'} />
+                    ) : null}
                     <Link className="btn sm act-print" href={`/income/${r.id}/print`}>พิมพ์</Link>
                     {!r.voided && mayEdit ? <Link className="btn sm act-del" href={`/income/${r.id}?void=1`}>ลบ</Link> : null}
                   </span>

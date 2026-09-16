@@ -225,6 +225,7 @@ export interface ContactHistory {
   docs: {
     id: string; kind: string; docNo: string; docDate: string;
     payable: number; paid: number; outstanding: number;
+    dueDate: string | null; hasReceipt: boolean;
   }[];
   totalAmount: number;
   totalOutstanding: number;
@@ -234,8 +235,10 @@ export interface ContactHistory {
 export async function getContactHistory(id: string): Promise<ContactHistory> {
   return query(async (c) => {
     const { rows } = await c.query(
-      `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.payable,
-              coalesce(p.paid, 0) as paid
+      `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.payable, d.due_date,
+              coalesce(p.paid, 0) as paid,
+              exists (select 1 from documents x
+                       where x.parent_doc_id = d.id and x.kind = 'RC' and x.status <> 'void') as has_receipt
        from documents d
        left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
               on p.doc_id = d.id
@@ -250,7 +253,7 @@ export async function getContactHistory(id: string): Promise<ContactHistory> {
       const paid = n(r.paid);
       return {
         id: r.id, kind: r.kind, docNo: r.doc_no, docDate: r.doc_date,
-        payable, paid,
+        payable, paid, dueDate: r.due_date as string | null, hasReceipt: Boolean(r.has_receipt),
         outstanding: Math.round((payable - paid) * 100) / 100,
       };
     });

@@ -47,14 +47,41 @@ describe('incomeDocCard — เอกสารขาย', () => {
   });
 
   /* ใบเสนอราคายังไม่ใช่หนี้ — ต้นแบบจึงไม่มีบรรทัดคงค้างบนการ์ดใบเสนอราคา */
-  it('ใบเสนอราคา — ไม่มีบรรทัดคงค้าง สถานะบอกว่าค้างส่งมอบหรือออกใบต่อแล้ว', () => {
+  /* ออกใบต่อแล้ว = "เรียบร้อย" (ผู้ใช้กำหนด 17 ก.ย. 2569 — เดิม "ออกใบต่อแล้ว") */
+  it('ใบเสนอราคา — ไม่มีบรรทัดคงค้าง สถานะบอกว่าค้างส่งมอบหรือเรียบร้อย', () => {
     const open = incomeDocCard(inc({ kind: 'QT', outstanding: 5350 }), TODAY);
     expect(open.outstanding).toBe(null);
     expect(open.status).toEqual({ label: 'ค้างส่งมอบ', tone: 'warn' });
 
     const done = incomeDocCard(inc({ kind: 'QT', outstanding: 5350, receipt: { id: 'x', no: 'RC-1' } }), TODAY);
     expect(done.outstanding).toBe(null);
-    expect(done.status).toEqual({ label: 'ออกใบต่อแล้ว', tone: 'ok' });
+    expect(done.status).toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+
+    const delivered = incomeDocCard(inc({ kind: 'QT', outstanding: 5350, invoice: { id: 'y', no: 'IVT-1' } }), TODAY);
+    expect(delivered.status).toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+  });
+
+  /* ใบส่งมอบ: บันทึกแล้ว = ส่งรถแล้ว "เรียบร้อย" · เลยวันครบกำหนดยังไม่ได้เงิน ยังต้องเตือน */
+  it.each(['IV', 'IVT'])('%s — เรียบร้อยแม้ยังค้าง · ยอดคงค้างยังโชว์ · เลยครบกำหนดขึ้นเกินกำหนด', (kind) => {
+    const fresh = incomeDocCard(inc({ kind, outstanding: 5350, dueDate: '2026-10-01' }), TODAY);
+    expect(fresh.status).toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+    expect(fresh.outstanding).toBe(5350);
+
+    expect(incomeStatus(inc({ kind, outstanding: 5350, dueDate: TODAY }), TODAY))
+      .toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+    expect(incomeStatus(inc({ kind, outstanding: 5350, dueDate: '2026-09-15' }), TODAY))
+      .toEqual({ label: 'เกินกำหนด', tone: 'due' });
+    expect(incomeStatus(inc({ kind, outstanding: 0 }), TODAY)).toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+  });
+
+  /* หนี้ย้ายไปอยู่ที่ใบเสร็จแล้ว (หน้าลูกหนี้ก็ไม่นับใบส่งมอบที่มีใบเสร็จ) — ไม่เตือนซ้ำที่ใบส่งมอบ */
+  it('ใบส่งมอบที่ออกใบเสร็จแล้ว — เรียบร้อย ไม่เตือนเกินกำหนด', () => {
+    expect(incomeStatus(inc({ kind: 'IVT', outstanding: 5350, dueDate: '2026-09-01', receipt: { id: 'r', no: 'RC-9' } }), TODAY))
+      .toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+  });
+
+  it('ใบส่งมอบที่ยกเลิก — ยกเลิก ไม่ใช่เรียบร้อย', () => {
+    expect(incomeStatus(inc({ kind: 'IV', voided: true }), TODAY)).toEqual({ label: 'ยกเลิก', tone: 'plain' });
   });
 
   it('ใบที่ยกเลิก — ชิปกลาง ไม่ใช่สีเตือน และการ์ดรู้ว่าต้องจาง', () => {
