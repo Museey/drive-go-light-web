@@ -373,10 +373,8 @@ end $policy$;
  * TypeScript คิดต่อ — ตรรกะเรื่องช่วงทดลองใช้กับวันหมดอายุมีที่อยู่ที่เดียว
  * ถ้าเขียนซ้ำในนี้ วันหนึ่งสองที่จะไม่ตรงกันแล้วไม่มีใครรู้ว่าอันไหนถูก
  *
- * จำนวนผู้ใช้กับอีเมลเจ้าของอ่านทีละอู่โดยกรอง tenant_id ในคำสั่งอ่านตรง ๆ
- * **ไม่พึ่ง RLS** — ฟังก์ชันนี้เป็น SECURITY DEFINER และ users ปิด force RLS ไว้
- * (db/012_auth_rls.sql) นโยบายจึงไม่มีผล เคยทำให้นับผู้ใช้รวมทุกอู่ (แก้ใน db/031)
- * คืนเฉพาะจำนวนกับอีเมลเจ้าของ ไม่เปิดตาราง users ให้ผู้ให้บริการอ่าน
+ * จำนวนผู้ใช้อ่านทีละอู่โดยตั้ง app.tenant_id ชั่วคราว **เพื่อไม่ต้องเปิด users
+ * ให้ผู้ให้บริการทั้งตาราง** ซึ่งจะทำให้อ่าน password_hash ของทุกคนได้ไปด้วย
  */
 create or replace function ops.list_shops(p_session bytea)
 returns table (
@@ -387,23 +385,22 @@ returns table (
   plan        text,
   ever_paid   boolean,
   user_count  integer,
-  max_users   integer,
-  owner_email citext
+  max_users   integer
 )
 language plpgsql
 security definer
 set search_path = ops, public, pg_temp
 as $$
 declare
+  v_prev  text := coalesce(current_setting('app.tenant_id', true), '');
   v_rows  jsonb;
   r       jsonb;
-  v_id    uuid;
   v_n     integer;
-  v_email citext;
 begin
   perform ops.require_session(p_session);
 
-  /* รวบผลลัพธ์ให้จบก่อนแล้วค่อยวน — ระหว่างวนเราอ่าน users ทีละอู่ */
+  /* รวบผลลัพธ์ให้จบก่อนแล้วค่อยวน — ระหว่างวนเราสลับ app.tenant_id ไปมา
+     ถ้าวนบนเคอร์เซอร์ที่ยังอ่านค้างอยู่ การสลับตัวแปรจะไปกระทบแถวที่ยังไม่ได้ดึง */
   select coalesce(jsonb_agg(x order by x->>'name'), '[]'::jsonb) into v_rows
     from (
       select jsonb_build_object(
@@ -421,31 +418,23 @@ begin
 
   for r in select * from jsonb_array_elements(v_rows)
   loop
-    v_id := (r->>'id')::uuid;
+    /* นับผู้ใช้ทีละอู่ **เพื่อไม่ต้องเปิด users ให้ผู้ให้บริการทั้งตาราง**
+       ซึ่งจะทำให้อ่าน password_hash ของทุกคนได้ไปด้วย */
+    perform set_config('app.tenant_id', r->>'id', true);
+    select count(*)::int into v_n from users where active;
 
-    /* กรองด้วย tenant_id ตรง ๆ — เดิมตั้ง app.tenant_id แล้วหวังให้ RLS กรอง
-       ซึ่งไม่มีผลกับ SECURITY DEFINER เพราะ users ปิด force RLS ไว้ (นับได้ทุกอู่รวมกัน) */
-    select count(*)::int into v_n
-      from users u where u.tenant_id = v_id and u.active;
-
-    /* อีเมลเจ้าของอู่ — คอนโซลต้องรู้ว่าลิงก์ตั้งรหัสผ่านจะไปเข้าบัญชีไหน (ผู้ใช้ขอ)
-       เจ้าของที่เปิดใช้อยู่รายแรกสุด เรียงให้แน่นอนด้วยวันสร้าง */
-    select u.email into v_email
-      from users u
-     where u.tenant_id = v_id and u.role = 'owner' and u.active
-     order by u.created_at, u.id limit 1;
-
-    tenant_id   := v_id;
-    name        := r->>'name';
-    created_on  := (r->>'created_on')::date;
-    expires_on  := (r->>'expires_on')::date;
-    plan        := r->>'plan';
-    ever_paid   := (r->>'ever_paid')::boolean;
-    user_count  := v_n;
-    max_users   := (r->>'max_users')::integer;
-    owner_email := v_email;
+    tenant_id  := (r->>'id')::uuid;
+    name       := r->>'name';
+    created_on := (r->>'created_on')::date;
+    expires_on := (r->>'expires_on')::date;
+    plan       := r->>'plan';
+    ever_paid  := (r->>'ever_paid')::boolean;
+    user_count := v_n;
+    max_users  := (r->>'max_users')::integer;
     return next;
   end loop;
+
+  perform set_config('app.tenant_id', v_prev, true);
 end;
 $$;
 
@@ -535,20 +524,23 @@ set search_path = ops, public, pg_temp
 as $$
 declare
   v_op    uuid := ops.require_session(p_session);
+  v_prev  text := coalesce(current_setting('app.tenant_id', true), '');
   v_user  uuid;
   v_email citext;
 begin
+  perform set_config('app.tenant_id', p_tenant::text, true);
+
   select u.id, u.email into v_user, v_email
-    from users u
-   where u.tenant_id = p_tenant and u.role = 'owner' and u.active
-   order by u.created_at, u.id limit 1;
+    from users u where u.role = 'owner' and u.active limit 1;
 
   if v_user is null then
+    perform set_config('app.tenant_id', v_prev, true);
     raise exception 'อู่นี้ยังไม่มีบัญชีเจ้าของที่ใช้งานอยู่';
   end if;
 
   perform auth.issue_setup_token(v_user, p_token_hash, 'reset', p_expires_at);
 
+  perform set_config('app.tenant_id', v_prev, true);
   perform ops.log(v_op, 'issue_owner_reset', p_tenant,
     jsonb_build_object('email', v_email::text));
   return v_email;
