@@ -11,6 +11,7 @@ import { baht } from '@/lib/format';
 import { ColPicker } from '@/components/col-picker';
 import { CUST_COLS, CUST_COLS_FIXED, getCustHiddenCols, type CustCol } from '@/lib/ui-prefs';
 import { saveCustColsAction } from './actions';
+import { contactCard } from '@/lib/contact-card';
 import { SavedNotice } from '@/components/saved-notice';
 
 export const dynamic = 'force-dynamic';
@@ -78,6 +79,17 @@ export default async function CustomersPage({
       <SubNav menu="customer" current={sp.kind === 'vendor' ? 'vendor' : 'customer'}>
       {/* แก้ไขผู้ติดต่อจากทะเบียน บันทึกแล้วกลับมาที่นี่พร้อมการ์ด */}
       <SavedNotice saved={sp.saved} savedId={sp.savedId} />
+
+      {/* จอต่ำกว่า 1280: ช่องค้นหายาว + ปุ่มเพิ่มสั้น (ต้นแบบ `.mcbar`)
+          Enter ส่งฟอร์มเอง — ไม่มีปุ่มค้นหา ช่องค้นหาจะได้กว้างเต็มที่ */}
+      <form autoComplete="off" action="/customers" method="get" className="mcbar" data-enter="own">
+        {sp.kind ? <input type="hidden" name="kind" value={sp.kind} /> : null}
+        {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
+        <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
+               placeholder="ค้นหา — ชื่อ รหัส เบอร์ หรือทะเบียนรถ" aria-label="ค้นหาผู้ติดต่อ" />
+        <Link className="mc-add" href={`/customers/new?kind=${sp.kind === 'vendor' ? 'vendor' : 'customer'}`}>＋ เพิ่ม</Link>
+      </form>
+
       <div className="card">
         <div className="toolbar">
           {/* ชิปกลุ่มเดียวกันต้องอยู่ใน .tag-row — ลูกตรงของ .toolbar บนมือถือยืดเต็มจอเรียงลงทีละปุ่ม */}
@@ -94,21 +106,50 @@ export default async function CustomersPage({
 
           <div className="spacer" />
 
-          <form autoComplete="off" action="/customers" method="get" style={{ display: 'flex', gap: 6 }}>
+          <form autoComplete="off" action="/customers" method="get" className="desk-only" style={{ gap: 6 }}>
             {sp.kind ? <input type="hidden" name="kind" value={sp.kind} /> : null}
             {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
             <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
                    placeholder="กรอกคำค้นหา — ชื่อ รหัส เบอร์โทร หรือทะเบียนรถ" style={{ width: 250 }} />
             <button className="btn" type="submit">ค้นหา</button>
           </form>
+          {/* จอแคบไม่มีตารางให้ตั้งค่าคอลัมน์ */}
+          <span className="desk-only">
           <ColPicker cols={CUST_COLS} hidden={hidden} fixed={CUST_COLS_FIXED} action={saveCustColsAction}
                      title="ตั้งค่าการแสดงผลทะเบียนลูกค้า / ผู้ขาย" basicHint="พื้นฐาน: ซ่อน ที่อยู่ · เครดิต · ยอดสะสม" />
+          </span>
         </div>
 
         {rows.length === 0 ? (
           <div className="empty">ไม่พบผู้ติดต่อที่ตรงกับเงื่อนไข</div>
         ) : (
-          <div className="tablewrap">
+          <>
+          <div className="list-head">
+            <h2>{sp.q ? 'ผลการค้นหา' : sp.kind === 'vendor' ? 'ผู้ขายทั้งหมด' : sp.kind === 'customer' ? 'ลูกค้าทั้งหมด' : 'ผู้ติดต่อทั้งหมด'}</h2>
+            <span className="cnt">{total.toLocaleString('en-US')} ราย{lastPage > 1 ? ` · หน้า ${page}/${lastPage}` : ''}</span>
+          </div>
+
+          {/* จอต่ำกว่า 1280: การ์ดใบละคน ปิดท้ายด้วยลูกศรอย่างเดียว (ผู้ใช้เลือก · ต้นแบบ a.mparty)
+              1280 ขึ้นไปและตอนพิมพ์ยังเป็นตารางเดิม */}
+          <div className="contact-cards">
+            {rows.map((row) => {
+              const c = contactCard(row);
+              return (
+                <Link key={row.id} href={c.href} className="mparty">
+                  <span className="who">
+                    <b className="nm">{c.name}</b>
+                    <span className="meta">
+                      <span className={c.kind.tone === 'plain' ? 'chip' : `chip ${c.kind.tone}`}>{c.kind.label}</span>
+                      {' '}{c.meta.join(' · ')}
+                    </span>
+                  </span>
+                  <span className="chev" aria-hidden="true">›</span>
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="tablewrap contact-table">
             {/* ตารางพอดีหน้า ตัวอักษร 14px (ผู้ใช้กำหนด): รหัส · ชื่อ(ที่เหลือ) · โทร · ทะเบียนรถ/เลขภาษี · เครดิต · ยอดสะสม · คงค้าง · ปุ่ม */}
             <table className="tbl hist fit cust">
               {/* คอลัมน์ตามการ์ดตั้งค่าการแสดงผล (ผู้ใช้กำหนด: ปกติซ่อน ที่อยู่ · เครดิต · ยอดสะสม) — ชื่อ 260px พอดีข้อมูลที่ 16px ยาวกว่าตัดบรรทัดในช่อง */}
@@ -186,15 +227,33 @@ export default async function CustomersPage({
               </tbody>
             </table>
           </div>
+          </>
         )}
 
+        {/* จอแคบเหลือเฉพาะ "แสดงต่อหน้า" — เลขหน้าและก่อนหน้า/ถัดไปอยู่ที่ปุ่มลอยข้างล่าง */}
         <div className="pager">
-          <span>หน้า {page} จาก {lastPage}</span>
+          <span className="desk-only">หน้า {page} จาก {lastPage}</span>
           <PageSize base="/customers" size={pageSize} keep={filters} />
           <div className="spacer" />
-          {page > 1 ? <Link className="btn" href={q({ page: page - 1 })}>ก่อนหน้า</Link> : null}
-          {page < lastPage ? <Link className="btn" href={q({ page: page + 1 })}>ถัดไป</Link> : null}
+          {page > 1 ? <Link className="btn desk-only" href={q({ page: page - 1 })}>ก่อนหน้า</Link> : null}
+          {page < lastPage ? <Link className="btn desk-only" href={q({ page: page + 1 })}>ถัดไป</Link> : null}
         </div>
+
+        {/* ปุ่มแบ่งหน้าแบบลอย (ของเฟส 3) + ตัวเว้นท้ายรายการกันบังการ์ดใบสุดท้าย */}
+        {lastPage > 1 ? (
+          <>
+            <nav className="mpager narrow-only" aria-label="เลื่อนหน้า">
+              {page > 1
+                ? <Link className="mpg" href={q({ page: page - 1 })}>‹ ก่อนหน้า</Link>
+                : <span className="mpg off" aria-disabled="true">‹ ก่อนหน้า</span>}
+              <span className="mpg-info">{page} / {lastPage}</span>
+              {page < lastPage
+                ? <Link className="mpg" href={q({ page: page + 1 })}>ถัดไป ›</Link>
+                : <span className="mpg off" aria-disabled="true">ถัดไป ›</span>}
+            </nav>
+            <div className="mpager-sp narrow-only" />
+          </>
+        ) : null}
       </div>
       </SubNav>
     </Shell>
