@@ -33,4 +33,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '028_purged.sql',
   '029_kits.sql',
   '030_kit_prices.sql',
+  '031_ops_owner_scope.sql',
 ];
