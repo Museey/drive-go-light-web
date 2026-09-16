@@ -1,7 +1,9 @@
 import 'server-only';
 import { query } from './auth';
 import { mutate } from './mutate';
-import { linkPendingWith, listPendingItemsWith, type PendingItem } from './pending-core';
+import {
+  createProductFromPendingWith, linkPendingWith, listPendingItemsWith, type PendingItem,
+} from './pending-core';
 
 /**
  * รายการค้างทำ — ชื่อสินค้าที่พนักงานพิมพ์ลงเอกสารเองโดยไม่ได้เลือกจากทะเบียน
@@ -53,15 +55,6 @@ export async function restoreIgnoredItems(): Promise<void> {
 export async function createProductFromPending(
   nameNorm: string, code: string, name: string, unit: string, cost: number, priceA: number,
 ): Promise<{ productId: string; linked: number }> {
-  return mutate('stock', async (c) => {
-    const { rows } = await c.query(
-      `insert into products (tenant_id, code, name, unit, last_cost, price_a, price_b, price_c)
-       values (current_tenant_id(), $1, $2, $3, $4, $5, $5, $5)
-       returning id`,
-      [code, name, unit, cost, priceA],
-    );
-    const productId = rows[0].id;
-    const linked = await linkPendingWith(c, nameNorm, productId);
-    return { productId, linked };
-  }, { sub: 'pending' });
+  return mutate('stock', (c) => createProductFromPendingWith(c, nameNorm, { code, name, unit, cost, priceA }),
+    { sub: 'pending' });
 }

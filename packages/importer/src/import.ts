@@ -354,6 +354,10 @@ export async function importBackup(
         qty(num(p.min)), qty(num(p.max)), text(p.id),
         COST_METHODS.has(p._costMethod) ? p._costMethod : 'FEFO',
         BARCODE_TYPES.has(p._barcodeType) ? p._barcodeType : 'CODE39',
+        /* ไฟล์สำรองเขียน active: false ให้สินค้าที่ปิดใช้งาน (backup.ts) — เดิมตัวนำเข้าไม่อ่าน
+           กู้คืนแล้วสินค้าที่ปิดไว้กลับมาใช้งานหมด และกินโควตา 3,000 รายการ (เจอ 16 ก.ย. 2569)
+           ไม่มีฟิลด์ = ใช้งาน (ไฟล์รุ่นเก่า) */
+        p.active !== false,
       ]);
     }
     if (dupBarcode) {
@@ -365,7 +369,7 @@ export async function importBackup(
     await insertRows(client, 'products',
       ['id', 'tenant_id', 'code', 'oem', 'barcode', 'name', 'unit', 'category_id',
        'last_cost', 'price_a', 'price_b', 'price_c', 'qty_min', 'qty_max', 'legacy_id',
-       'cost_method', 'barcode_type'],
+       'cost_method', 'barcode_type', 'active'],
       productRows);
 
     /* ---------- ชุดอะไหล่ซ่อมบำรุง (029–030) ----------

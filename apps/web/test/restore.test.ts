@@ -299,6 +299,62 @@ describe.skipIf(!DB_URL)('กู้คืนข้อมูลทับอู่
     expect(await summary(target)).toEqual(before);
   });
 
+  /**
+   * ขีดจำกัดสินค้าที่ใช้งาน 3,000 รายการ (16 ก.ย. 2569)
+   * ไฟล์ที่เกินต้องถูกปฏิเสธ **ก่อนล้างข้อมูลเดิม** — ไม่งั้นอู่เสียข้อมูลเดิมไปแล้วค่อยรู้ว่ากู้ไม่ได้
+   */
+  const withProducts = (active: number, inactive: number) => {
+    const fixture = JSON.parse(readFileSync(resolve(ROOT, 'fixtures/demo-backup.json'), 'utf8'));
+    const mk = (i: number, on: boolean) => ({
+      id: `lim-${on ? 'on' : 'off'}-${i}`, code: `LIM-${on ? 'ON' : 'OFF'}-${i}`, name: `สินค้าโควตา ${i}`,
+      unit: 'ชิ้น', ...(on ? {} : { active: false }),
+    });
+    return {
+      ...fixture,
+      /* สินค้าเดิมของไฟล์ทดสอบถูกแทนทั้งหมด เอกสารที่อ้างสินค้าเดิมยังนำเข้าได้เพราะบรรทัดเก็บชื่อไว้เอง */
+      products: [
+        ...Array.from({ length: active }, (_, i) => mk(i, true)),
+        ...Array.from({ length: inactive }, (_, i) => mk(i, false)),
+      ],
+    };
+  };
+
+  it('ตรวจไฟล์ก่อนกู้คืน: บอกว่าสินค้าที่ใช้งานเกินกี่รายการ — นับเฉพาะที่ใช้งาน', () => {
+    const over = previewBackup(JSON.stringify(withProducts(3050, 40)));
+    expect(over.productLimit).toEqual({ total: 3050, over: 50 });
+
+    const ok = previewBackup(JSON.stringify(withProducts(3000, 40)));
+    expect(ok.productLimit, 'ปิดใช้งาน 40 รายการไม่นับ').toBe(null);
+  });
+
+  it('กู้คืนไฟล์ที่เกินถูกปฏิเสธก่อนล้างข้อมูลเดิม — ข้อมูลเดิมยังอยู่ครบ', async () => {
+    const before = await summary(target);
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [target]);
+    await app.query('begin');
+    const err = await restoreIntoTenant(app, target, parseBackupFile(JSON.stringify(withProducts(3001, 0))))
+      .then(() => null, (e) => e);
+    /* ดูในทรานแซกชันเดียวกันก่อนย้อน — หลัง rollback ข้อมูลกลับมาเสมอ จะบอกไม่ได้ว่าล้างไปก่อนหรือเปล่า */
+    const inside = await app.query(
+      `select (select count(*)::int from products) as products, (select count(*)::int from documents) as docs`);
+    await app.query('rollback');
+
+    expect(inside.rows[0], 'ต้องยังไม่ล้างอะไรตอนปฏิเสธ').toEqual({ products: before.products, docs: before.documents });
+
+    expect(err?.message).toBe('ไฟล์นี้มีสินค้าใช้งาน 3,001 รายการ เกินกำหนด 3,000 — ไม่ได้กู้คืน ข้อมูลเดิมยังอยู่ครบ');
+    expect(await summary(target)).toEqual(before);
+  });
+
+  it('สินค้าที่ปิดใช้งานในไฟล์ กลับมาเป็นปิดใช้งาน — ไม่ถูกเปิดขึ้นมากินโควตา', async () => {
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [target]);
+    await app.query('begin');
+    /* ใช้งานพอดี 3,000 + ปิดใช้งาน 25 — ถ้าตัวนำเข้าเปิดทุกตัว ฐานข้อมูลจะปฏิเสธที่ 3,025 */
+    await restoreIntoTenant(app, target, parseBackupFile(JSON.stringify(withProducts(3000, 25))));
+    const { rows } = await app.query(
+      `select count(*) filter (where active)::int as on, count(*) filter (where not active)::int as off from products`);
+    await app.query('rollback');
+    expect(rows[0]).toEqual({ on: 3000, off: 25 });
+  });
+
   it('ไฟล์แบบ 6.4 บอกล่วงหน้าว่ากลุ่มไหนจะไม่ตามมา และต้องให้ยืนยันก่อน', () => {
     const fixture = JSON.parse(readFileSync(resolve(ROOT, 'fixtures/demo-backup.json'), 'utf8'));
     const v64 = {

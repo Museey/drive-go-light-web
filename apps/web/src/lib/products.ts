@@ -7,6 +7,7 @@ import { mutate } from './mutate';
 import { savePic } from './pics';
 import { listExpiringLotsWith, REMAINING_LOTS_SQL, type ExpiringLotRow } from './expiry';
 import { BOOK_VALUE_SQL, consumeStock, receiveStock } from './stock-cost';
+import { activeProductCountWith, ensureActivationRoomWith, ensureProductRoomWith } from './product-limit';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
@@ -347,9 +348,16 @@ async function writeSuppliers(c: pg.PoolClient, productId: string, list: Product
     );
   }
 }
+/** สินค้าที่ใช้งานทั้งอู่ — ตัวนับ "ใช้งานอยู่ N / 3,000" ที่หัวทะเบียนสินค้า ไม่ขึ้นกับตัวกรอง */
+export async function activeProductCount(): Promise<number> {
+  return query((c) => activeProductCountWith(c));
+}
+
 export async function saveProduct(input: ProductInput): Promise<string> {
   return mutate('stock', async (c, userId) => {
+    /* สินค้าที่ใช้งานไม่เกิน 3,000 — ฐานข้อมูลบังคับอยู่แล้ว ตรวจก่อนเพื่อได้ข้อความที่บอกว่าต้องทำอะไรต่อ */
     if (input.id) {
+      await ensureActivationRoomWith(c, input.id, input.active);
       await c.query(
         `update products set code=$2, oem=$3, name=$4, unit=$5, category_id=$6,
                 last_cost=$7, price_a=$8, price_b=$9, price_c=$10,
@@ -365,6 +373,7 @@ export async function saveProduct(input: ProductInput): Promise<string> {
       return input.id;
     }
 
+    if (input.active) await ensureProductRoomWith(c, 1);
     const { rows } = await c.query(
       `insert into products (tenant_id, code, oem, name, unit, category_id,
                              last_cost, price_a, price_b, price_c, qty_min, qty_max,

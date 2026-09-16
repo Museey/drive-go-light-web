@@ -1,4 +1,4 @@
-import { today } from '@drivegolight/core';
+import { PRODUCT_LIMIT, today } from '@drivegolight/core';
 import Link from 'next/link';
 import { RowLink } from '@/components/row-link';
 import { STOCK_FLAG_LABEL, STOCK_FLAG_SHORT, STOCK_FLAGS, toStockFlag } from '@drivegolight/core';
@@ -14,7 +14,7 @@ import { SavedNotice } from '@/components/saved-notice';
 import { ActionTiles } from '@/components/action-tiles';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
-import { listCategories, listProducts } from '@/lib/products';
+import { activeProductCount, listCategories, listProducts } from '@/lib/products';
 import { filterLabel, stockCard } from '@/lib/stock-card';
 import { canCost } from '@/lib/perms';
 import { baht, thDate } from '@/lib/format';
@@ -42,10 +42,11 @@ export default async function StockPage({
   /* ทะเบียนสินค้า: หน้าละ 10 ตั้งต้น เลือก 10/20 */
   const pageSize = pageSizeOf(sp.size, STOCK_PAGE_SIZES, STOCK_DEFAULT_PAGE_SIZE);
 
-  const [cats, hidden, pending, { rows, total, stockValue }] = await Promise.all([
+  const [cats, hidden, pending, activeCount, { rows, total, stockValue }] = await Promise.all([
     listCategories(),
     getStockHiddenCols(),
     listPendingItems(),
+    activeProductCount(),
     listProducts({
       search: sp.q,
       categoryId: sp.cat,
@@ -80,7 +81,11 @@ export default async function StockPage({
     <Shell
       current="/stock"
       title="สินค้า"
-      sub={`${total.toLocaleString('en-US')} รายการ` + (show('cost') ? ` · มูลค่าสต๊อก ${baht(stockValue)}` : '')}
+      /* จำกัดสินค้าที่ใช้งาน 3,000 ต่ออู่ — ตัวนับนับทั้งอู่ ไม่ขึ้นกับตัวกรอง
+         เลือกตัวกรองอยู่ก็ยังบอกจำนวนที่ตรงเงื่อนไขต่อท้าย — เดสก์ท็อปไม่มีที่อื่นบอกเลขนี้ (หัวรายการซ่อนอยู่) */
+      sub={`ใช้งานอยู่ ${activeCount.toLocaleString('en-US')} / ${PRODUCT_LIMIT.toLocaleString('en-US')} รายการ`
+        + (Object.keys(keep).length ? ` · ตรงเงื่อนไข ${total.toLocaleString('en-US')} รายการ` : '')
+        + (show('cost') ? ` · มูลค่าสต๊อก ${baht(stockValue)}` : '')}
     >
       {/* จอต่ำกว่า 1280: สองแท็บ — เปิดหน้ามาเจอรายการสินค้าเลย เมนูย่อยกับตัวกรองอยู่หลังปุ่มเดียว
           (ต้นแบบของทีม `.mseg` · ของเดิมต้องเลื่อนผ่านไทล์ 18 ใบราว 700px ก่อนถึงสินค้าใบแรก) */}

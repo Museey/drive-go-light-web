@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import { productLimitMessage } from '@drivegolight/core';
 import { inspectBackupAction, restoreBackupAction } from '../actions';
 import type { FormResult } from '@/lib/mutate';
 import type { BackupPreview, RestoreResult } from '@/lib/restore';
@@ -113,6 +114,16 @@ export function RestoreForm() {
         <div style={{ marginTop: 4 }}>{list(preview.counts) || 'ไม่พบรายการ'}</div>
       </div>
 
+      {/* สินค้าที่ใช้งานเกิน 3,000 — กู้คืนไม่ได้ ไม่ต้องให้กรอกยืนยันแล้วค่อยมาพังตอนกด */}
+      {preview.productLimit ? (
+        <div className="err restore-limit">
+          <b>{productLimitMessage({ kind: 'restore', ...preview.productLimit })}</b>
+          <div style={{ marginTop: 6 }}>
+            ปิดใช้งานสินค้าที่เลิกขายในโปรแกรมที่ทำไฟล์นี้ แล้วสำรองไฟล์ใหม่มากู้คืนอีกครั้ง
+          </div>
+        </div>
+      ) : null}
+
       {preview.dropped.length ? (
         <div className={preview.needsAcknowledgement ? 'err' : 'note'}>
           <b>ข้อมูลที่ระบบยังรองรับไม่ได้</b>
@@ -133,6 +144,11 @@ export function RestoreForm() {
         </div>
       ) : null}
 
+      {preview.productLimit ? (
+        <div className="tag-row">
+          <button className="btn" type="button" onClick={() => setOpen(false)}>ปิด</button>
+        </div>
+      ) : (<>
       <div className="err">
         <b>อ่านก่อนกด</b>
         <ul style={{ margin: '8px 0 0', paddingLeft: 20, lineHeight: 1.8 }}>
@@ -166,6 +182,7 @@ export function RestoreForm() {
         <Submit label="กู้คืนทับข้อมูลเดิม" busy="กำลังกู้คืน…" cls="btn danger" />
         <button className="btn" type="button" onClick={() => setOpen(false)}>ไม่กู้คืนแล้ว</button>
       </div>
+      </>)}
     </form>
   );
 }
