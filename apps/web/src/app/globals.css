@@ -1555,3 +1555,67 @@ table.hist.fit .row-acts .btn { word-break: keep-all; overflow-wrap: normal; whi
 .drawer .tools .acts { display: flex; flex-wrap: wrap; gap: 8px; }
 .drawer .tools .acts .tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .drawer .tools .acts .btn { flex: 1 1 auto; justify-content: center; }
+
+/* =====================================================================
+   รายการเอกสารแบบการ์ด — เฟส 2 (16 ก.ย. 2569 · ต้นแบบของทีม a.mdoc)
+   ===================================================================== */
+
+/* หัวข้อกลุ่มของรายการ (จอแคบเท่านั้น) — ชื่อ · จำนวน · ปุ่มสร้างใหม่ */
+.list-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 0; }
+.list-head h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.list-head .cnt { font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.list-head .new-btn {
+  margin-left: auto; display: inline-flex; align-items: center; min-height: 40px;
+  padding: 0 14px; border-radius: 10px; white-space: nowrap;
+  background: var(--accent); color: #2A1F00; border: 1px solid #E0A800;
+  font-size: 14px; font-weight: 700; text-decoration: none;
+}
+
+.doc-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.doc-table { display: none; }
+
+a.dcard {
+  display: block; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 13px 15px; color: var(--ink); text-decoration: none;
+  box-shadow: 0 1px 3px rgba(16,32,43,.06);
+}
+a.dcard.voided { opacity: .55; }
+.dcard .r1 { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.dcard .no { font-size: 15.5px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+.dcard .r1 .chip { margin-left: auto; }
+.dcard .nm { font-size: 16px; font-weight: 700; line-height: 1.3; }
+.dcard .plate { font-size: 13px; color: var(--ink-3); margin-top: 1px; }
+.dcard .r3 {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line-2);
+}
+.dcard .r3 .d { font-size: 12.5px; color: var(--ink-3); }
+.dcard .r3 .tot { text-align: right; }
+.dcard .r3 .amt { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dcard .r3 .out { font-size: 12.5px; color: var(--due); font-weight: 600; margin-top: 1px; }
+.dcard .r3 .out.clear { color: var(--ok); }
+/* ชิปชนิดเอกสารสีเดียวกับในตาราง — ใบเดียวกันต้องหน้าตาเดียวกันทั้งสองมุมมอง */
+.dcard .kindchip { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700; background: #E9F8F0; color: var(--ok); }
+.dcard .kindchip.k-QT { background: #FFF3CC; color: #7A4E00; }
+.dcard .kindchip.k-RC { background: #E6EEF9; color: #1F4E8C; }
+.dcard .kindchip.k-BN { background: #EEE; color: #444; }
+.dcard .kindchip.k-PO, .dcard .kindchip.k-EX { background: #F0EAF9; color: #5B3E9C; }
+
+/* ตัวกรองช่วงเวลาบนจอแคบ — dropdown เดียว (ต้นแบบ .mdate) */
+.mdate {
+  display: flex; align-items: center; gap: 12px; margin: 12px 12px 0;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
+}
+.mdate > label { font-size: 14px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.mdate select { flex: 1; min-width: 0; min-height: 46px; font-size: 15px; font-weight: 600; }
+
+/* แถวชิปช่วงวันที่ + ช่องกรอกเอง เป็นของเดสก์ท็อป — จอแคบใช้ dropdown ข้างบนแทน
+   (ผู้ใช้เลือก 16 ก.ย. 2569: dropdown อย่างเดียว ตามต้นแบบ) */
+.toolbar.dfilter { display: none; }
+
+/* 1280 ขึ้นไปและตอนพิมพ์ = ของเดิมทุกอย่าง (ตาราง · ชิปช่วงวันที่ · ไม่มีหัวข้อกลุ่ม) */
+@media (min-width: 1280px), print {
+  .doc-cards, .list-head, .mdate { display: none; }
+  .doc-table { display: block; }
+  .toolbar.dfilter { display: flex; }
+}

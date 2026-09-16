@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { ActionTiles } from '@/components/action-tiles';
+import { DocCards } from '@/components/doc-cards';
+import { expenseDocCard } from '@/lib/doc-card';
 import { EXPENSE_CATS } from '@drivegolight/core';
 import { requireTab } from '@/lib/auth';
 import { canEdit as mayEditOf, canExport as mayExportOf } from '@/lib/perms';
@@ -133,8 +135,11 @@ export default async function ExpensePage({
       {!histFirst ? formBlock : null}
       {histFirst ? (<div className="card">
 
+        {/* hist=1 ต้องติดไปกับตัวกรองวันที่ด้วย — ไม่งั้นกรองจากหน้าประวัติแล้วเด้งไปฟอร์มสร้างใหม่
+                           (เทสต์ doc-cards จับได้ตอนทำ dropdown ของจอแคบ · ชิปบนเดสก์ท็อปก็เป็นมาก่อนหน้านี้) */}
         <DocDateFilter base="/expense" from={from} to={to}
                        keep={{
+                         hist: '1',
                          ...(sp.q ? { q: sp.q } : {}),
                          ...(sp.kind ? { kind: sp.kind } : {}),
                          ...(sp.cat ? { cat: sp.cat } : {}),
@@ -143,7 +148,14 @@ export default async function ExpensePage({
         {rows.length === 0 ? (
           <div className="empty">ไม่พบรายการที่ตรงกับเงื่อนไข</div>
         ) : (
-          <div className="tablewrap">
+          <>
+          {/* จอต่ำกว่า 1280 = การ์ด · 1280 ขึ้นไปและตอนพิมพ์ = ตารางเดิม (สลับด้วย CSS) */}
+          <DocCards cards={rows.map(expenseDocCard)} more={lastPage > 1}
+                    title={sp.kind === 'EX' ? 'ประวัติค่าใช้จ่าย' : sp.kind === 'PO' ? 'ประวัติใบซื้อ' : 'ประวัติรายจ่ายทั้งหมด'}
+                    newHref={sp.kind ? `/expense?kind=${sp.kind}` : undefined}
+                    newLabel={sp.kind === 'EX' ? '＋ บันทึกค่าใช้จ่าย' : '＋ ใบซื้อสินค้า'} />
+
+          <div className="tablewrap doc-table">
             <table className="tbl hist fit">
               <thead>
                 <tr>
@@ -208,6 +220,7 @@ export default async function ExpensePage({
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         <div className="pager">
