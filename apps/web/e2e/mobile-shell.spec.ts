@@ -73,6 +73,26 @@ test('แท็บเล็ต — เนื้อหากว้างสุด
   expect(Math.abs(left - right), `ซ้าย ${left} ขวา ${right} ต้องเท่ากัน`).toBeLessThanOrEqual(2);
 });
 
+/**
+ * เดสก์ท็อป — เนื้อหาต้องเต็มความกว้างทุกหน้า ไม่ใช่เฉพาะหน้าที่มีตารางกว้าง
+ *
+ * กฎ 560px ของแท็บเล็ตใส่ margin ซ้ายขวาเป็น auto แล้วที่ 1280 คืนแค่ max-width
+ * `.main` เป็น flex แนวตั้ง — ลูกที่มี margin auto เลิกยืดตามกว้าง หดเท่าเนื้อหาแล้วไปอยู่กลางจอ
+ * หน้าที่มีตารางกว้างไม่เห็นอาการ แต่หน้าฟอร์ม (แก้ไขผู้ติดต่อ) เหลือกว้าง 848px จากจอ 1280
+ * เจอตอนเก็บภาพเฟส 4 — เฟส 1 ไม่มีเทสต์ข้อนี้ เพราะวัดแต่ที่ 768
+ */
+test('เดสก์ท็อป — เนื้อหาเต็มความกว้างแม้หน้าที่เนื้อหาแคบ (หน้าฟอร์ม)', async ({ page }) => {
+  test.skip(!isDesktop(page), 'แท็บเล็ตจำกัด 560px โดยตั้งใจ · มือถือเต็มจออยู่แล้ว');
+  for (const path of ['/customers/new?kind=customer', '/stock/new', '/settings']) {
+    await page.goto(path);
+    const [main, wrap] = await page.evaluate(() => [
+      document.querySelector('.main')!.getBoundingClientRect().width,
+      document.querySelector('.main > .wrap')!.getBoundingClientRect().width,
+    ]);
+    expect(Math.round(wrap), `${path}: เนื้อหากว้าง ${Math.round(wrap)} จาก ${Math.round(main)}`).toBe(Math.round(main));
+  }
+});
+
 test('ปุ่มเครื่องมือของหน้า — ต่ำกว่า 1280 ย้ายเข้าลิ้นชัก "เพิ่มเติม"', async ({ page }) => {
   await page.goto('/finance/ar');
   /* หน้านี้มีปุ่มพิมพ์สองตัว — เอาตัวที่อยู่ในชุดเครื่องมือของหัวหน้า (PrintReport) */

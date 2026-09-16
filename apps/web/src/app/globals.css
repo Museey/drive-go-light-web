@@ -1596,7 +1596,10 @@ table.hist.fit .row-acts .btn { word-break: keep-all; overflow-wrap: normal; whi
   .tabbar .tab b { font-size: 12px; }
 }
 @media (min-width: 1280px), print {
-  .main > .wrap { max-width: none; }
+  /* คืน margin ด้วย ไม่ใช่แค่ max-width — `.main` เป็น flex แนวตั้ง ลูกที่ margin ซ้ายขวาเป็น auto
+     เลิกยืดตามกว้าง หดเท่าเนื้อหาแล้วไปอยู่กลางจอ หน้าตารางกว้างไม่เห็น แต่หน้าฟอร์มเหลือ 818px จาก 1280
+     (เทสต์ mobile-shell "เนื้อหาเต็มความกว้างแม้หน้าที่เนื้อหาแคบ") */
+  .main > .wrap { max-width: none; margin-left: 0; margin-right: 0; }
 }
 
 /* ---------- ปุ่มเครื่องมือของหน้า (พิมพ์รายงาน · ส่งออก CSV · ฯลฯ) ----------
@@ -1676,4 +1679,73 @@ a.dcard.voided { opacity: .55; }
   .doc-cards, .list-head, .mdate { display: none; }
   .doc-table { display: block; }
   .toolbar.dfilter { display: flex; }
+}
+
+/* =====================================================================
+   ลูกค้า/ผู้ขายบนจอแคบ — เฟส 4 (16 ก.ย. 2569 · ต้นแบบ mCustomers / mCustomerDetail)
+   ===================================================================== */
+
+/* ของที่มีแต่บนเดสก์ท็อป — แต่ละชนิดคืนค่า display ของตัวเองที่ 1280
+   (ใช้ revert ไม่ได้ มันย้อนไปค่าของเบราว์เซอร์ ปุ่ม .btn จะเสีย inline-flex) */
+.desk-only { display: none; }
+
+/* แถบค้นหา + ปุ่มเพิ่ม (ต้นแบบ `.mcbar`) */
+.mcbar { display: flex; gap: 10px; align-items: stretch; margin: 12px 12px 0; }
+.mcbar .in.search { flex: 1; min-width: 0; min-height: 52px; font-size: 16px; border-radius: 12px; }
+.mcbar .mc-add {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 16px; min-height: 52px; border-radius: 12px; white-space: nowrap;
+  background: var(--accent); color: #2A1F00; border: 1px solid #E0A800;
+  font-weight: 700; font-size: 15px; text-decoration: none;
+}
+
+/* การ์ดผู้ติดต่อ (ต้นแบบ `a.mparty`) — ปิดท้ายด้วยลูกศรอย่างเดียว (ผู้ใช้เลือก) */
+.contact-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.contact-table { display: none; }
+a.mparty {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 15px;
+  color: var(--ink); text-decoration: none; box-shadow: 0 1px 3px rgba(16,32,43,.06);
+}
+.mparty .who { flex: 1; min-width: 0; }
+.mparty .nm { display: block; font-size: 16px; font-weight: 700; line-height: 1.3; }
+.mparty .meta { display: block; margin-top: 3px; font-size: 12.5px; color: var(--ink-3); line-height: 1.6; }
+.mparty .meta .chip { font-size: 11.5px; }
+.mparty .chev { color: var(--ink-3); font-size: 20px; }
+
+/* หน้ารายคน — การ์ดอ่านก่อน กดแก้ไขแล้วค่อยเห็นฟอร์ม
+   `.cpanes` ใช้ display: contents จึงไม่มีผลกับการวางผังของการ์ดข้างใน */
+.cpanes { display: contents; }
+.cpanes:not(.editing) .contact-edit { display: none; }
+.cpanes.editing .contact-read, .cpanes.editing .contact-view { display: none; }
+
+.mback { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 14px; font-size: 14px; font-weight: 700; color: var(--steel-dk); text-decoration: none; }
+.mdetail { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 15px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(16,32,43,.06); }
+.mdetail .dh { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; margin-bottom: 6px; border-bottom: 1px solid var(--line-2); }
+.mdetail .dh b { font-size: 19px; font-weight: 800; line-height: 1.25; }
+.mdetail .dh .chip { margin-left: auto; }
+.mkv { display: flex; gap: 12px; padding: 7px 0; font-size: 14px; }
+.mkv + .mkv { border-top: 1px dotted var(--line-2); }
+.mkv .k { flex: none; min-width: 98px; color: var(--ink-3); }
+.mkv .v { flex: 1; font-weight: 600; color: var(--ink); word-break: break-word; }
+
+/* การ์ดตัวเลขสองใบ (ต้นแบบ `.mstat-grid`) */
+.mstat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.mstat { display: flex; flex-direction: column; gap: 2px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 15px 15px 14px; box-shadow: 0 1px 3px rgba(16,32,43,.06); }
+.mstat .lbl { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.mstat .val { margin-top: 4px; font-size: 22px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.mstat .val small { font-size: 13px; font-weight: 500; color: var(--ink-3); }
+.mstat .val.due { color: var(--due); }
+.mstat .val.ok { color: var(--steel-dk); }
+.mdet-acts { display: flex; gap: 10px; margin: 0 0 16px; }
+.mdet-acts .btn { flex: 1; justify-content: center; min-height: 48px; }
+
+@media (min-width: 1280px), print {
+  .mcbar, .contact-cards, .mback, .contact-read { display: none; }
+  .contact-table { display: block; }
+  form.desk-only { display: flex; }
+  span.desk-only { display: contents; }
+  .btn.desk-only { display: inline-flex; }
+  /* เดสก์ท็อปเห็นฟอร์ม ประวัติ และการ์ดลบเสมอ ไม่ว่าจะมี ?edit=1 หรือไม่ */
+  .cpanes:not(.editing) .contact-edit, .cpanes.editing .contact-view { display: block; }
 }

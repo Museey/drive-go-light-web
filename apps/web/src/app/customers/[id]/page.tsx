@@ -6,7 +6,9 @@ import { safeBack } from '@/lib/saved-target';
 import { SavedNotice } from '@/components/saved-notice';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
-import { getContact, getContactHistory, nextContactCode } from '@/lib/contacts';
+import { addrLineOf, getContact, getContactHistory, nextContactCode } from '@/lib/contacts';
+import { contactDetailRows, contactHistoryCard, plateOf } from '@/lib/contact-card';
+import { DocCards } from '@/components/doc-cards';
 import { baht, KIND_SHORT, thDate } from '@/lib/format';
 import { ContactForm } from '../contact-form';
 import { DeleteContactButton } from '../delete-button';
@@ -17,7 +19,10 @@ export default async function ContactPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; savedId?: string; error?: string; kind?: string }>;
+  searchParams: Promise<{ saved?: string; savedId?: string; error?: string; kind?: string;
+    /** จอแคบ: เปิดฟอร์มแก้ไขแทนการ์ดอ่าน (เฟส 4) — เดสก์ท็อปเห็นฟอร์มเสมออยู่แล้ว */
+    edit?: string;
+  }>;
 }) {
   await requireTab('customer', 'customer');
   const { id } = await params;
@@ -46,7 +51,54 @@ export default async function ContactPage({
       <SavedNotice saved={sp.saved} savedId={sp.savedId} />
       {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}
 
-      <div className="card">
+      {/* จอต่ำกว่า 1280: เปิดมาเป็นการ์ดอ่านก่อน แล้วค่อยกดแก้ไข (ผู้ใช้เลือก · ต้นแบบ mCustomerDetail)
+          ทุกก้อนเรนเดอร์เสมอแล้วสลับด้วย CSS — เดสก์ท็อปเห็นฟอร์ม ประวัติ และการ์ดลบ ลำดับเดิมทุกอย่าง
+          ข้อผิดพลาดจากการบันทึกต้องเห็นฟอร์มทันที จึงนับเป็นโหมดแก้ไขด้วย */}
+      <div className={isNew || sp.edit === '1' || sp.error ? 'cpanes editing' : 'cpanes'}>
+      {contact ? (
+        <Link className="mback" href={`/customers?kind=${contact.kind}`}>← กลับรายชื่อ</Link>
+      ) : null}
+
+      {contact && history ? (
+        <div className="contact-read">
+          <div className="mdetail">
+            <div className="dh">
+              <b>{contact.displayName || contact.code}</b>
+              <span className={contact.kind === 'vendor' ? 'chip' : 'chip ok'}>
+                {contact.kind === 'vendor' ? 'ผู้ขาย' : 'ลูกค้า'}
+              </span>
+            </div>
+            {contactDetailRows({
+              kind: contact.kind, code: contact.code, tel: contact.tel, tel2: contact.tel2,
+              email: contact.email, taxId: contact.taxId, creditDays: contact.creditDays,
+              note: contact.note, addrLine: addrLineOf(contact),
+              plates: (contact.vehicles ?? []).map(plateOf),
+            }).map((r) => (
+              <div key={r.label} className="mkv"><span className="k">{r.label}</span><span className="v">{r.value}</span></div>
+            ))}
+          </div>
+
+          {/* ตัวเลขสองใบคิดจากประวัติที่หน้านี้ดึงมาอยู่แล้ว — ไม่เพิ่มคิวรี */}
+          <div className="mstat-grid">
+            <div className="mstat">
+              <span className="lbl">📄 จำนวนเอกสาร</span>
+              <span className="val">{history.docs.length.toLocaleString('en-US')} <small>ใบ</small></span>
+            </div>
+            <div className="mstat">
+              <span className="lbl">💰 ยอดคงค้าง</span>
+              <span className={history.totalOutstanding > 0.004 ? 'val due' : 'val ok'}>
+                {baht(history.totalOutstanding)} <small>บาท</small>
+              </span>
+            </div>
+          </div>
+
+          <div className="mdet-acts">
+            <Link className="btn primary" href={`/customers/${contact.id}?edit=1`}>✎ แก้ไขข้อมูลผู้ติดต่อ</Link>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="card contact-edit">
         <header><h2>{isNew ? 'ข้อมูลผู้ติดต่อ' : 'แก้ไขข้อมูลผู้ติดต่อ'}</h2></header>
         <div className="body">
           {/* key = ใบบันทึกล่าสุด — เพิ่มรายถัดไปติดกัน ฟอร์มต้องเริ่มใหม่ ไม่ค้างค่าที่พิมพ์ของรายก่อน */}
@@ -56,7 +108,7 @@ export default async function ContactPage({
 
       {contact && history ? (
         <>
-          <div className="card">
+          <div className="card contact-view">
             <header>
               <h2>ประวัติซื้อขาย</h2>
               <div className="spacer" />
@@ -69,7 +121,11 @@ export default async function ContactPage({
             {history.docs.length === 0 ? (
               <div className="empty">ยังไม่มีเอกสารกับผู้ติดต่อรายนี้</div>
             ) : (
-              <div className="tablewrap">
+              <>
+              {/* จอแคบเป็นการ์ดเอกสารของเฟส 2 · เดสก์ท็อปและตอนพิมพ์เป็นตารางเดิม */}
+              <DocCards title="เอกสารของผู้ติดต่อ"
+                        cards={history.docs.map((d) => contactHistoryCard(d, contact.displayName || contact.code))} />
+              <div className="tablewrap doc-table">
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -95,10 +151,11 @@ export default async function ContactPage({
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
 
-          <div className="card">
+          <div className="card contact-edit">
             <header><h2>ลบผู้ติดต่อ</h2></header>
             <div className="body">
               {history.docs.length > 0 ? (
@@ -114,6 +171,7 @@ export default async function ContactPage({
           </div>
         </>
       ) : null}
+      </div>
     </Shell>
   );
 }
