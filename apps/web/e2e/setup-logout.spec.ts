@@ -44,9 +44,12 @@ async function newShopWithSetupLink(tag: string) {
   return { tenant, email, name, raw };
 }
 
-test('ตั้งรหัสผ่านตามลิงก์ทั้งที่ยังล็อกอินอู่เดิม — ต้องได้ฟอร์มล็อกอิน แล้วเข้าอู่ของลิงก์', async ({ page }, info) => {
+test('ตั้งรหัสผ่านตามลิงก์ทั้งที่ยังล็อกอินอู่เดิม — เข้าอู่ของลิงก์ให้เลย', async ({ page, context }, info) => {
   test.skip(info.project.name !== 'เดสก์ท็อป', 'ชื่ออู่บนแถบบนมีเฉพาะเดสก์ท็อป · มือถืออยู่ในลิ้นชัก');
   const shop = await newShopWithSetupLink(`zs${info.parallelIndex}${Date.now().toString(36)}`);
+  /* เซสชันของอู่เดิมเป็นของเทสต์นี้เอง — ข้อนี้เพิกถอนมัน เทสต์ข้ออื่นจึงต้องไม่ใช้ร่วม */
+  const old = await makeSession();
+  await context.addCookies([{ name: 'dgl_session', value: old, url: 'http://localhost:3100' }]);
   try {
     await page.goto('/');
     const before = (await page.locator('.brand .shop').first().innerText()).trim();
@@ -58,16 +61,16 @@ test('ตั้งรหัสผ่านตามลิงก์ทั้ง�
     await page.locator('#confirm').fill(PASSWORD);
     await page.getByRole('button', { name: /ตั้งรหัสผ่าน/ }).click();
 
-    /* เดิม: เด้งเข้าหน้าแรกของอู่เดิมทันที เพราะเซสชันเก่ายังอยู่ */
-    await expect(page).toHaveURL(/\/login$/);
-    await expect(page.locator('input[name="email"]'), 'ต้องได้ฟอร์มล็อกอิน').toBeVisible();
-
-    await page.locator('#email').fill(shop.email);
-    await page.locator('#password').fill(PASSWORD);
-    await page.getByRole('button', { name: 'เข้าสู่ระบบ' }).click();
-
+    /* ตั้งเสร็จต้องเข้าระบบให้เลย ไม่ต้องกรอกอีเมล/รหัสซ้ำ (ผู้ใช้กำหนด 16 ก.ย. 2569)
+       เดิมเด้งเข้าอู่เดิมเพราะเซสชันเก่ายังอยู่ · รอบถัดมาพาไปหน้าล็อกอินซึ่งยังต้องพิมพ์ซ้ำ */
     await expect(page).toHaveURL(/localhost:3100\/$/);
     await expect(page.locator('.brand .shop').first(), 'เข้าอู่ของลิงก์').toHaveText(shop.name);
+
+    /* เซสชันของอู่เดิมต้องถูกเพิกถอนในฐาน ไม่ใช่แค่คุกกี้ถูกเขียนทับ */
+    const left = await db((c) => c.query(
+      'select count(*)::int n from auth.sessions where token_hash = $1',
+      [createHash('sha256').update(old).digest()]));
+    expect(left.rows[0].n, 'เซสชันเดิมต้องถูกเพิกถอน').toBe(0);
   } finally {
     await db((c) => c.query('delete from tenants where id = $1', [shop.tenant]));
   }

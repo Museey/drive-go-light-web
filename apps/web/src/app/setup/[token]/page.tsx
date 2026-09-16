@@ -1,5 +1,6 @@
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { consumeSetupToken, peekSetupToken, signOut } from '@/lib/auth';
+import { consumeSetupToken, peekSetupToken, signOut, startSessionFor } from '@/lib/auth';
 import { checkPasswordStrength, hashPassword } from '@/lib/password';
 
 export const dynamic = 'force-dynamic';
@@ -37,7 +38,8 @@ export default async function SetupPage({
     const password = String(formData.get('password') ?? '');
     const confirm = String(formData.get('confirm') ?? '');
 
-    const fail = (msg: string) => redirect(`/setup/${t}?error=${encodeURIComponent(msg)}`);
+    /* : never — บอก TypeScript ว่าบรรทัดหลัง fail() ไม่มีทางทำงานต่อ ค่าที่ตรวจแล้วจึงไม่เป็น null */
+    const fail: (msg: string) => never = (msg) => redirect(`/setup/${t}?error=${encodeURIComponent(msg)}`);
 
     if (password !== confirm) fail('รหัสผ่านทั้งสองช่องไม่ตรงกัน');
 
@@ -45,13 +47,15 @@ export default async function SetupPage({
     if (weak) fail(weak);
 
     // ตรวจ token อีกรอบตอนจะใช้จริง — ระหว่างที่เปิดหน้าค้างไว้ ลิงก์อาจถูกยกเลิกไปแล้ว
-    const ok = await consumeSetupToken(t, await hashPassword(password));
-    if (!ok) fail('ลิงก์นี้ใช้ไม่ได้แล้ว กรุณาขอลิงก์ใหม่');
+    const userId = await consumeSetupToken(t, await hashPassword(password));
+    if (!userId) fail('ลิงก์นี้ใช้ไม่ได้แล้ว กรุณาขอลิงก์ใหม่');
 
-    /* ออกจากบัญชีที่ค้างอยู่ในเบราว์เซอร์ก่อน — ไม่งั้น /login เห็นเซสชันเดิมแล้วเด้งเข้าอู่นั้นทันที
-       คนที่เพิ่งตั้งรหัสของอู่ใหม่จะงงว่าทำไมเข้าไปอยู่อีกอู่ (ผู้ใช้แจ้ง 16 ก.ย. 2569) */
+    /* ออกจากบัญชีที่ค้างอยู่ในเบราว์เซอร์ก่อน — เพิกถอนในฐานด้วย ไม่ใช่แค่ลบคุกกี้
+       ไม่งั้นคนที่ยังล็อกอินอู่เดิมจะถูกพากลับเข้าอู่นั้น (ผู้ใช้แจ้ง 16 ก.ย. 2569)
+       แล้วเข้าระบบด้วยบัญชีของลิงก์ให้เลย ผู้ใช้เพิ่งตั้งรหัสเอง ไม่ต้องพิมพ์ซ้ำ (ผู้ใช้กำหนด) */
     await signOut();
-    redirect('/login');
+    await startSessionFor(userId, (await headers()).get('user-agent') ?? undefined);
+    redirect('/');
   }
 
   return (
