@@ -1856,3 +1856,28 @@ a.mstat:active { background: #F7FAF9; }
   .paper .sign { flex-wrap: nowrap; row-gap: 0; }
   .paper .sign > div { flex: 1; }
 }
+
+/* =====================================================================
+   หน้าลูกค้า/ผู้ขายบนจอแคบแบบเรียบ (16 ก.ย. 2569 · ผู้ใช้ส่งภาพต้นแบบ)
+   เหลือช่องค้นหา + ปุ่มเพิ่ม → หัวข้อ → การ์ด · ไทล์เมนูย่อยใช้ SubNav hideNarrow · แถวแบ่งหน้าใช้ .pager.narrow-hide
+   ===================================================================== */
+/* แถบเครื่องมือในการ์ด = ชิปประเภท + ช่องค้นหาของเดสก์ท็อป + ตั้งค่าคอลัมน์ ทั้งแถบไม่มีอะไรเหลือให้จอแคบ */
+.toolbar.cust-toolbar { display: none; }
+/* การ์ดวางบนพื้นหลังตรง ๆ ไม่มีกล่องขาวครอบ */
+.card.cust-list { background: transparent; border: 0; overflow: visible; }
+@media (min-width: 1280px), print {
+  .toolbar.cust-toolbar { display: flex; }
+  /* ค่าเดิมของ .card */
+  .card.cust-list { background: var(--card); border: 1px solid var(--line); overflow: hidden; }
+}
+
+/* ---------- แถบค้นหาหน้ารายรับบนจอแคบ (16 ก.ย. 2569 · ผู้ใช้ส่งภาพเครื่องจริง) ----------
+   เดิมช่องค้นหา ติ๊ก "รวมใบที่ยกเลิก" และปุ่มพิมพ์เรียงต่อกันแล้วตัดแถว ช่องค้นหาได้แค่ที่เหลือ (153 จาก 319px)
+   ช่องค้นหาเต็มแถว → ติ๊กกับปุ่มพิมพ์ลงแถวถัดไปด้วยกัน · เดสก์ท็อปคืนค่าเดิม (.toolbar .in = flex: 1) */
+.toolbar form.inc-search { flex-wrap: wrap; }
+.toolbar form.inc-search > .in.search { flex: 1 1 100%; }
+.toolbar form.inc-search > label.chip, .toolbar form.inc-search > .btn { flex: 0 0 auto; }
+@media (min-width: 1280px), print {
+  .toolbar form.inc-search > .in.search { flex: 1; }
+  .toolbar form.inc-search > label.chip, .toolbar form.inc-search > .btn { flex: 0 1 auto; }
+}

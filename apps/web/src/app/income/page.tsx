@@ -159,7 +159,8 @@ export default async function IncomePage({
           <div className="spacer" />
 
           {/* data-enter="own": ไม่มีปุ่มค้นหาแล้ว Enter ต้องส่งฟอร์ม — ไม่ให้ EnterToNext ดักไปโฟกัสช่องติ๊กถัดไป */}
-          <form autoComplete="off" action="/income" method="get" data-enter="own" style={{ display: 'flex', gap: 6 }}>
+          {/* inc-search — จอแคบ: ช่องค้นหาเต็มแถว ติ๊กกับปุ่มพิมพ์ลงแถวถัดไปด้วยกัน (ผู้ใช้ส่งภาพ 16 ก.ย. 2569) */}
+          <form autoComplete="off" action="/income" method="get" data-enter="own" className="inc-search" style={{ display: 'flex', gap: 6 }}>
             <input type="hidden" name="hist" value="1" />
             {kind ? <input type="hidden" name="kind" value={kind} /> : null}
             {from ? <input type="hidden" name="from" value={from} /> : null}

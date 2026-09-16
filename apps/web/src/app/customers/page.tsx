@@ -74,9 +74,16 @@ export default async function CustomersPage({
       current="/customers"
       title="ข้อมูลลูกค้า / ผู้ขาย"
       sub={`${total.toLocaleString('en-US')} ราย`}
-      tools={<PrintReport />}
+      tools={<>
+        <PrintReport />
+        {/* จอแคบซ่อนแถบเมนูย่อย — การ์ดเครื่องมือ 02.4 ไม่ได้อยู่ในลิ้นชักมาแต่เดิม (ลิ้นชักมีแค่เมนูย่อย)
+            จึงมาไว้ใต้ "เครื่องมือของหน้านี้" · narrow-only: เดสก์ท็อปมีการ์ด 02.4 ในแถบเมนูย่อยอยู่แล้ว */}
+        <Link className="btn narrow-only" href="/settings/import#contacts">นำเข้า / ส่งออก CSV</Link>
+      </>}
     >
-      <SubNav menu="customer" current={sp.kind === 'vendor' ? 'vendor' : 'customer'}>
+      {/* จอแคบแบบเรียบ (ผู้ใช้ส่งภาพ 16 ก.ย. 2569): "เหลือ search bar กับ ปุ่ม + เพิ่มพอ อย่างอื่น hide"
+          ซ่อนไทล์เมนูย่อย · ชิปประเภท · แถวแสดงต่อหน้า — เดสก์ท็อปเหมือนเดิม */}
+      <SubNav menu="customer" current={sp.kind === 'vendor' ? 'vendor' : 'customer'} hideNarrow>
       {/* แก้ไขผู้ติดต่อจากทะเบียน บันทึกแล้วกลับมาที่นี่พร้อมการ์ด */}
       <SavedNotice saved={sp.saved} savedId={sp.savedId} />
 
@@ -90,8 +97,8 @@ export default async function CustomersPage({
         <Link className="mc-add" href={`/customers/new?kind=${sp.kind === 'vendor' ? 'vendor' : 'customer'}`}>＋ เพิ่ม</Link>
       </form>
 
-      <div className="card">
-        <div className="toolbar">
+      <div className="card cust-list">
+        <div className="toolbar cust-toolbar">
           {/* ชิปกลุ่มเดียวกันต้องอยู่ใน .tag-row — ลูกตรงของ .toolbar บนมือถือยืดเต็มจอเรียงลงทีละปุ่ม */}
           <div className="tag-row">
             <span style={{ color: 'var(--line)' }}>|</span>
@@ -231,7 +238,7 @@ export default async function CustomersPage({
         )}
 
         {/* จอแคบเหลือเฉพาะ "แสดงต่อหน้า" — เลขหน้าและก่อนหน้า/ถัดไปอยู่ที่ปุ่มลอยข้างล่าง */}
-        <div className="pager">
+        <div className="pager narrow-hide">
           <span className="desk-only">หน้า {page} จาก {lastPage}</span>
           <PageSize base="/customers" size={pageSize} keep={filters} />
           <div className="spacer" />

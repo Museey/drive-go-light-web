@@ -98,7 +98,7 @@ test('ตัวเลขบนการ์ดสองใบตรงกับ�
   expect(baht(await stats.nth(1).innerText()), 'ยอดคงค้าง').toBeCloseTo(owe, 2);
 });
 
-test('ปุ่มแบ่งหน้าลอยบนรายชื่อ · "แสดงต่อหน้า" ยังกดได้', async ({ page }) => {
+test('ปุ่มแบ่งหน้าลอยบนรายชื่อเปลี่ยนหน้าได้และไม่บังการ์ด', async ({ page }) => {
   test.skip(!แคบ(page), 'เดสก์ท็อปใช้แถวแบ่งหน้าเดิม');
   await page.goto('/customers?size=5');
 
@@ -110,14 +110,88 @@ test('ปุ่มแบ่งหน้าลอยบนรายชื่อ �
   await expect(page).toHaveURL(/[?&]page=2/);
   expect((await page.locator('.mparty .nm').first().innerText()).trim()).not.toBe(before);
 
-  await page.locator('.mparty').last().scrollIntoViewIfNeeded();
+  /* เลื่อนสุดหน้า — คำถามคือ "เลื่อนไปจนสุดแล้วการ์ดใบสุดท้ายยังกดได้ไหม"
+     (scrollIntoViewIfNeeded หยุดตรงที่การ์ดเพิ่งโผล่ขอบล่างจอ ซึ่งปุ่มลอยอยู่ตรงนั้นพอดีเสมอ) */
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(150);
   const last = (await page.locator('.mparty').last().boundingBox())!;
   const bar = (await pager.boundingBox())!;
   const ทับ = last.y < bar.y + bar.height && bar.y < last.y + last.height
     && last.x < bar.x + bar.width && bar.x < last.x + last.width;
   expect(ทับ, 'ปุ่มลอยต้องไม่ทับการ์ดใบสุดท้าย').toBe(false);
+});
 
-  const size = page.locator('.tag-row').filter({ hasText: 'แสดงต่อหน้า' }).first();
+/**
+ * หน้ารายชื่อแบบเรียบบนจอแคบ (ผู้ใช้ส่งภาพต้นแบบ 16 ก.ย. 2569)
+ * "เหลือ search bar กับ ปุ่ม + เพิ่มพอ อย่างอื่น hide ไปครับ"
+ */
+test('จอแคบ: เหนือการ์ดใบแรกมีแค่แถบค้นหา + ปุ่มเพิ่ม และหัวข้อรายการ', async ({ page }) => {
+  test.skip(!แคบ(page), 'เดสก์ท็อปยังมีเมนูย่อย ชิป และแถวแบ่งหน้า');
+  await page.goto('/customers');
+
+  await expect(page.locator('.mcbar')).toBeVisible();
+  await expect(page.locator('.list-head')).toBeVisible();
+  await expect(page.locator('.subnav'), 'ไทล์เมนูย่อย 02.x').toBeHidden();
+  for (const label of ['ทุกรูปแบบ', 'บุคคลธรรมดา', 'นิติบุคคล']) {
+    await expect(page.getByRole('link', { name: label, exact: true }), `ชิป ${label}`).toBeHidden();
+  }
+  await expect(page.locator('.pager'), 'แถวแสดงต่อหน้า').toBeHidden();
+
+  /* ไม่มีอะไรอื่นที่มองเห็นอยู่ระหว่างแถบค้นหากับการ์ดใบแรก — ถามจากตำแหน่งจริง ไม่ใช่จากชื่อคลาส */
+  const extra = await page.evaluate(() => {
+    const top = document.querySelector('.mcbar')!.getBoundingClientRect().bottom;
+    const first = document.querySelector('.contact-cards .mparty')!.getBoundingClientRect().top;
+    return [...document.querySelectorAll('.wrap a, .wrap button, .wrap input, .wrap select, .wrap label')]
+      .filter((e) => (e as HTMLElement).offsetParent !== null)
+      .filter((e) => { const r = e.getBoundingClientRect(); return r.height > 0 && r.top >= top && r.bottom <= first; })
+      .map((e) => (e.textContent || (e as HTMLInputElement).name || e.tagName).trim().slice(0, 30));
+  });
+  expect(extra, 'ของที่กดได้ระหว่างแถบค้นหากับการ์ดใบแรก').toEqual([]);
+});
+
+test('จอแคบ: กล่องรายการโปร่งใส การ์ดวางบนพื้นหลังตรง ๆ', async ({ page }) => {
+  test.skip(!แคบ(page), 'เดสก์ท็อปยังเป็นการ์ดขาวครอบตาราง');
+  await page.goto('/customers');
+  const box = await page.locator('.contact-cards').evaluate((el) => {
+    const card = el.closest('.card')!;
+    const cs = getComputedStyle(card);
+    return { bg: cs.backgroundColor, border: cs.borderTopWidth };
+  });
+  expect(box).toEqual({ bg: 'rgba(0, 0, 0, 0)', border: '0px' });
+});
+
+test('จอแคบ: ทุกเมนูย่อยที่ซ่อนไปยังไปถึงได้ — ปุ่มเพิ่ม · ลิ้นชัก "เพิ่มเติม"', async ({ page }) => {
+  test.skip(!แคบ(page), 'เดสก์ท็อปไม่มีลิ้นชัก');
+  await page.goto('/customers');
+
+  /* 02.1 เพิ่มผู้ติดต่อ = ปุ่ม ＋ เพิ่ม ข้างช่องค้นหา */
+  await expect(page.locator('.mcbar .mc-add')).toHaveAttribute('href', /^\/customers\/new\?kind=/);
+
+  await page.getByRole('button', { name: 'เพิ่มเติม' }).click();
+  const drawer = page.locator('.drawer');
+  /* 02.2 / 02.3 อยู่ในรายการเมนูของลิ้นชัก */
+  await expect(drawer.getByRole('link', { name: /ทะเบียนลูกค้า/ }).first()).toHaveAttribute('href', '/customers?kind=customer');
+  await expect(drawer.getByRole('link', { name: /ทะเบียนผู้ขาย/ }).first()).toHaveAttribute('href', '/customers?kind=vendor');
+  /* 02.4 เป็นการ์ดเครื่องมือ ไม่ใช่เมนูย่อย — ลิ้นชักไม่มีมาแต่เดิม จึงย้ายมาไว้ใต้ "เครื่องมือของหน้านี้" */
+  await expect(drawer.locator('.tools').getByRole('link', { name: /นำเข้า \/ ส่งออก CSV/ }))
+    .toHaveAttribute('href', '/settings/import#contacts');
+});
+
+test('เดสก์ท็อป: เมนูย่อย ชิปประเภท และแถวแบ่งหน้า (แสดงต่อหน้า) ยังอยู่ครบ', async ({ page }) => {
+  test.skip(แคบ(page), 'ข้อนี้ถามเฉพาะเดสก์ท็อป');
+  await page.goto('/customers?size=5');
+  await expect(page.locator('.subnav')).toBeVisible();
+  /* ลิงก์ CSV ที่เพิ่มในเครื่องมือของหน้าเป็นของจอแคบ — เดสก์ท็อปมีการ์ด 02.4 ในแถบเมนูย่อยอยู่แล้ว ไม่ซ้ำในหัวหน้า */
+  await expect(page.locator('.page-acts').getByRole('link', { name: /นำเข้า \/ ส่งออก CSV/ })).toBeHidden();
+  /* เดสก์ท็อปย้ายแถบเมนูย่อยขึ้นแถวหัวหน้า — ต้องเห็นลิงก์ CSV อันเดียวคือการ์ด 02.4 ไม่ซ้ำกับปุ่มในเครื่องมือ */
+  const csv = await page.getByRole('link', { name: /นำเข้า \/ ส่งออก CSV/ }).evaluateAll(
+    (els) => els.filter((e) => (e as HTMLElement).offsetParent !== null).length);
+  expect(csv, 'ลิงก์ CSV ที่มองเห็นบนเดสก์ท็อป').toBe(1);
+  for (const label of ['ทุกรูปแบบ', 'บุคคลธรรมดา', 'นิติบุคคล']) {
+    await expect(page.getByRole('link', { name: label, exact: true })).toBeVisible();
+  }
+  await expect(page.locator('.card').filter({ has: page.locator('table.cust') })).toHaveCSS('border-top-width', '1px');
+  const size = page.locator('.pager .tag-row').filter({ hasText: 'แสดงต่อหน้า' }).first();
   await expect(size).toBeVisible();
   await size.getByRole('link', { name: '20', exact: true }).click();
   await expect(page).not.toHaveURL(/[?&]size=5/);
