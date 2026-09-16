@@ -784,9 +784,10 @@ body { font-size: 15px; }
 /* การ์ดตัวเลขสี่ใบเป็น 2×2 บนจอแคบ (ต้นแบบ .mstat-grid · เฟส 5) — คอลัมน์เดียวต้องเลื่อนสี่หน้าจอกว่าจะเห็นครบ */
 .grid.g2 { grid-template-columns: minmax(0, 1fr); }
 .grid.g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-/* ต้นแบบ: สามและสี่ช่องยุบเหลือสองคอลัมน์ ไม่ใช่คอลัมน์เดียว (.frame.m .f3/.f4) */
-.row-fields.f2 { grid-template-columns: minmax(0, 1fr); }
-.row-fields.f3, .row-fields.f4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* ช่องกรอกคอลัมน์เดียวทุกแบบบนจอแคบ (เฟส 6 · ผู้ใช้เลือก)
+   เฟส 1 เคยให้ f3/f4 เป็นสองคอลัมน์ตาม `.frame.m .f3,.frame.m .f4` — อ่านต้นแบบพลาด
+   ต้นแบบมี `.frame.m .card .row-fields{1fr!important}` ที่เจาะจงกว่าทับอยู่ ฟอร์มในการ์ดจึงเป็นคอลัมน์เดียวจริง */
+.row-fields.f2, .row-fields.f3, .row-fields.f4 { grid-template-columns: minmax(0, 1fr); }
 .totals { width: 100%; margin-left: 0; }
 .paper { width: auto; min-height: auto; padding: 10mm; }
 
@@ -1549,7 +1550,8 @@ table.hist.fit.cust td, table.hist.fit.cust th { vertical-align: middle; }
 
 /* ---------- ฟอร์มสินค้า: โครงตามต้นแบบ ---------- */
 .row-fields.pf-top, .row-fields.pf-price { grid-template-columns: minmax(0, 1fr); }
-.row-fields.pf-bc { grid-template-columns: 150px minmax(0, 1fr); gap: 6px; }
+.row-fields.pf-bc { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+@media (min-width: 1280px), print { .row-fields.pf-bc { grid-template-columns: 150px minmax(0, 1fr); } }
 @media (min-width: 1280px), print {
   .row-fields.pf-top { grid-template-columns: 1fr 1.6fr 0.6fr; align-items: start; }
   .row-fields.pf-price { grid-template-columns: 1.4fr 1fr 1.2fr; }
@@ -1801,4 +1803,56 @@ a.mstat:active { background: #F7FAF9; }
   .mhome, .party-view { display: none; }
   .hgrid { display: grid; }
   .mhome-hide, .mhome-tax-src { display: block; }
+}
+
+/* =====================================================================
+   ฟอร์มและหน้ากระดาษบนจอแคบ — เฟส 6 (16 ก.ย. 2569 · ต้นแบบ .frame.m .card)
+   กฎฐานเป็นของจอแคบ แล้วคืนค่าเดิมที่จุดตัด — ค่าที่คืนคัดมาจากกฎเดิมตรง ๆ
+   (.in: 14px · มุม 6px · สูง 44px — .field > label: 13px สี --ink-3 · .formbar: แถวเดียว)
+   ใช้ `revert` ไม่ได้ มันย้อนไปค่าของเบราว์เซอร์ ไม่ใช่ค่าของเรา
+   ===================================================================== */
+
+/* ช่องกรอกในการ์ดฟอร์ม — ตัวหนังสือ 16px: iPhone ซูมหน้าจอเองทุกครั้งที่แตะช่องที่เล็กกว่านั้น */
+.card .field .in, .card .field select, .card .field textarea { font-size: 16px; }
+.card .field input.in, .card .field select { min-height: 48px; }
+.card .field .in { border-radius: 10px; }
+.card .field > label { font-size: 13px; color: var(--ink-2); font-weight: 600; }
+
+/* ปุ่มท้ายฟอร์ม — เรียงลงทีละปุ่ม กว้างเต็มแถว (ลำดับเดิม บันทึกอยู่บนสุด) */
+.card .formbar { flex-direction: column; align-items: stretch; }
+.card .formbar > * { width: 100%; min-height: 50px; justify-content: center; }
+
+/* ฟอร์มผู้ติดต่อ (ต้นแบบ .mform) — หัวการ์ด 16px · กล่องข้อความหลายบรรทัดสูงขึ้น */
+.contact-edit > header h2 { font-size: 16px; }
+.contact-edit .field textarea.in { min-height: 84px; }
+
+@media (min-width: 1280px), print {
+  .card .field .in, .card .field select, .card .field textarea { font-size: 14px; }
+  .card .field input.in, .card .field select { min-height: 44px; }
+  .card .field .in { border-radius: 6px; }
+  .card .field > label { color: var(--ink-3); font-weight: 400; }
+  .card .formbar { flex-direction: row; align-items: center; }
+  .card .formbar > * { width: auto; min-height: 44px; justify-content: normal; }
+  .contact-edit > header h2 { font-size: 15px; }
+  .contact-edit .field textarea.in { min-height: 60px; }
+}
+
+/* หน้ากระดาษบนจอแคบ — คงแบบบีบลงความกว้างจอตามต้นแบบ (ผู้ใช้เลือก) แต่ห้ามล้นกล่อง
+   ที่วัดได้: หัวใบวางบิลล้น 51px (กล่องเลขที่/วันที่กว้างขั้นต่ำ 228px) · ป้าย "วันครบกำหนดชำระ" ห้ามตัดบรรทัดจึงเลยขอบ
+   **คืนค่าที่ 768px ไม่ใช่ 1280** — หน้ากระดาษ A4 ตอนพิมพ์กว้างราว 794px เข้าเงื่อนไขนี้
+   ตอนพิมพ์จริงจึงได้ค่าเดิมทุกข้อ (เทสต์ paper-narrow จำลองโหมดพิมพ์ตรวจไว้) */
+.paper .doc-head { flex-wrap: wrap; }
+.paper .doc-meta { min-width: 0; }
+.paper .kv b,
+.paper.doc2 .box.party2 .kv b, .paper.doc2 .box.veh3 .kv b { white-space: normal; }
+/* ช่องเซ็นชื่อของใบวางบิลเรียงสามช่องแถวเดียว จุดไข่ปลาในวงเล็บกว้างเกินช่องละหนึ่งในสามของจอ — ให้ลงแถวได้ */
+.paper .sign { flex-wrap: wrap; row-gap: 12px; }
+.paper .sign > div { flex: 1 1 160px; min-width: 0; }
+@media (min-width: 768px) {
+  .paper .doc-head { flex-wrap: nowrap; }
+  .paper .doc-meta { min-width: 228px; }
+  .paper .kv b,
+  .paper.doc2 .box.party2 .kv b, .paper.doc2 .box.veh3 .kv b { white-space: nowrap; }
+  .paper .sign { flex-wrap: nowrap; row-gap: 0; }
+  .paper .sign > div { flex: 1; }
 }
