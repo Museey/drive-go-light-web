@@ -31,7 +31,7 @@ export default async function ApPage({
     await listPayables({ search: sp.q, onlyOverdue });
 
   return (
-    <Shell actions={<><PrintReport />{" "}
+    <Shell tools={<><PrintReport />{" "}
       <div className="tag-row">
         {mayExportOf(session, 'finance', 'ap') ? (
           <a className="btn" href={`/finance/ap/csv${csvQuery ? `?${csvQuery}` : ''}`} download>

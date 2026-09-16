@@ -32,7 +32,7 @@ export default async function FormsPage({
   };
 
   return (
-    <Shell current="/forms" title="พิมพ์ฟอร์มเปล่า" sub={FORM_LABEL[kind]} actions={<PrintButton label="🖨 พิมพ์" />}>
+    <Shell current="/forms" title="พิมพ์ฟอร์มเปล่า" sub={FORM_LABEL[kind]} tools={<PrintButton label="🖨 พิมพ์" />}>
       <div className="subwrap">
         <SubnavPortal>
           <nav className="subnav" aria-label="ฟอร์มเปล่า">

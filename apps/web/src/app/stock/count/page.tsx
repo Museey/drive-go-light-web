@@ -32,7 +32,8 @@ export default async function CountPage({
       current="/stock"
       title="ตรวจนับสต๊อก"
       sub={`${rows.length} ฉบับ · ร่างที่ยังไม่ปรับยอด ${drafts}`}
-      actions={<><PrintReport />{" "}<NewCount today={today()} /></>}
+      tools={<PrintReport />}
+      actions={<NewCount today={today()} />}
     >
       <SubNav menu="stock" current="count">
         <div className="grid g4" style={{ marginBottom: 18 }}>

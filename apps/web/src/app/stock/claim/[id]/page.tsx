@@ -35,7 +35,7 @@ export default async function ClaimDetailPage({
       current="/stock"
       title={`${S.title} ${claim.no}`}
       sub={`วันที่ ${thDate(claim.claimDate)} · ${kindLabel(claim.side, claim.kind)}`}
-      actions={
+      tools={
         <div className="tag-row">
           <Link className="btn" href={`/stock/claim/${id}/print`}>พิมพ์ใบเคลม</Link>
         </div>

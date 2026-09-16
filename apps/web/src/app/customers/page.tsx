@@ -73,7 +73,7 @@ export default async function CustomersPage({
       current="/customers"
       title="ข้อมูลลูกค้า / ผู้ขาย"
       sub={`${total.toLocaleString('en-US')} ราย`}
-      actions={<PrintReport />}
+      tools={<PrintReport />}
     >
       <SubNav menu="customer" current={sp.kind === 'vendor' ? 'vendor' : 'customer'}>
       {/* แก้ไขผู้ติดต่อจากทะเบียน บันทึกแล้วกลับมาที่นี่พร้อมการ์ด */}

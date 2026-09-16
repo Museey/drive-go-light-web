@@ -25,6 +25,13 @@ test.beforeEach(async ({ context }) => {
   }]);
 });
 
+/**
+ * ถามตาม "ความกว้างจอ" ไม่ใช่ชื่อโปรเจกต์ — แท็บเล็ตใช้หน้าตาเดียวกับมือถือแล้ว
+ * (ต้นแบบของทีม 16 ก.ย. 2569 · สเปก §5.2) เปลี่ยนขนาดใน playwright.config
+ * แล้วเทสต์ยังถามคำถามเดิม
+ */
+const แคบ = (page: Page) => (page.viewportSize()?.width ?? 0) < 1280;
+
 const boxOf = (page: Page, sel: string) =>
   page.locator(sel).first().evaluate((el) => el.getBoundingClientRect().toJSON());
 
@@ -34,19 +41,19 @@ test.describe('การนำทาง', () => {
     const railShown = await page.locator('.rail').isVisible();
     const tabbarShown = await page.locator('.tabbar').isVisible();
 
-    if (info.project.name === 'มือถือ') {
-      expect(tabbarShown, 'มือถือต้องมีแถบล่าง').toBe(true);
-      expect(railShown, 'มือถือต้องไม่มีแถบเมนูด้านบน/ซ้าย').toBe(false);
+    if (แคบ(page)) {
+      expect(tabbarShown, 'มือถือ/แท็บเล็ตต้องมีแถบล่าง').toBe(true);
+      expect(railShown, 'มือถือ/แท็บเล็ตต้องไม่มีแถบเมนูด้านบน/ซ้าย').toBe(false);
     } else {
-      expect(railShown, 'แท็บเล็ตและเดสก์ท็อปต้องมีแถบเมนู').toBe(true);
-      expect(tabbarShown, 'จอใหญ่ต้องไม่มีแถบล่าง').toBe(false);
+      expect(railShown, 'เดสก์ท็อปต้องมีแถบเมนูบน').toBe(true);
+      expect(tabbarShown, 'เดสก์ท็อปต้องไม่มีแถบล่าง').toBe(false);
     }
   });
 
   /** ข้อที่เจอตอนวัดของเดิม — เมนูหลุดออกนอกจอโดยไม่มีอะไรบอก */
   test('ปุ่มเมนูทุกปุ่มอยู่ในจอ ไม่มีตัวไหนหลุดออกไปทางขวา', async ({ page }, info) => {
     await page.goto('/');
-    const sel = info.project.name === 'มือถือ' ? '.tabbar .tab' : '.rail .navbtn, .rail .signout';
+    const sel = แคบ(page) ? '.tabbar .tab' : '.rail .navbtn, .rail .signout';
     const boxes = await page.locator(sel).evaluateAll(
       (els) => els.map((e) => e.getBoundingClientRect().toJSON()));
 
@@ -58,12 +65,12 @@ test.describe('การนำทาง', () => {
 
   test('เข้าถึงทุกเมนูได้โดยไม่ต้องเดาว่าปัดแถบได้', async ({ page }, info) => {
     await page.goto('/');
-    if (info.project.name !== 'มือถือ') {
-      /* แท็บเล็ตและเดสก์ท็อป — เมนูหลักครบทุกตัวในแถบบน ไม่ต้องเปิดลิ้นชัก */
+    if (!แคบ(page)) {
+      /* เดสก์ท็อป — เมนูหลักครบทุกตัวในแถบบน ไม่ต้องเปิดลิ้นชัก */
       expect(await page.locator('.rail .railnav .navbtn').count()).toBeGreaterThan(5);
       return;
     }
-    /* มือถือ — เปิดลิ้นชักจากแถบล่างช่อง "เพิ่มเติม" */
+    /* มือถือ/แท็บเล็ต — เปิดลิ้นชักจากแถบล่างช่อง "เพิ่มเติม" */
     const opener = page.locator('.tabbar .tab', { hasText: 'เพิ่มเติม' });
     await expect(opener).toBeVisible();
     await opener.click();
@@ -77,7 +84,7 @@ test.describe('ของที่ลอยทับต้องไม่บั�
     test(`เปิดเมนูที่ ${p.ชื่อ} แล้วไม่บังปุ่มหลักและไม่ล้นขอบจอ`, async ({ page }, info) => {
       await page.goto(p.path);
 
-      const มือถือ = info.project.name === 'มือถือ';
+      const มือถือ = แคบ(page);
 
       if (มือถือ) {
         const opener = page.locator('.tabbar .tab', { hasText: 'เพิ่มเติม' });
@@ -107,7 +114,7 @@ test.describe('ของที่ลอยทับต้องไม่บั�
         return;
       }
 
-      /* แท็บเล็ต/เดสก์ท็อป — เมนูหลักอยู่บนเป็น "ลิงก์" กดแล้วนำทาง ไม่มีแผงลอย
+      /* เดสก์ท็อป — เมนูหลักอยู่บนเป็น "ลิงก์" กดแล้วนำทาง ไม่มีแผงลอย
          ที่จะไปทับปุ่มหลักของหน้าได้อีก จึงตรวจว่า (1) ไม่มี .mmenu หลงเหลือ
          (2) เมนูหลักเป็นลิงก์ครบ (3) ปุ่มหลักของหน้ายังกดได้จริง */
       expect(await page.locator('.mmenu').count(), 'ไม่ควรมีแผงเมนูหล่นแล้ว').toBe(0);

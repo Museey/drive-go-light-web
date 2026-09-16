@@ -17,7 +17,7 @@ export default async function PendingPage() {
       current="/stock"
       title="รายการค้างทำ"
       sub={`${items.length} ชื่อที่ยังไม่ได้ลงทะเบียน`}
-      actions={
+      tools={
         <div className="tag-row">
           <Link className="btn" href="/stock/pending/print">พิมพ์รายการ</Link>
         </div>

@@ -91,7 +91,7 @@ for (const path of LINE_PAGES) {
 }
 
 /* ข้อ 6 */
-test('หน้าแรก: ช่วงเวลาเป็นแถบปุ่มต่อกัน 6 ปุ่ม · อันที่เลือกเขียวเข้ม', async ({ page }, info) => {
+test('หน้าแรก: ช่วงเวลาเป็นแถบปุ่มต่อกัน 6 ปุ่ม · อันที่เลือกเขียวเข้ม', async ({ page }) => {
   await page.goto('/');
   const seg = page.locator('nav.seg');
   await expect(seg).toBeVisible();
@@ -101,7 +101,8 @@ test('หน้าแรก: ช่วงเวลาเป็นแถบปุ
   expect(await bg(page, 'nav.seg a[aria-current="true"]')).toBe(DARK);
 
   const tops = await btns.evaluateAll((els) => [...new Set(els.map((e) => Math.round(e.getBoundingClientRect().top)))].length);
-  expect(tops, 'จำนวนแถวของแถบ').toBe(info.project.name === 'มือถือ' ? 2 : 1);
+  /* แถบปุ่มช่วงเวลาเรียงเดียวได้เฉพาะเดสก์ท็อป — แท็บเล็ตเนื้อหากว้าง 560px จึงตกสองแถวเหมือนมือถือ */
+  expect(tops, 'จำนวนแถวของแถบ').toBe(page.viewportSize()!.width < 1280 ? 2 : 1);
 
   /* ป้าย "ถึง" อยู่แถวเดียวกับช่องของมัน */
   const pair = await page.locator('.range-f').nth(1).evaluate((el) => {
