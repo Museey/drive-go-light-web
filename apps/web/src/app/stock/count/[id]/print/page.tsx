@@ -4,6 +4,7 @@ import { isUuid } from '@/lib/ids';
 import { query, requireTab } from '@/lib/auth';
 import { getCount } from '@/lib/stock-counts';
 import { getShop } from '@/lib/queries';
+import { BackFab } from '@/components/back-fab';
 import { PrintButton } from '../../../../income/[id]/print/print-button';
 import { baht, thDate, thDateLong } from '@/lib/format';
 
@@ -47,6 +48,8 @@ export default async function CountPrintPage({
         </span>
         <PrintButton />
       </div>
+
+      <BackFab solo fallbackHref={`/stock/count/${id}`} />
 
       <div className="printview">
         <div className="paper">

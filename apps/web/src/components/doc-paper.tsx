@@ -1,6 +1,7 @@
 import type { DocDetail, ShopInfo } from '@/lib/queries';
 import { baht, thDate } from '@/lib/format';
 import { PrintButton } from '@/app/income/[id]/print/print-button';
+import { BackFab } from './back-fab';
 
 /**
  * หน้าพิมพ์เอกสาร A4 ตามต้นแบบ 14 ก.ย. 2569 22:37 (pagePrint ใน dgl-prototype-2569-09-13.html)
@@ -8,6 +9,7 @@ import { PrintButton } from '@/app/income/[id]/print/print-button';
  * ใช้ร่วมกันระหว่างเอกสารขาย (ใบเสนอราคา ใบส่งมอบ ใบกำกับภาษี ใบเสร็จ) และใบซื้อ/ค่าใช้จ่าย
  * เจ้าของกิจการเลือกให้เหมือนต้นแบบทุกอย่าง (15 ก.ย. 2569) — ไม่มีกรอบวิธีชำระเงิน หัก ณ ที่จ่าย
  * ยอดสุทธิ และจำนวนเงินตัวอักษรเหมือนหน้าพิมพ์เดิม · ดู docs/ui-layout-spec.md §13
+ * ยกเว้นใบเสร็จ: ต่อท้ายยอดรวมด้วย หัก ณ ที่จ่าย (ถ้ามี) · ชำระแล้ว · คงค้างชำระ (ผู้ใช้ขอเพิ่ม 17 ก.ย. 2569)
  *
  * แบ่งหน้า A4: หน้าแรกมีกรอบลูกค้า/รถ/อาการ จุได้น้อยกว่า หน้าต่อไปจุ 26 บรรทัด ยอดรวม/ลายเซ็นอยู่หน้าสุดท้าย
  */
@@ -61,6 +63,8 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
   const showBank = (kind === 'RC' || kind === 'BN' || kind === 'IVT' || kind === 'IV') && !!bank;
 
   const colCount = hasDisc ? 7 : 6;
+  const paid = Math.round(doc.payments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+  const outstanding = Math.max(0, Math.round((doc.payable - paid) * 100) / 100);
   const owner = (kind === 'QT' ? doc.proposer : doc.receivedBy) || brand.ownerName || '..........................';
 
   return (
@@ -71,6 +75,8 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
           กระดาษ A4{N > 1 ? ` · ${N} หน้า (รายการเกินหน้าแรก ระบบขึ้นหน้าใหม่ให้)` : ''}
         </span>
       </div>
+
+      <BackFab solo fallbackHref={buy ? `/expense/${doc.id}` : `/income/${doc.id}`} />
 
       <div className="printview">
         {pages.map((chunk, pi) => (
@@ -213,6 +219,17 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
                         </>
                       ) : null}
                       <tr><td><b>รวมทั้งสิ้น</b></td><td><b>{baht(doc.grandTotal)}</b></td></tr>
+                      {/* ใบเสร็จ: ยอดที่รับแล้วและที่ยังค้าง ณ ตอนพิมพ์ (ผู้ใช้แจ้ง 17 ก.ย. 2569 — ต้นแบบไม่มี)
+                          คงค้างคิดจากยอดต้องชำระหลังหัก ณ ที่จ่าย จึงต้องโชว์บรรทัดหักด้วย ไม่งั้นบวกลบไม่ลงกัน */}
+                      {kind === 'RC' ? (
+                        <>
+                          {doc.whtAmount > 0 ? (
+                            <tr className="pay-wht"><td>หัก ณ ที่จ่าย {doc.whtRate}%</td><td>−{baht(doc.whtAmount)}</td></tr>
+                          ) : null}
+                          <tr className="pay-paid"><td>ชำระแล้ว</td><td>{baht(paid)}</td></tr>
+                          <tr className="pay-out"><td><b>คงค้างชำระ</b></td><td><b>{baht(outstanding)}</b></td></tr>
+                        </>
+                      ) : null}
                     </tbody>
                   </table>
                 </div>

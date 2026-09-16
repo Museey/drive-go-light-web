@@ -390,12 +390,12 @@ export async function listIncomeDocs(opts: {
     );
 
     /*
-     * คอลัมน์งานค้างของใบเสนอราคา — ถามเฉพาะตอนอยู่แท็บนั้น
-     * คิวรีเดียวสำหรับทั้งหน้า ไม่ใช่ต่อแถว ใช้ดัชนี (tenant_id, parent_doc_id) ที่มีอยู่แล้ว
+     * ใบต่อของใบเสนอราคา (คอลัมน์งานค้าง + ชิปสถานะ) — คิวรีเดียวสำหรับทั้งหน้า ใช้ดัชนี (tenant_id, parent_doc_id)
+     * ถามทุกแถวใบเสนอราคาในหน้า ไม่ใช่เฉพาะแท็บใบเสนอราคา — เดิมถามเฉพาะแท็บนั้น
+     * แท็บทั้งหมด/ผลค้นหา/การ์ดมือถือ จึงขึ้น "ค้างส่งมอบ" ทั้งที่ออกใบส่งมอบไปแล้ว (ผู้ใช้แจ้ง 17 ก.ย. 2569)
      */
-    const follow = kind === 'QT'
-      ? await quoteFollowUpsWith(c, rows.map((r) => r.id as string))
-      : new Map<string, { invoice: DocRef | null; receipt: DocRef | null }>();
+    const follow: Map<string, { invoice: DocRef | null; receipt: DocRef | null }> =
+      await quoteFollowUpsWith(c, rows.filter((r) => r.kind === 'QT').map((r) => r.id as string));
 
     /* ใบส่งมอบในหน้านี้ ใบไหนออกใบเสร็จไปแล้ว — ใช้ตัดสินว่าจะโชว์ปุ่มออกใบเสร็จในแถวไหม
        ถามทุกแท็บที่มีใบส่งมอบปนอยู่ ไม่ใช่เฉพาะแท็บใบส่งมอบ */

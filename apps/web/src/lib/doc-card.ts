@@ -58,12 +58,22 @@ export interface IncomeCardRow {
 }
 
 /** ชิปสถานะของเอกสารขาย — ตารางประวัติและการ์ดใช้ตัวเดียวกัน */
-export function incomeStatus(r: IncomeCardRow, todayIso: string): CardStatus {
+export function incomeStatus(
+  r: Pick<IncomeCardRow, 'kind' | 'outstanding' | 'dueDate' | 'invoice' | 'receipt' | 'voided'>,
+  todayIso: string,
+): CardStatus {
   if (r.voided) return { label: 'ยกเลิก', tone: 'plain' };
+  /* ออกใบต่อแล้ว = "เรียบร้อย" (ผู้ใช้กำหนด 17 ก.ย. 2569) */
   if (r.kind === 'QT') {
     return r.invoice || r.receipt
-      ? { label: 'ออกใบต่อแล้ว', tone: 'ok' }
+      ? { label: 'เรียบร้อย', tone: 'ok' }
       : { label: 'ค้างส่งมอบ', tone: 'warn' };
+  }
+  /* ใบส่งมอบ: บันทึกแล้ว = ส่งมอบงานแล้ว "เรียบร้อย" — ยอดคงค้างยังโชว์เป็นตัวเลข
+     เลยวันครบกำหนดแล้วยังไม่ได้เงินยังเตือน · ออกใบเสร็จแล้วหนี้ย้ายไปใบเสร็จ ไม่เตือนซ้ำ */
+  if (r.kind === 'IV' || r.kind === 'IVT') {
+    if (!r.receipt && overdue(r.outstanding, r.dueDate, todayIso)) return { label: 'เกินกำหนด', tone: 'due' };
+    return { label: 'เรียบร้อย', tone: 'ok' };
   }
   if (overdue(r.outstanding, r.dueDate, todayIso)) return { label: 'เกินกำหนด', tone: 'due' };
   if (r.outstanding > 0.004) return { label: 'ค้างชำระ', tone: 'warn' };
