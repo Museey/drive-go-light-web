@@ -117,7 +117,9 @@ export default async function WalkinPage({
             {history.rows.length === 0 ? (
               <div className="empty">ยังไม่มีการขายหน้าร้านในช่วงนี้</div>
             ) : (
-              <IncomeHistoryTable rows={history.rows} todayIso={todayIso} mayEdit={mayEdit} banks={shopBanks} />
+              <IncomeHistoryTable rows={history.rows} todayIso={todayIso} mayEdit={mayEdit} banks={shopBanks}
+                                  cardTitle="ประวัติขายหน้าร้าน" more={lastPage > 1}
+                                  newHref="/income/walkin" newLabel="＋ ขายหน้าร้าน" />
             )}
             <div className="pager">
               <span>หน้า {page} จาก {lastPage}</span>

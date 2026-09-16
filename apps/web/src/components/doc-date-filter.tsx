@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { DateRangeSelect } from './date-range-select';
+import { datePresets, monthRange } from '@/lib/date-presets';
 import { ThaiDateInput } from './thai-date-input';
 
 /**
@@ -15,16 +17,7 @@ const TH_MONTHS = [
   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
 ];
 
-const pad = (n: number) => String(n).padStart(2, '0');
-const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-/** วันแรกและวันสุดท้ายของเดือน */
-export function monthRange(year: number, month1: number): { from: string; to: string } {
-  return {
-    from: `${year}-${pad(month1)}-01`,
-    to: `${year}-${pad(month1)}-${pad(new Date(year, month1, 0).getDate())}`,
-  };
-}
+export { monthRange };
 
 export function DocDateFilter({
   base, from, to, keep = {}, monthPicker = true,
@@ -42,19 +35,7 @@ export function DocDateFilter({
 }) {
   const now = new Date();
   const y = now.getFullYear();
-  const thisMonth = monthRange(y, now.getMonth() + 1);
-  const lastM = new Date(y, now.getMonth() - 1, 1);
-  const lastMonth = monthRange(lastM.getFullYear(), lastM.getMonth() + 1);
-  const todayIso = iso(now);
-
-  const presets = [
-    { label: 'ทั้งหมด', from: '', to: '' },
-    { label: 'วันนี้', from: todayIso, to: todayIso },
-    { label: 'เดือนนี้', ...thisMonth },
-    { label: 'เดือนที่แล้ว', ...lastMonth },
-    { label: 'ปีนี้', from: `${y}-01-01`, to: `${y}-12-31` },
-    { label: 'ปีที่แล้ว', from: `${y - 1}-01-01`, to: `${y - 1}-12-31` },
-  ];
+  const presets = datePresets(now);
 
   const on = (p: { from: string; to: string }) =>
     (from ?? '') === p.from && (to ?? '') === p.to;
@@ -63,7 +44,12 @@ export function DocDateFilter({
   const years = Array.from({ length: 6 }, (_, i) => y - i);
 
   return (
-    <div className="toolbar" style={{ borderTop: '1px solid var(--line)' }}>
+    <>
+    {/* จอต่ำกว่า 1280 เหลือ dropdown เดียวตามต้นแบบ — เรนเดอร์ทั้งสองแบบแล้วซ่อนด้วย CSS
+        ไม่วัดความกว้างจอใน JS (สเปก §2) ไม่งั้นตัวกรองกระพริบตอนโหลดทุกครั้ง */}
+    <DateRangeSelect base={base} from={from} to={to} keep={keep} />
+
+    <div className="toolbar dfilter" style={{ borderTop: '1px solid var(--line)' }}>
       {/* .tag-row — ลูกตรงของ .toolbar บนมือถือยืดเต็มจอ ชิปเรียงลงทีละปุ่ม */}
       <div className="tag-row">
         <span className="subtle">ช่วงวันที่</span>
@@ -102,6 +88,7 @@ export function DocDateFilter({
         <button className="btn" type="submit">ดู</button>
       </form>
     </div>
+    </>
   );
 }
 

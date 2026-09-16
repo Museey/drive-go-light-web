@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { DocCards } from '@/components/doc-cards';
 import { RowLink } from '@/components/row-link';
+import { incomeDocCard, incomeStatus } from '@/lib/doc-card';
 import { baht, thDate } from '@/lib/format';
 import type { listIncomeDocs } from '@/lib/queries';
 import { RowPay } from './row-pay';
@@ -12,15 +14,25 @@ type IncomeRow = Awaited<ReturnType<typeof listIncomeDocs>>['rows'][number];
  * แยกออกมาเพราะหน้าขายหน้าร้านต้องมีตารางเดียวกันทุกคอลัมน์ (ต้นแบบใช้ histTable ตัวเดียวกัน)
  * ถ้าคัดลอกไปวางสองที่ วันหนึ่งแก้ที่หนึ่งแล้วอีกที่หนึ่งจะเพี้ยนไปเงียบ ๆ
  */
-export function IncomeHistoryTable({ rows, todayIso, mayEdit, banks }: {
+export function IncomeHistoryTable({ rows, todayIso, mayEdit, banks, cardTitle = 'ประวัติเอกสาร', more = false, newHref, newLabel }: {
   rows: IncomeRow[];
   todayIso: string;
   mayEdit: boolean;
   /** บัญชีรับโอนของร้าน — ป๊อปอัปรับชำระตรงแถวให้เลือก */
   banks: { bank: string; no: string; name: string }[];
+  /** หัวข้อกลุ่มของการ์ด (จอแคบ) */
+  cardTitle?: string;
+  more?: boolean;
+  newHref?: string;
+  newLabel?: string;
 }) {
   return (
-    <div className="tablewrap">
+    <>
+    {/* จอต่ำกว่า 1280 = การ์ด · 1280 ขึ้นไปและตอนพิมพ์ = ตารางเดิมทุกคอลัมน์ (สลับด้วย CSS) */}
+    <DocCards cards={rows.map((r) => incomeDocCard(r, todayIso))}
+              title={cardTitle} more={more} newHref={newHref} newLabel={newLabel} />
+
+    <div className="tablewrap doc-table">
       {/* ประวัติแบบใหม่ (ผู้ใช้ให้ภาพอ้างอิง): ชนิด · วันที่ · ลูกค้า · ชำระ · ครบกำหนด · ก่อนภาษี · ภาษี · รวมสุทธิ · คงค้าง · สถานะ · รับชำระ/แก้/≡/ลบ */}
       {/* คอลัมน์พอดีหน้า ไม่ต้องเลื่อนซ้ายขวา: table-layout fixed + ชื่อลูกค้าตัดบรรทัดได้ · จอ < 1280 ซ่อน ก่อนภาษี/ภาษี */}
       <table className="tbl hist fit">
@@ -48,12 +60,9 @@ export function IncomeHistoryTable({ rows, todayIso, mayEdit, banks }: {
         </thead>
         <tbody>
           {rows.map((r) => {
-            const overdue = r.outstanding > 0.004 && !!r.dueDate && r.dueDate < todayIso;
-            const st = r.voided ? <span className="chip">ยกเลิก</span>
-              : r.kind === 'QT' ? (r.invoice || r.receipt ? <span className="chip ok">ออกใบต่อแล้ว</span> : <span className="chip warn">ค้างส่งมอบ</span>)
-              : overdue ? <span className="chip due">เกินกำหนด</span>
-              : r.outstanding > 0.004 ? <span className="chip warn">ค้างชำระ</span>
-              : <span className="chip ok">ชำระครบ</span>;
+            /* ชิปเดียวกับที่การ์ดใช้ — คิดที่ lib/doc-card.ts ที่เดียว ไม่งั้นสองหน้าจอพูดคนละเรื่อง */
+            const s = incomeStatus(r, todayIso);
+            const st = <span className={s.tone === 'plain' ? 'chip' : `chip ${s.tone}`}>{s.label}</span>;
             const canPay = !r.voided && r.kind !== 'QT' && r.outstanding > 0.004;
             return (
               <RowLink key={r.id} href={`/income/${r.id}`} className={r.voided ? 'voided' : ''}>
@@ -94,5 +103,6 @@ export function IncomeHistoryTable({ rows, todayIso, mayEdit, banks }: {
         </tfoot>
       </table>
     </div>
+    </>
   );
 }

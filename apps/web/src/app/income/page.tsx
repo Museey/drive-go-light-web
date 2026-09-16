@@ -186,13 +186,20 @@ export default async function IncomePage({
       </div>
       {form && !histFirst ? <FormBlock form={form} kind={formKind!} returnTo={returnTo} /> : null}
       {histFirst ? (<div className="card">
+        {/* hist=1 ต้องติดไปกับตัวกรองวันที่ด้วย — ไม่งั้นกรองจากหน้าประวัติแล้วเด้งไปฟอร์มสร้างใหม่
+                           (เทสต์ doc-cards จับได้ตอนทำ dropdown ของจอแคบ · ชิปบนเดสก์ท็อปก็เป็นมาก่อนหน้านี้) */}
         <DocDateFilter base="/income" from={from} to={to} monthPicker={false}
-                       keep={{ ...(search ? { q: search } : {}), ...(kind ? { kind } : {}) }} />
+                       keep={{ hist: '1', ...(search ? { q: search } : {}), ...(kind ? { kind } : {}) }} />
 
         {rows.length === 0 ? (
           <div className="empty">ไม่พบเอกสารที่ตรงกับเงื่อนไข</div>
         ) : (
-          <IncomeHistoryTable rows={rows} todayIso={todayIso} mayEdit={mayEdit} banks={shopBanks} />
+          <IncomeHistoryTable rows={rows} todayIso={todayIso} mayEdit={mayEdit} banks={shopBanks}
+                              cardTitle={kind ? `ประวัติ${KIND_SHORT[kind] ?? ''}` : 'ประวัติเอกสารทั้งหมด'}
+                              more={lastPage > 1}
+                              /* ปุ่มสร้างใหม่ต้องรู้ว่าจะสร้างใบอะไร — ยังไม่ได้เลือกชนิดก็ไม่มีปุ่ม */
+                              newHref={kind ? `/income?kind=${kind}` : undefined}
+                              newLabel={kind ? `＋ ${KIND_SHORT[kind] ?? 'สร้างใหม่'}` : undefined} />
         )}
 
         <div className="pager">

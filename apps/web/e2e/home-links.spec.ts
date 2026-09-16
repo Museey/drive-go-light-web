@@ -15,16 +15,22 @@ test.beforeEach(async ({ context }) => {
 });
 
 /**
- * หน้าประวัติ = ไม่มีฟอร์มสร้างเอกสารใหม่ และมีตารางรายการ (ไม่มีรายการตรงเงื่อนไขก็เป็นข้อความว่าง)
+ * หน้าประวัติ = ไม่มีฟอร์มสร้างเอกสารใหม่ และมีรายการให้ดู (ไม่มีรายการตรงเงื่อนไขก็เป็นข้อความว่าง)
  * `rows` = รู้มาก่อนว่าต้องมีรายการ — กันเคสหน้าโล่งแล้วเทสต์ผ่านเปล่า ๆ
+ *
+ * รายการแสดงคนละแบบตามขนาดจอตั้งแต่ 16 ก.ย. 2569 (สเปก §13.9):
+ * ต่ำกว่า 1280 เป็นการ์ด · 1280 ขึ้นไปเป็นตาราง — ถามคำถามเดิมกับของที่หน้านั้นแสดงจริง
  */
+const แคบ = (page: Page) => (page.viewportSize()?.width ?? 0) < 1280;
+const รายการ = (page: Page) => แคบ(page) ? '.doc-cards .dcard' : 'table.hist tbody tr';
+
 async function expectHistoryPage(page: Page, rows: boolean) {
   await expect(page).toHaveURL(/[?&]hist=1/);
   await expect(page.locator('#new-doc, #new-buy'), 'ต้องไม่ใช่ฟอร์มสร้างเอกสารใหม่').toHaveCount(0);
   if (rows) {
-    await expect(page.locator('table.hist tbody tr').first()).toBeVisible();
+    await expect(page.locator(รายการ(page)).first()).toBeVisible();
   } else {
-    await expect(page.locator('table.hist, .empty').first()).toBeVisible();
+    await expect(page.locator(`${แคบ(page) ? '.doc-cards' : 'table.hist'}, .empty`).first()).toBeVisible();
   }
 }
 
@@ -34,8 +40,10 @@ test('สรุปยอดขาย → "ดูใบเสร็จทั้�
 
   await expect(page).toHaveURL(/\/income\?.*kind=RC/);
   await expectHistoryPage(page, true);
-  /* ตัวกรองชนิดยังติดไป — ทุกแถวเป็นใบเสร็จ */
-  const kinds = await page.locator('table.hist tbody tr td:nth-child(2)').allInnerTexts();
+  /* ตัวกรองชนิดยังติดไป — ทุกใบเป็นใบเสร็จ (ชิปชนิดอยู่ทั้งบนการ์ดและในตาราง) */
+  const kinds = await page.locator(แคบ(page)
+    ? '.doc-cards .dcard .kindchip'
+    : 'table.hist tbody tr td:nth-child(2)').allInnerTexts();
   expect(kinds.length).toBeGreaterThan(0);
   expect(kinds.every((k) => k.includes('RC')), kinds.join(' · ')).toBe(true);
 });

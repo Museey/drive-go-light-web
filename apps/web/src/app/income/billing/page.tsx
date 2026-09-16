@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { DocCards } from '@/components/doc-cards';
+import { billingDocCard } from '@/lib/doc-card';
 import { PrintReport } from '@/components/print-report';
 import { canEdit as mayEditOf, canExport as mayExportOf } from '@/lib/perms';
 import { requireTab } from '@/lib/auth';
@@ -124,13 +126,21 @@ export default async function BillingPage({
         {!histFirst ? formBlock : null}
         {histFirst ? (<div className="card">
 
+          {/* hist=1 ต้องติดไปกับตัวกรองวันที่ด้วย — ไม่งั้นกรองจากหน้าประวัติแล้วเด้งไปฟอร์มสร้างใหม่
+                           (เทสต์ doc-cards จับได้ตอนทำ dropdown ของจอแคบ · ชิปบนเดสก์ท็อปก็เป็นมาก่อนหน้านี้) */}
           <DocDateFilter base="/income/billing" from={from} to={to} monthPicker={false}
-                         keep={sp.q ? { q: sp.q } : {}} />
+                         keep={{ hist: '1', ...(vat ? { vat } : {}), ...(sp.q ? { q: sp.q } : {}) }} />
 
           {rows.length === 0 ? (
             <div className="empty">ยังไม่มีใบวางบิล</div>
           ) : (
-            <div className="tablewrap">
+            <>
+            {/* จอต่ำกว่า 1280 = การ์ด · 1280 ขึ้นไปและตอนพิมพ์ = ตารางเดิม (สลับด้วย CSS) */}
+            <DocCards cards={rows.map(billingDocCard)} more={lastPage > 1} title="ประวัติใบวางบิล"
+                      newHref={mayEdit ? `/income/billing?vat=${vat === 'no' ? 'no' : 'yes'}` : undefined}
+                      newLabel="＋ ใบวางบิล" />
+
+            <div className="tablewrap doc-table">
               <table className="tbl hist fit">
                 <thead>
                   <tr>
@@ -193,6 +203,7 @@ export default async function BillingPage({
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           <div className="pager">
