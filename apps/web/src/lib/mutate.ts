@@ -1,8 +1,10 @@
 import 'server-only';
 import type pg from 'pg';
+import { productLimitMessage } from '@drivegolight/core';
 import { requireEdit, requirePerm, type Perm } from './auth';
 import { withTenant } from './db';
 import { licenseStatusWith } from './license-window';
+import { isProductLimitError } from './product-limit';
 
 export interface MutateOptions {
   /**
@@ -89,6 +91,9 @@ export function keepValues(fd: FormData): Record<string, string> {
  */
 export function friendlyDbError(err: unknown, labels: Record<string, string> = {}): string {
   const e = err as { code?: string; constraint?: string; message?: string };
+
+  /* ทริกเกอร์จำกัดสินค้า 3,000 — มาถึงตรงนี้เมื่อแข่งกันกดพร้อมกันจนหลุดการตรวจล่วงหน้า */
+  if (isProductLimitError(e)) return productLimitMessage({ kind: 'form' });
 
   if (e.code === '23505') {
     const c = e.constraint ?? '';

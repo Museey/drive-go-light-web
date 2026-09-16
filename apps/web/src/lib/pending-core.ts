@@ -7,6 +7,7 @@
  * และผูกชื่อชุดเข้าสินค้าจะเขียน product_id ทับบรรทัดชุด (ตัดสต๊อกผิดตัวตอนยกเลิก/กู้คืน)
  */
 import type pg from 'pg';
+import { ensureProductRoomWith } from './product-limit';
 
 type Client = pg.PoolClient | pg.Client;
 
@@ -92,4 +93,21 @@ export async function linkPendingWith(c: Client, nameNorm: string, productId: st
     [nameNorm, productId],
   );
   return rowCount ?? 0;
+}
+
+/** สร้างสินค้าใหม่จากชื่อที่ค้างอยู่ แล้วผูกให้เลย */
+export async function createProductFromPendingWith(
+  c: Client, nameNorm: string,
+  p: { code: string; name: string; unit: string; cost: number; priceA: number },
+): Promise<{ productId: string; linked: number }> {
+  await ensureProductRoomWith(c, 1);
+  const { rows } = await c.query(
+    `insert into products (tenant_id, code, name, unit, last_cost, price_a, price_b, price_c)
+     values (current_tenant_id(), $1, $2, $3, $4, $5, $5, $5)
+     returning id`,
+    [p.code, p.name, p.unit, p.cost, p.priceA],
+  );
+  const productId = rows[0].id;
+  const linked = await linkPendingWith(c, nameNorm, productId);
+  return { productId, linked };
 }

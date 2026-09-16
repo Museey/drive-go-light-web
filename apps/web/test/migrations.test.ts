@@ -115,6 +115,20 @@ async function fingerprint(c: pg.Client) {
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname in ('public', 'auth', 'ops')
       order by 1, 2`),
+
+    /*
+     * ทริกเกอร์ — เดิมไม่ได้เทียบเลย
+     *
+     * ฟังก์ชันของทริกเกอร์ตรงกันแต่ลืมสร้างตัวทริกเกอร์ในทางใดทางหนึ่ง = กติกานั้นไม่ทำงานเงียบ ๆ
+     * (เช่นขีดจำกัดสินค้า 3,000 รายการ db/032 — ฟังก์ชันอยู่ครบ แต่ไม่มีอะไรเรียกมัน)
+     */
+    triggers: await q(`
+      select c.relname || '.' || t.tgname as name, pg_get_triggerdef(t.oid) as def
+      from pg_trigger t
+      join pg_class c on c.oid = t.tgrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname in ('public', 'auth', 'ops') and not t.tgisinternal
+      order by 1`),
   };
 }
 
@@ -189,6 +203,12 @@ describe.skipIf(!DB_URL)('ไมเกรชัน', () => {
     const a = await fingerprint(fresh);
     const b = await fingerprint(upgraded);
     expect(b.functions).toEqual(a.functions);
+  });
+
+  it('ทริกเกอร์เหมือนกัน', async () => {
+    const a = await fingerprint(fresh);
+    const b = await fingerprint(upgraded);
+    expect(b.triggers).toEqual(a.triggers);
   });
 
   /**

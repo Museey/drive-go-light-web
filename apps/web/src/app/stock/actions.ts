@@ -16,6 +16,7 @@ import {
 } from '@/lib/mutate';
 import { setStockHiddenCols, STOCK_COLS } from '@/lib/ui-prefs';
 import { safeBack, withSaved } from '@/lib/saved-target';
+import { isProductLimitError, ProductLimitError } from '@/lib/product-limit';
 
 /** รายชื่อผู้ขายจากฟอร์ม (JSON) — กรองของเสีย ไม่ให้ค่าพัง ๆ ลงฐาน */
 function parseSuppliers(raw: string): { vendorId: string | null; name: string }[] | undefined {
@@ -105,7 +106,8 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
         code: `รหัสสินค้า "${code}" มีอยู่แล้ว ใช้รหัสอื่น`,
         barcode: `บาร์โค้ด "${str(fd, 'barcode')}" ถูกใช้กับสินค้าตัวอื่นแล้ว`,
       }),
-      field: 'code',
+      /* ครบ 3,000 ไม่ใช่ความผิดของช่องรหัส — ไม่ไฮไลต์ช่องไหน */
+      field: isProductLimitError(err) || err instanceof ProductLimitError ? undefined : 'code',
       values: kept,
     };
   }
@@ -228,7 +230,10 @@ export async function createFromPendingAction(_prev: FormResult, fd: FormData): 
       nameNorm, code, str(fd, 'name'), str(fd, 'unit'), money(fd, 'cost'), money(fd, 'priceA'),
     );
   } catch (err) {
-    return { error: friendlyDbError(err, { code: `รหัสสินค้า "${code}" มีอยู่แล้ว` }), field: 'code' };
+    return {
+      error: friendlyDbError(err, { code: `รหัสสินค้า "${code}" มีอยู่แล้ว` }),
+      field: isProductLimitError(err) || err instanceof ProductLimitError ? undefined : 'code',
+    };
   }
 
   revalidatePath('/stock/pending');

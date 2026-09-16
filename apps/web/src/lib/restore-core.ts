@@ -1,3 +1,4 @@
+import { activeProductsOf, productLimitMessage, productRoomAfter } from '@drivegolight/core';
 import {
   hasDataLoss, importBackup, unsupportedCollections, validateBackup,
   type BackupFile, type UnsupportedGroup,
@@ -98,6 +99,8 @@ export interface BackupPreview {
   dropped: UnsupportedGroup[];
   /** true = มีข้อมูลที่จะหายทั้งกลุ่ม ต้องให้ผู้ใช้ยืนยันเพิ่ม */
   needsAcknowledgement: boolean;
+  /** สินค้าที่ใช้งานในไฟล์เกิน 3,000 — มีค่า = กู้คืนไม่ได้ · null = ไม่เกิน */
+  productLimit: { total: number; over: number } | null;
 }
 
 const COUNTABLE = [
@@ -115,8 +118,17 @@ export function previewBackup(text: string): BackupPreview {
     if (Array.isArray(v) && v.length) counts[k] = v.length;
   }
 
-  return { counts, dropped, needsAcknowledgement: hasDataLoss(dropped) };
+  return { counts, dropped, needsAcknowledgement: hasDataLoss(dropped), productLimit: productLimitOf(backup) };
 }
+
+/** สินค้าที่ใช้งานในไฟล์เทียบขีดจำกัด — กู้คืนแทนที่สินค้าทั้งหมด จึงนับจากไฟล์อย่างเดียว ไม่บวกของเดิม */
+function productLimitOf(backup: Record<string, unknown>): { total: number; over: number } | null {
+  const room = productRoomAfter(0, activeProductsOf(backup.products));
+  return room.over > 0 ? room : null;
+}
+
+/** ไฟล์มีสินค้าที่ใช้งานเกินขีดจำกัด — โยนก่อนแตะข้อมูลเดิม */
+export class RestoreProductLimitError extends Error {}
 
 export async function restoreIntoTenant(
   c: SqlClient,
@@ -124,6 +136,9 @@ export async function restoreIntoTenant(
   backup: BackupFile,
 ): Promise<RestoreResult> {
   const dropped = unsupportedCollections(backup);
+  /* ตรวจก่อนล้าง — ไม่งั้นอู่เสียข้อมูลเดิมไปแล้วค่อยรู้ว่ากู้ไม่ได้ (ทรานแซกชันก็ย้อนได้ แต่ข้อความต้องบอกได้ว่าเพราะอะไร) */
+  const limit = productLimitOf(backup as unknown as Record<string, unknown>);
+  if (limit) throw new RestoreProductLimitError(productLimitMessage({ kind: 'restore', ...limit }));
   const removed = await wipeTenantData(c);
   const result = await importBackup(c, backup, {
     intoTenantId: tenantId,
