@@ -15,14 +15,27 @@ test.beforeEach(async ({ context }) => {
 
 const DARK = 'rgb(15, 92, 62)';          /* --steel-dk */
 
+/**
+ * ปุ่มรับ/จ่ายชำระรายใบ — ตั้งแต่เฟส 5 จอต่ำกว่า 1280 ไม่มีตารางรายใบแล้ว
+ * ปุ่มอยู่ในหน้ารายคน (กดการ์ดรายคนใบแรกเข้าไป) · เดสก์ท็อปยังอยู่ในแถวตาราง
+ */
+async function payButton(page: Page, path: string, word: string) {
+  await page.goto(path);
+  if ((page.viewportSize()?.width ?? 0) < 1280) {
+    await page.locator('.party-cards a.mparty').first().click();
+    await page.waitForURL(/[?&]party=/);
+    return page.locator('.party-docs button.pay-btn', { hasText: word }).first();
+  }
+  return page.locator('table tbody button', { hasText: word }).first();
+}
+
 const bg = (page: Page, sel: string) =>
   page.locator(sel).first().evaluate((el) => getComputedStyle(el).backgroundColor);
 
 /* ข้อ 1–2 */
 for (const [path, word] of [['/finance/ar', 'รับชำระ'], ['/finance/ap', 'จ่ายชำระ']] as const) {
   test(`ปุ่ม${word}ในแถวเป็นสีเขียว — ${path}`, async ({ page }) => {
-    await page.goto(path);
-    const btn = page.locator('table tbody button', { hasText: word }).first();
+    const btn = await payButton(page, path, word);
     await expect(btn).toBeVisible();
     const color = await btn.evaluate((el) => getComputedStyle(el).backgroundColor);
     const ok = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--ok').trim());
@@ -93,6 +106,14 @@ for (const path of LINE_PAGES) {
 /* ข้อ 6 */
 test('หน้าแรก: ช่วงเวลาเป็นแถบปุ่มต่อกัน 6 ปุ่ม · อันที่เลือกเขียวเข้ม', async ({ page }) => {
   await page.goto('/');
+  /* เฟส 5: จอต่ำกว่า 1280 ช่วงเวลาหน้าแรกเป็น dropdown เดียว — ตัวเลือกชุดเดียวกัน ลำดับเดียวกัน */
+  if ((page.viewportSize()?.width ?? 0) < 1280) {
+    await expect(page.locator('nav.seg')).toBeHidden();
+    const opts = await page.locator('.mdate select option').allInnerTexts();
+    expect(opts).toEqual(['ทั้งหมด', 'วันนี้', 'เดือนนี้', 'เดือนที่แล้ว', 'ปีนี้', 'ปีที่แล้ว']);
+    await expect(page.locator('.mdate select')).toHaveValue('|');
+    return;
+  }
   const seg = page.locator('nav.seg');
   await expect(seg).toBeVisible();
   const btns = seg.locator('a.seg-btn');
@@ -129,8 +150,7 @@ test('ตัวกรองวันที่: dropdown เดือนขึ้
 
 /* ข้อ 9 */
 test('ช่องวันที่เป็นปฏิทินไทย พ.ศ. — ฟอร์มรับชำระ', async ({ page }) => {
-  await page.goto('/finance/ar');
-  await page.locator('table tbody button', { hasText: 'รับชำระ' }).first().click();
+  await (await payButton(page, '/finance/ar', 'รับชำระ')).click();
   await expect(page.locator('input[type="date"]')).toHaveCount(0);
   const field = page.locator('.datein').first();
   await expect(field.locator('input.in')).toHaveAttribute('placeholder', 'วว/ดด/ปป');

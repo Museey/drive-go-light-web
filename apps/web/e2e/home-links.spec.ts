@@ -36,7 +36,9 @@ async function expectHistoryPage(page: Page, rows: boolean) {
 
 test('สรุปยอดขาย → "ดูใบเสร็จทั้งหมด" ไปประวัติใบเสร็จ ไม่ใช่ฟอร์มใบเสร็จใหม่', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: /ดูใบเสร็จทั้งหมด/ }).click();
+  /* เฟส 5: จอแคบใช้การ์ดเล็กของหน้าแรก — ปลายทางต้องเป็นที่เดียวกับปุ่มบนการ์ดใหญ่ */
+  if (แคบ(page)) await page.locator('.mhome a.mstat[data-k="sales"]').click();
+  else await page.getByRole('link', { name: /ดูใบเสร็จทั้งหมด/ }).click();
 
   await expect(page).toHaveURL(/\/income\?.*kind=RC/);
   await expectHistoryPage(page, true);
@@ -50,11 +52,14 @@ test('สรุปยอดขาย → "ดูใบเสร็จทั้�
 
 test('งานค้างส่งมอบ → "ดูรายการ" ไปประวัติใบเสนอราคาที่ยังค้าง', async ({ page }) => {
   await page.goto('/');
-  const card = page.locator('.hcard').filter({ hasText: 'งานค้างส่งมอบ' });
+  const card = แคบ(page)
+    ? page.locator('.mhome a.mstat[data-k="openqt"]')
+    : page.locator('.hcard').filter({ hasText: 'งานค้างส่งมอบ' });
   test.skip(!(await card.count()), 'บัญชีนี้ไม่เห็นการ์ดงานค้างส่งมอบ');
   /* ตัวเลขบนการ์ดบอกว่าควรมีกี่ใบ — ถ้ามี ต้องเห็นรายการจริงในหน้าปลายทาง */
-  const count = Number((await card.locator('.big').innerText()).replace(/[^\d]/g, '')) || 0;
-  await card.getByRole('link', { name: /ดูรายการ/ }).click();
+  const count = Number((await card.locator(แคบ(page) ? '.val' : '.big').innerText()).replace(/[^\d]/g, '')) || 0;
+  if (แคบ(page)) await card.click();
+  else await card.getByRole('link', { name: /ดูรายการ/ }).click();
 
   await expect(page).toHaveURL(/\/income\?.*kind=QT/);
   await expect(page, 'ตัวกรองเฉพาะงานค้างยังติดไป').toHaveURL(/[?&]open=1/);
@@ -63,6 +68,8 @@ test('งานค้างส่งมอบ → "ดูรายการ" ไ
 });
 
 test('ตาราง "เอกสารในระบบ" → "ดูรายการ" ทุกแถวไปประวัติของชนิดนั้น', async ({ page }) => {
+  /* เฟส 5 (แผนข้อ 6): จอแคบไม่มีตารางนี้แล้ว — ประวัติไปถึงได้จากแถบล่างรายรับ/รายจ่าย */
+  test.skip(แคบ(page), 'จอต่ำกว่า 1280 ไม่มีตารางเอกสารในระบบ');
   await page.goto('/');
   const table = page.locator('table').filter({ has: page.locator('thead th', { hasText: 'ชนิดเอกสาร' }) });
   await expect(table, 'หาตารางเอกสารในระบบเจอ').toHaveCount(1);

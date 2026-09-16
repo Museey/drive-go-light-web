@@ -6,7 +6,7 @@
  * เขียนเป็นโมดูลบริสุทธิ์เพื่อให้เทสต์ได้โดยไม่ต้องเปิดเบราว์เซอร์หรือต่อฐานข้อมูล
  */
 import { describe, expect, it } from 'vitest';
-import { billingDocCard, expenseDocCard, incomeDocCard, incomeStatus } from '../src/lib/doc-card';
+import { billingDocCard, expenseDocCard, incomeDocCard, incomeStatus, owingDocCard, salesDocCard } from '../src/lib/doc-card';
 
 const TODAY = '2026-09-16';
 
@@ -137,5 +137,57 @@ describe('billingDocCard — ใบวางบิล', () => {
     expect(c.voided).toBe(true);
     expect(c.outstanding).toBe(null);
     expect(c.status).toEqual({ label: 'ยกเลิก', tone: 'plain' });
+  });
+});
+
+describe('owingDocCard — ใบค้างในหน้าลูกหนี้/เจ้าหนี้รายคน', () => {
+  const owe = (over = {}) => ({
+    id: 'o1', kind: 'IVT', docNo: 'IV-202609-004', docDate: '2026-09-02', dueDate: '2026-10-02',
+    partyName: 'บริษัท ขนส่งไทย จำกัด', vehiclePlate: 'กข 1', payable: 5000, paid: 0, outstanding: 5000, daysOverdue: -16,
+    ...over,
+  });
+
+  it('ลูกหนี้ลิงก์ไปหน้ารายรับ · เจ้าหนี้ลิงก์ไปหน้ารายจ่าย', () => {
+    expect(owingDocCard(owe(), 'sell').href).toBe('/income/o1');
+    expect(owingDocCard(owe({ kind: 'PO' }), 'buy').href).toBe('/expense/o1');
+  });
+
+  it('ยอดบนการ์ด = ยอดเต็มใบ · คงค้างแยกบรรทัด', () => {
+    const c = owingDocCard(owe({ paid: 2000, outstanding: 3000 }), 'sell');
+    expect(c.amount).toBe(5000);
+    expect(c.outstanding).toBe(3000);
+    expect(c.plate).toBe('กข 1');
+  });
+
+  it('ยังไม่ถึงกำหนด: ค้างชำระ (เหลือง) · จ่ายมาบางส่วน: ชำระบางส่วน', () => {
+    expect(owingDocCard(owe(), 'sell').status).toEqual({ label: 'ค้างชำระ', tone: 'warn' });
+    expect(owingDocCard(owe({ paid: 1, outstanding: 4999 }), 'sell').status).toEqual({ label: 'ชำระบางส่วน', tone: 'warn' });
+  });
+
+  it('เกินกำหนดบอกจำนวนวัน (แดง) — ครบกำหนดวันนี้ยังไม่เกิน', () => {
+    expect(owingDocCard(owe({ daysOverdue: 12 }), 'sell').status).toEqual({ label: 'เกิน 12 วัน', tone: 'due' });
+    expect(owingDocCard(owe({ daysOverdue: 0 }), 'sell').status.tone).toBe('warn');
+  });
+
+  it('เจ้าหนี้ไม่มีทะเบียนรถ', () => {
+    const { vehiclePlate: _omit, ...ap } = owe({ kind: 'EX' });
+    expect(owingDocCard(ap, 'buy').plate).toBe('');
+  });
+});
+
+describe('salesDocCard — เอกสารขายรายใบในหน้ายอดขาย', () => {
+  const d = (over = {}) => ({ id: 's1', kind: 'RC', docNo: 'RC-1', docDate: '2026-09-01', partyName: 'ก', payable: 1070, outstanding: 0, ...over });
+
+  it('ยอดบนการ์ด = สุทธิรับ · ชำระครบเขียว', () => {
+    const c = salesDocCard(d());
+    expect(c.href).toBe('/income/s1');
+    expect(c.amount).toBe(1070);
+    expect(c.status).toEqual({ label: 'ชำระครบ', tone: 'ok' });
+  });
+
+  it('ยังค้าง — เหลือง พร้อมยอดคงค้าง', () => {
+    const c = salesDocCard(d({ outstanding: 70 }));
+    expect(c.outstanding).toBe(70);
+    expect(c.status).toEqual({ label: 'ค้างชำระ', tone: 'warn' });
   });
 });
