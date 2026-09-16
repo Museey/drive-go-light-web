@@ -15,6 +15,7 @@ import { ActionTiles } from '@/components/action-tiles';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listCategories, listProducts } from '@/lib/products';
+import { filterLabel, stockCard } from '@/lib/stock-card';
 import { canCost } from '@/lib/perms';
 import { baht, thDate } from '@/lib/format';
 import { CategoryManager } from './category-manager';
@@ -26,6 +27,8 @@ export default async function StockPage({
 }: {
   searchParams: Promise<{ cols?: string; saved?: string; savedId?: string;
     q?: string; cat?: string; reorder?: string; all?: string; page?: string; flag?: string; size?: string;
+    /** แท็บของจอแคบ: ไม่มี = รายการสินค้า · '1' = เมนูและตัวกรอง (เฟส 3) */
+    menu?: string;
   }>;
 }) {
   const session = await requireTab('stock', 'list');
@@ -33,6 +36,9 @@ export default async function StockPage({
   const page = Number(sp.page ?? '1') || 1;
   const todayIso = today();
   const flag = toStockFlag(sp.flag);
+  /* แท็บบนจอแคบ — เดสก์ท็อปไม่สนใจค่านี้ เพราะเห็นทั้งสองก้อนพร้อมกันอยู่แล้ว */
+  const menuTab = sp.menu === '1';
+  const tabClass = menuTab ? 'narrow-tabs tab-menu' : 'narrow-tabs tab-list';
   /* ทะเบียนสินค้า: หน้าละ 10 ตั้งต้น เลือก 10/20 */
   const pageSize = pageSizeOf(sp.size, STOCK_PAGE_SIZES, STOCK_DEFAULT_PAGE_SIZE);
 
@@ -76,12 +82,30 @@ export default async function StockPage({
       title="สินค้า"
       sub={`${total.toLocaleString('en-US')} รายการ` + (show('cost') ? ` · มูลค่าสต๊อก ${baht(stockValue)}` : '')}
     >
-      <SubNav menu="stock" current="list" badges={{ pending: pending.length }}>
+      {/* จอต่ำกว่า 1280: สองแท็บ — เปิดหน้ามาเจอรายการสินค้าเลย เมนูย่อยกับตัวกรองอยู่หลังปุ่มเดียว
+          (ต้นแบบของทีม `.mseg` · ของเดิมต้องเลื่อนผ่านไทล์ 18 ใบราว 700px ก่อนถึงสินค้าใบแรก) */}
+      <nav className="mseg" aria-label="มุมมองหน้าสินค้า">
+        <Link className={menuTab ? '' : 'on'} href={{ pathname: '/stock', query: { ...keep } }}>🔎 ค้นหาสินค้า</Link>
+        <Link className={menuTab ? 'on' : ''} href={{ pathname: '/stock', query: { ...keep, menu: '1' } }}>▤ เมนูและตัวกรอง</Link>
+      </nav>
+
+      {/* คนกดมาจากการ์ด "ต้องสั่งซื้อ" ของหน้าแรกเห็นรายการไม่ครบ ต้องรู้ว่าเพราะอะไร
+          — บนเดสก์ท็อปไทล์ที่เลือกอยู่บอกแทน แต่จอแคบไทล์ไปอยู่หลังปุ่มสลับแล้ว */}
+      {filterLabel(sp) ? (
+        <div className="mfilter">
+          <span>กรอง: <b>{filterLabel(sp)}</b></span>
+          <Link className="clr" href="/stock">✕ ล้าง</Link>
+        </div>
+      ) : null}
+
+      <SubNav menu="stock" current="list" badges={{ pending: pending.length }} hideNarrow={!menuTab}>
       {/* แก้ไขสินค้าจากทะเบียน บันทึกแล้วกลับมาที่นี่พร้อมการ์ด */}
       <SavedNotice saved={sp.saved} savedId={sp.savedId} />
       <div className="card">
         {/* แถบไทล์แบบเดียวกับต้นแบบ: ทั้งหมด · ถึงจุดสั่งซื้อ · ตัวกรองสต๊อก · การ์ดอำพันเพิ่มสินค้า · ค้นหา · ตั้งค่าการแสดงผล · พิมพ์รายงาน */}
         <div className="toolbar">
+        <div className={tabClass}>
+          <div className="pane-menu">
           <div className="tiles">
             <Link className="tile" aria-current={!flag && sp.reorder !== '1' ? 'true' : undefined} href="/stock">ทั้งหมด</Link>
             <Link className="tile" aria-current={sp.reorder === '1' ? 'true' : undefined} href={{ pathname: '/stock', query: { reorder: '1' } }}>ถึงจุดสั่งซื้อ</Link>
@@ -93,8 +117,10 @@ export default async function StockPage({
             ))}
             <ActionTiles menu="stock" />
           </div>
+          </div>
           <span className="spacer" />
-          <form autoComplete="off" action="/stock" method="get" className="row-flex">
+          <div className="pane-list">
+          <form autoComplete="off" action="/stock" method="get" className="row-flex stock-search" data-enter="own">
             <input className="in search w-240" type="search" name="q" defaultValue={sp.q ?? ''}
                    placeholder="กรอกคำค้นหา — รหัส ชื่อ หรือหมวด" />
             <select className="in w-auto" name="cat" defaultValue={sp.cat ?? ''}>
@@ -109,32 +135,65 @@ export default async function StockPage({
             </label>
             <button className="btn" type="submit">ค้นหา</button>
           </form>
+          </div>
+          <div className="pane-menu">
           <ColPicker cols={STOCK_COLS} hidden={hidden} fixed={STOCK_COLS_FIXED} action={saveStockColsAction}
                      title="ตั้งค่าการแสดงผลรายการสินค้า" basicHint="พื้นฐาน: รหัสสินค้า · ชื่อสินค้า · คงเหลือ · ราคา A"
                      startOpen={sp.cols === '1'} />
           <Link className="btn" href={`/stock/print${printQuery ? `?${printQuery}` : ''}`}>🖨 พิมพ์รายงาน</Link>
+          {/* จำนวนต่อหน้าอยู่ในแท็บนี้บนจอแคบ (ผู้ใช้เลือก) — แถวแบ่งหน้าเดิมท้ายรายการซ่อนไปแล้ว */}
+          <span className="narrow-only">
+            <PageSize base="/stock" size={pageSize} keep={{ ...(keep as Record<string, string>), menu: '1' }}
+                      sizes={STOCK_PAGE_SIZES} defaultSize={STOCK_DEFAULT_PAGE_SIZE} />
+          </span>
+          </div>
+        </div>
         </div>
 
+        <div className={tabClass}>
+        <div className="pane-list">
         {rows.length === 0 ? (
           <div className="empty">ไม่พบสินค้าที่ตรงกับเงื่อนไข</div>
         ) : (
           <>
-          {/* มือถือ: การ์ดต่อสินค้า (รูป · ชื่อ · รหัส · ราคาขาย/หน่วย · คงเหลือ) — จอใหญ่ยังเป็นตาราง (ผู้ใช้กำหนด) */}
+          <div className="list-head">
+            <h2>รายการสินค้า</h2>
+            <span className="cnt">
+              {total.toLocaleString('en-US')} รายการ{lastPage > 1 ? ` · หน้า ${page}/${lastPage}` : ''}
+            </span>
+          </div>
+
+          {/* จอต่ำกว่า 1280: การ์ดต่อสินค้า สามคอลัมน์ตามต้นแบบ (รูป | ชื่อ+รหัส | ราคา+คงเหลือ)
+              1280 ขึ้นไปและตอนพิมพ์ยังเป็นตารางเดิมทุกคอลัมน์ */}
           <div className="stock-cards">
-            {rows.map((p) => (
-              <Link key={p.id} href={`/stock/${p.id}`} className="scard">
-                <div className="top">
+            {rows.map((p) => {
+              const c = stockCard(p);
+              return (
+                <Link key={p.id} href={c.href} className="pcard">
                   {picSha.get(p.id) ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img className="thumb" src={`/pics/${p.id}/${picSha.get(p.id)}?t=1`} alt="" />
                   ) : <span className="thumb">📷</span>}
-                  <b className="nm">{p.name}</b>
-                  <span className="code mono">{p.code}</span>
-                </div>
-                <div className="kv"><span>ราคาขาย/หน่วย</span><b>{baht(p.priceA)} บาท</b></div>
-                <div className="kv"><span>จำนวนคงเหลือ</span><b>{p.qtyOnHand.toLocaleString('en-US')} {p.unit}</b></div>
-              </Link>
-            ))}
+                  <span className="mid">
+                    <span className="nm">{c.name}</span>
+                    <span className="code mono">{c.code}</span>
+                    {c.chips.length ? (
+                      <span className="tags">
+                        {c.chips.map((x) => (
+                          <span key={x.key} className={`chip flag-${x.key}`} title={x.title}>{x.label}</span>
+                        ))}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="rt">
+                    <span className="price">{baht(c.price)}</span>
+                    <span className={c.low ? 'qty low' : 'qty'}>
+                      คงเหลือ {c.qty.toLocaleString('en-US')} {c.unit}
+                    </span>
+                  </span>
+                </Link>
+              );
+            })}
           </div>
           <div className="tablewrap stock-table">
             <table className="tbl">
@@ -227,11 +286,31 @@ export default async function StockPage({
           </div>
         ) : null}
 
-        <div className="pager">
+        {/* แถวแบ่งหน้าเดิม — จอแคบซ่อนไว้ ใช้ปุ่มลอยด้านล่างแทน (ผู้ใช้เลือก) */}
+        <div className="pager narrow-hide">
           <span>หน้า {page} จาก {lastPage}</span>
           <PageSize base="/stock" size={pageSize} keep={keep as Record<string, string>} sizes={STOCK_PAGE_SIZES} defaultSize={STOCK_DEFAULT_PAGE_SIZE} />
           <div className="spacer" />
           <Pager base="/stock" query={paged as Record<string, string | number | undefined>} page={page} lastPage={lastPage} />
+        </div>
+
+        {/* ปุ่มแบ่งหน้าแบบลอย มุมซ้ายล่างเหนือแถบล่าง (ต้นแบบ `.mpager`)
+            ตัวเว้นท้ายรายการกันไม่ให้ปุ่มบังการ์ดใบสุดท้าย */}
+        {lastPage > 1 ? (
+          <>
+            <nav className="mpager narrow-only" aria-label="เลื่อนหน้า">
+              {page > 1
+                ? <Link className="mpg" href={{ pathname: '/stock', query: { ...paged, page: page - 1 === 1 ? undefined : page - 1 } }}>‹ ก่อนหน้า</Link>
+                : <span className="mpg off" aria-disabled="true">‹ ก่อนหน้า</span>}
+              <span className="mpg-info">{page} / {lastPage}</span>
+              {page < lastPage
+                ? <Link className="mpg" href={{ pathname: '/stock', query: { ...paged, page: page + 1 } }}>ถัดไป ›</Link>
+                : <span className="mpg off" aria-disabled="true">ถัดไป ›</span>}
+            </nav>
+            <div className="mpager-sp narrow-only" />
+          </>
+        ) : null}
+        </div>
         </div>
       </div>
 
