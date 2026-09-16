@@ -67,7 +67,7 @@ export default async function HomePage({
             <Icon name="sales" size={22} color="#1F5FBF" />
             <h2>สรุปยอดขาย{ranged ? ' (ช่วงที่เลือก)' : ''}</h2>
             {seesIncome ? (
-              <Link className="go" href="/income?kind=RC">ดูใบเสร็จทั้งหมด<span className="ar">→</span></Link>
+              <Link className="go" href="/income?kind=RC&hist=1">ดูใบเสร็จทั้งหมด<span className="ar">→</span></Link>
             ) : null}
           </header>
           <div className="body">
@@ -169,7 +169,7 @@ export default async function HomePage({
           <header>
             <Icon name="truck" size={22} color="#0F5C3E" />
             <h2>งานค้างส่งมอบ</h2>
-            <Link className="go" href="/income?kind=QT&open=1">ดูรายการ<span className="ar">→</span></Link>
+            <Link className="go" href="/income?kind=QT&open=1&hist=1">ดูรายการ<span className="ar">→</span></Link>
           </header>
           <div className="body">
             <div className="big" style={{ color: summary.openQuoteCount > 0 ? 'var(--warn)' : undefined }}>
@@ -366,8 +366,9 @@ export default async function HomePage({
               {summary.docCounts.map((d) => {
                 const sell = ['QT', 'IV', 'IVT', 'RC'].includes(d.kind);
                 const canSee = sell ? seesIncome : can(session, 'expense');
-                const href = sell ? { pathname: '/income', query: { kind: d.kind } }
-                                  : { pathname: '/expense', query: { kind: d.kind } };
+                /* hist=1 — เมนู 03/04 เปิดมาเป็นฟอร์มสร้างใหม่เสมอ คนกดจากหน้าแรกตั้งใจดูรายการที่มีอยู่ (ผู้ใช้แจ้ง) */
+                const href = sell ? { pathname: '/income', query: { kind: d.kind, hist: '1' } }
+                                  : { pathname: '/expense', query: { kind: d.kind, hist: '1' } };
                 return (
                   <tr key={d.kind}>
                     <td>{KIND_SHORT[d.kind] ?? d.kind}</td>
