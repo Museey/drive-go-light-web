@@ -20,7 +20,7 @@ import { canTab, type PermKey } from '@/lib/perms';
  */
 
 export async function SubNav({
-  menu, current, badges, actions, children,
+  menu, current, badges, actions, hideNarrow = false, children,
 }: {
   /** คีย์เมนูหลัก เช่น 'stock' */
   menu: string;
@@ -29,6 +29,12 @@ export async function SubNav({
   /** ตัวเลขแจ้งเตือนบนแท็บ เช่น { pending: 12 } */
   badges?: Record<string, number>;
   actions?: ReactNode;
+  /**
+   * ซ่อนเมนูย่อยบนจอต่ำกว่า 1280 — หน้าที่มีปุ่มสลับของตัวเอง (ทะเบียนสินค้า เฟส 3)
+   * เอาเมนูย่อยไปไว้หลังปุ่ม "เมนูและตัวกรอง" เพื่อให้เปิดหน้ามาเห็นรายการทันที
+   * จอ 1280 ขึ้นไปไม่มีผล — เมนูย่อยย้ายขึ้นแถวหัวหน้าไปแล้ว (SubnavPortal)
+   */
+  hideNarrow?: boolean;
   children: ReactNode;
 }) {
   const item = MENU.find((m) => m.key === menu);
@@ -56,7 +62,7 @@ export async function SubNav({
   if (subs.length === 0 && acts.length === 0) return <>{children}</>;
 
   return (
-    <div className="subwrap">
+    <div className={hideNarrow ? 'subwrap narrow-list' : 'subwrap'}>
       <SubnavPortal>
       <nav className="subnav">
         <div className="ttl">{item!.label}</div>

@@ -1203,17 +1203,75 @@ button.tile { font-family: inherit; cursor: pointer; }
 .in.lic-due { border-color: var(--due); border-width: 2px; background: #FCF1F1; color: var(--due); font-weight: 700; }
 .confirm.licnag { border-left: 6px solid var(--due); }
 
-/* ---------- ทะเบียนสินค้าบนมือถือ: การ์ดต่อสินค้า (จอ ≥768 ยังเป็นตาราง) ---------- */
-.stock-cards { display: grid; gap: 12px; padding: 12px; }
+/* ---------- ทะเบียนสินค้าบนจอแคบ: การ์ดต่อสินค้า (1280 ขึ้นไปและตอนพิมพ์ยังเป็นตาราง) ----------
+   เค้าโครงตามต้นแบบของทีม `a.mpcard` (16 ก.ย. 2569): รูป | ชื่อ+รหัส | ราคา+คงเหลือ
+   ของเดิมเป็นสองบรรทัดคู่ป้าย/ค่า สูงใบละ 150px — สามคอลัมน์เหลือ 84px เห็นได้มากกว่าเท่าตัว */
+.stock-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
 .stock-table { display: none; }
-.scard { display: block; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; color: var(--ink); text-decoration: none; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-.scard .top { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; padding-bottom: 10px; border-bottom: 1px solid var(--line-2); margin-bottom: 8px; }
-.scard .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: #F4F6F5; display: inline-grid; place-items: center; font-size: 22px; color: var(--ink-3); }
-.scard .nm { font-size: 17px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.scard .code { color: #2F80ED; font-weight: 700; font-size: 16px; white-space: nowrap; }
-.scard .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 16px; padding: 3px 0; }
-.scard .kv span { color: var(--ink-2); }
-@media (min-width: 1280px), print { .stock-cards { display: none; } .stock-table { display: block; } }
+a.pcard {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 13px 15px;
+  color: var(--ink); text-decoration: none; box-shadow: 0 1px 3px rgba(16,32,43,.06);
+}
+.pcard .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); background: #F4F6F5; display: inline-grid; place-items: center; font-size: 24px; color: var(--ink-3); }
+.pcard .mid { min-width: 0; }
+.pcard .nm { font-size: 15.5px; font-weight: 700; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pcard .code { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.pcard .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pcard .rt { text-align: right; white-space: nowrap; }
+.pcard .price { display: block; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pcard .qty { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.pcard .qty.low { color: var(--due); font-weight: 700; }
+
+/* จอแคบ: ช่องค้นหาเต็มความกว้างตามต้นแบบ (`.msearch`) · ตัวกรองรองลงมาอยู่แถวเดียวกันใต้ช่อง
+   ปุ่ม "ค้นหา" ซ่อนไป — ฟอร์มมีช่องข้อความช่องเดียว กด Enter ส่งฟอร์มเองโดยไม่ต้องพึ่ง JS */
+/* .row-flex อยู่ท้ายไฟล์และก็ display:flex เหมือนกัน — ต้องเจาะจงกว่าถึงจะชนะ */
+.row-flex.stock-search { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
+.stock-search > .in.search { grid-column: 1 / -1; min-height: 50px; font-size: 16px; }
+.stock-search > button[type="submit"] { display: none; }
+
+/* ปุ่มสลับมุมมองของหน้าสินค้า (ต้นแบบ `.mseg`) */
+.mseg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #EAF0ED; border-radius: 12px; padding: 4px; margin: 12px 12px 0; }
+.mseg a { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border-radius: 9px; font-size: 14.5px; font-weight: 600; color: var(--ink-2); text-decoration: none; }
+.mseg a.on { background: var(--card); color: var(--steel-dk); box-shadow: 0 1px 3px rgba(16,32,43,.12); }
+
+/* แถบบอกตัวกรองที่เปิดอยู่ (ต้นแบบ `.mfilter`) */
+.mfilter { display: flex; align-items: center; gap: 10px; margin: 12px 12px 0; padding: 9px 14px; border-radius: 11px; background: #FFF9E6; border: 1px solid #F0D98A; font-size: 13.5px; color: #6B4E12; }
+.mfilter .clr { margin-left: auto; font-weight: 700; color: var(--steel-dk); text-decoration: none; white-space: nowrap; }
+
+/* ปุ่มแบ่งหน้าแบบลอย (ต้นแบบ `.mpager`) — เหนือแถบล่าง ไม่ทับปุ่มย้อนกลับที่มุมขวา */
+.mpager {
+  position: fixed; left: 10px; bottom: calc(var(--h-tabbar) + 22px); z-index: var(--z-sticky);
+  display: inline-flex; align-items: stretch; gap: 5px; padding: 5px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 11px;
+  box-shadow: 0 5px 18px -8px rgba(11,26,38,.5);
+}
+.mpager .mpg { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 700; white-space: nowrap; text-decoration: none; background: var(--accent); color: #2A1F00; border: 1px solid #E0A800; }
+.mpager .mpg.off { background: #F2F5F4; color: var(--ink-3); border-color: var(--line); opacity: .6; pointer-events: none; }
+.mpager .mpg-info { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+/* ของชิ้นสุดท้ายในรายการต้องเลื่อนพ้นปุ่มลอยได้ */
+.mpager-sp { height: 58px; }
+
+/* สองแท็บของจอแคบ — `display: contents` ทำให้ตัวห่อหายไปจากการวางผัง
+   เดสก์ท็อปจึงได้แถบเครื่องมือหน้าตาเดิมทุกจุด ไม่ใช่ของที่ถูกห่อเพิ่มอีกชั้น */
+.narrow-tabs, .narrow-tabs > .pane-menu, .narrow-tabs > .pane-list { display: contents; }
+.narrow-tabs.tab-list > .pane-menu, .narrow-tabs.tab-menu > .pane-list { display: none; }
+.subwrap.narrow-list > .subnav { display: none; }
+/* แถวแบ่งหน้าเดิมของหน้าสินค้า — จอแคบใช้ปุ่มลอยแทน */
+.pager.narrow-hide { display: none; }
+
+@media (min-width: 1280px), print {
+  .stock-cards { display: none; }
+  .stock-table { display: block; }
+  .mseg, .mfilter, .mpager, .mpager-sp, .narrow-only { display: none; }
+  .narrow-tabs.tab-list > .pane-menu, .narrow-tabs.tab-menu > .pane-list { display: contents; }
+  .pager.narrow-hide { display: flex; }
+  .row-flex.stock-search { display: flex; }
+  .stock-search > .in.search { min-height: 0; font-size: inherit; }
+  .stock-search > button[type="submit"] { display: inline-flex; }
+  /* ก่อน SubnavPortal ย้ายเมนูย่อยขึ้นแถวหัวหน้า มันยังเป็นลูกของ .subwrap อยู่ชั่วครู่ */
+  .subwrap.narrow-list > .subnav { display: flex; }
+}
 
 /* ---------- ประวัติรายรับแบบใหม่ ---------- */
 table.hist .kindchip { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; background: #E9F8F0; color: var(--ok); }
