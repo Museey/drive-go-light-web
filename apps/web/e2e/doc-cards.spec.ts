@@ -115,3 +115,70 @@ test('ตัวกรองช่วงเวลาบนจอแคบเป�
   /* เลือกแล้วค่าที่เห็นต้องเป็นค่าที่เลือก ไม่เด้งกลับ */
   await expect(page.locator('.mdate select')).toHaveValue(/^\d{4}-\d{2}-\d{2}\|\d{4}-\d{2}-\d{2}$/);
 });
+
+/**
+ * แถบค้นหาหน้ารายรับบนจอแคบ (ผู้ใช้ส่งภาพเครื่องจริง 16 ก.ย. 2569)
+ * "ย้าย รวมใบที่ยกเลิก ลงมาติดกับพิมพ์ แล้วขยายช่องค้นหาครับ"
+ */
+const incomeSearch = (page: Page) => page.locator('form[action="/income"]').filter({ has: page.locator('input[name="q"]') });
+
+async function boxes(page: Page) {
+  return incomeSearch(page).evaluate((form) => {
+    const r = (e: Element | null) => e ? e.getBoundingClientRect().toJSON() as DOMRect : null;
+    const cs = getComputedStyle(form);
+    const f = form.getBoundingClientRect();
+    const labels = [...form.querySelectorAll('label.chip')].map((l) => ({ text: (l.textContent ?? '').trim(), box: r(l)! }));
+    return {
+      form: f.toJSON() as DOMRect,
+      inner: f.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      search: r(form.querySelector('input[name="q"]'))!,
+      voided: labels.find((l) => l.text.includes('รวมใบที่ยกเลิก'))!.box,
+      labels,
+      print: r([...form.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('พิมพ์รายงาน')) ?? null)!,
+    };
+  });
+}
+const sameRow = (a: DOMRect, b: DOMRect) => Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) < 6;
+
+test('รายรับจอแคบ: ช่องค้นหาเต็มแถว · "รวมใบที่ยกเลิก" อยู่แถวเดียวกับปุ่มพิมพ์ใต้ช่องค้นหา', async ({ page }) => {
+  test.skip(!แคบ(page), 'เดสก์ท็อปอยู่แถวเดียวเหมือนเดิม');
+  await page.goto('/income?kind=RC&hist=1');
+  const b = await boxes(page);
+
+  expect(Math.round(b.search.width), `ช่องค้นหากว้าง ${Math.round(b.search.width)} จาก ${Math.round(b.inner)}`)
+    .toBeGreaterThanOrEqual(Math.floor(b.inner) - 1);
+  expect(sameRow(b.voided, b.print), 'ติ๊กกับปุ่มพิมพ์อยู่แถวเดียวกัน').toBe(true);
+  expect(b.voided.top, 'ติ๊กอยู่ใต้ช่องค้นหา').toBeGreaterThanOrEqual(b.search.bottom);
+});
+
+test('รายรับจอแคบ: หน้าใบเสนอราคามีสองติ๊ก — ทั้งหมดอยู่ใต้ช่องค้นหาและไม่ล้นขอบฟอร์ม', async ({ page }) => {
+  test.skip(!แคบ(page), 'เดสก์ท็อปอยู่แถวเดียวเหมือนเดิม');
+  await page.goto('/income?kind=QT&hist=1');
+  const b = await boxes(page);
+
+  expect(b.labels.map((l) => l.text)).toEqual(['รวมใบที่ยกเลิก', 'เฉพาะงานค้างส่งมอบ']);
+  for (const x of [...b.labels.map((l) => l.box), b.print]) {
+    expect(x.top, 'อยู่ใต้ช่องค้นหา').toBeGreaterThanOrEqual(b.search.bottom);
+    expect(x.right, 'ไม่ล้นขอบขวาของฟอร์ม').toBeLessThanOrEqual(b.form.right + 1);
+  }
+});
+
+test('รายรับจอแคบ: ค้นหาด้วย Enter และติ๊กรวมใบที่ยกเลิกยังส่งค่าเหมือนเดิม', async ({ page }) => {
+  test.skip(!แคบ(page), 'ถามบนจอแคบที่ย้ายตำแหน่ง');
+  await page.goto('/income?kind=RC&hist=1');
+  const form = incomeSearch(page);
+  await form.locator('label.chip', { hasText: 'รวมใบที่ยกเลิก' }).click();
+  await form.locator('input[name="q"]').fill('RC-');
+  await form.locator('input[name="q"]').press('Enter');
+  await expect(page).toHaveURL(/[?&]q=RC-/);
+  await expect(page).toHaveURL(/[?&]voided=1/);
+});
+
+test('รายรับเดสก์ท็อป: ช่องค้นหา 200px ติ๊กและปุ่มพิมพ์อยู่แถวเดียวเหมือนเดิม', async ({ page }) => {
+  test.skip(แคบ(page), 'ข้อนี้ถามเฉพาะเดสก์ท็อป');
+  await page.goto('/income?kind=RC&hist=1');
+  const b = await boxes(page);
+  /* วัดจากหน้าจริงก่อนแก้ (16 ก.ย. 2569) — โค้ดเขียน width: 260 แต่มีกฎ CSS จำกัดไว้ที่ 200px */
+  expect(Math.round(b.search.width)).toBe(200);
+  expect(sameRow(b.search, b.voided) && sameRow(b.voided, b.print), 'ทั้งสามอยู่แถวเดียว').toBe(true);
+});

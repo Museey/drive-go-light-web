@@ -1870,3 +1870,14 @@ a.mstat:active { background: #F7FAF9; }
   /* ค่าเดิมของ .card */
   .card.cust-list { background: var(--card); border: 1px solid var(--line); overflow: hidden; }
 }
+
+/* ---------- แถบค้นหาหน้ารายรับบนจอแคบ (16 ก.ย. 2569 · ผู้ใช้ส่งภาพเครื่องจริง) ----------
+   เดิมช่องค้นหา ติ๊ก "รวมใบที่ยกเลิก" และปุ่มพิมพ์เรียงต่อกันแล้วตัดแถว ช่องค้นหาได้แค่ที่เหลือ (153 จาก 319px)
+   ช่องค้นหาเต็มแถว → ติ๊กกับปุ่มพิมพ์ลงแถวถัดไปด้วยกัน · เดสก์ท็อปคืนค่าเดิม (.toolbar .in = flex: 1) */
+.toolbar form.inc-search { flex-wrap: wrap; }
+.toolbar form.inc-search > .in.search { flex: 1 1 100%; }
+.toolbar form.inc-search > label.chip, .toolbar form.inc-search > .btn { flex: 0 0 auto; }
+@media (min-width: 1280px), print {
+  .toolbar form.inc-search > .in.search { flex: 1; }
+  .toolbar form.inc-search > label.chip, .toolbar form.inc-search > .btn { flex: 0 1 auto; }
+}
