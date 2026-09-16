@@ -781,7 +781,9 @@ body { font-size: 15px; }
 .topbar h1 { font-size: 18px; }
 .topbar .sub { font-size: 12.5px; }
 
-.grid.g2, .grid.g4 { grid-template-columns: minmax(0, 1fr); }
+/* การ์ดตัวเลขสี่ใบเป็น 2×2 บนจอแคบ (ต้นแบบ .mstat-grid · เฟส 5) — คอลัมน์เดียวต้องเลื่อนสี่หน้าจอกว่าจะเห็นครบ */
+.grid.g2 { grid-template-columns: minmax(0, 1fr); }
+.grid.g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* ต้นแบบ: สามและสี่ช่องยุบเหลือสองคอลัมน์ ไม่ใช่คอลัมน์เดียว (.frame.m .f3/.f4) */
 .row-fields.f2 { grid-template-columns: minmax(0, 1fr); }
 .row-fields.f3, .row-fields.f4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1748,4 +1750,55 @@ a.mparty {
   .btn.desk-only { display: inline-flex; }
   /* เดสก์ท็อปเห็นฟอร์ม ประวัติ และการ์ดลบเสมอ ไม่ว่าจะมี ?edit=1 หรือไม่ */
   .cpanes:not(.editing) .contact-edit, .cpanes.editing .contact-view { display: block; }
+}
+
+/* =====================================================================
+   หน้าแรกและการเงินบนจอแคบ — เฟส 5 (16 ก.ย. 2569 · ต้นแบบ mHome / mFinance)
+   ===================================================================== */
+
+/* หมวดของหน้าแรก (ต้นแบบ `.m-sec`) */
+.mhome { display: block; }
+.m-sec { margin: 0 0 18px; }
+.m-sec > h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 15px; font-weight: 700; color: var(--ink); }
+.m-sec > h2 .cnt { margin-left: auto; font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.m-empty { padding: 24px 16px; text-align: center; color: var(--ink-3); background: var(--card); border: 1px dashed var(--line); border-radius: 14px; font-size: 14px; }
+.mcards { display: flex; flex-direction: column; gap: 12px; }
+
+/* การ์ดตัวเลขเล็ก — ต่อยอดจาก .mstat ของเฟส 4 ให้เป็นลิงก์ได้และมีบรรทัดรอง */
+a.mstat { color: var(--ink); text-decoration: none; }
+a.mstat:active { background: #F7FAF9; }
+.mstat.wide { grid-column: 1 / -1; }
+.mstat .sub { margin-top: 2px; font-size: 12.5px; color: var(--ink-3); }
+.mstat .val.warn { color: var(--warn); }
+.mstat-grid:has(> .mstat:only-child) { grid-template-columns: minmax(0, 1fr); }
+
+/* การ์ดภาษีสามใบ (ต้นแบบ `.mtax`) */
+.mtax { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mtax .mstat { padding: 13px 11px; }
+.mtax .val { font-size: 17px; }
+.mtax .mstat.net { background: var(--steel-soft); border-color: #BFE3D6; }
+
+/* ยอดค้างด้านขวาของการ์ดรายคน (ต้นแบบ `.mparty .amt`) */
+.mparty .amt { text-align: right; white-space: nowrap; }
+.mparty .amt .n { display: block; font-size: 17px; font-weight: 800; color: var(--due); font-variant-numeric: tabular-nums; }
+.mparty .amt .u { display: block; font-size: 11.5px; color: var(--ink-3); }
+
+/* ลูกหนี้/เจ้าหนี้รายคน */
+.party-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.party-docs { padding: 12px; }
+.party-docs .mback { margin-top: 0; }
+.party-docs .list-head { padding: 0 0 10px; }
+.party-docs .doc-cards { padding: 0; }
+.pdoc { display: flex; flex-direction: column; gap: 8px; }
+.pdoc-acts { display: flex; justify-content: flex-end; }
+.pdoc-acts .pay-btn { min-width: 120px; justify-content: center; }
+.pdoc-pay { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+
+/* ของที่หน้าแรกบนจอแคบไม่แสดง — การ์ดใหญ่ · ตารางสินค้าที่ควรสั่ง · ตารางเอกสารในระบบ · การ์ดภาษีใหญ่ */
+.hgrid, .mhome-hide, .mhome-tax-src { display: none; }
+
+@media (min-width: 1280px), print {
+  .mhome, .party-view { display: none; }
+  .hgrid { display: grid; }
+  .mhome-hide, .mhome-tax-src { display: block; }
 }

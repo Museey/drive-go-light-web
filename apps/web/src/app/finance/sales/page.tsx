@@ -12,6 +12,8 @@ import { query } from '@/lib/auth';
 import { salesDocsWith } from '@/lib/home-report';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, KIND_SHORT, monthLabel, thDate } from '@/lib/format';
+import { DocCards } from '@/components/doc-cards';
+import { salesDocCard } from '@/lib/doc-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,7 +81,8 @@ export default async function SalesReportPage({
         </div></div>
       </div>
 
-      <div className="card">
+      {/* ตารางรายเดือนคงเป็นตารางทุกขนาดจอ — ตัวเลขหลายคอลัมน์ที่ต้องไล่เทียบเดือนต่อเดือน อ่านเป็นตารางง่ายกว่า */}
+      <div className="card sales-monthly">
         <header><h2>ยอดขายรายเดือน</h2></header>
         <DateRange base="/finance/sales" from={sp.from} to={sp.to} />
 
@@ -121,7 +124,7 @@ export default async function SalesReportPage({
       </div>
 
       {/* ตารางรายใบ — ตอบว่าใบไหนบ้างที่ประกอบเป็นยอดด้านบน ซึ่งสรุปรายงวดตอบไม่ได้ */}
-      <div className="card">
+      <div className="card sales-docs">
         <header>
           <h2>เอกสารขายรายใบ</h2>
           <div className="spacer" />
@@ -132,7 +135,9 @@ export default async function SalesReportPage({
           <div className="empty">ไม่มีเอกสารขายในช่วงที่เลือก</div>
         ) : (
           <>
-            <div className="tablewrap">
+            {/* จอต่ำกว่า 1280 เป็นการ์ดเอกสารของเฟส 2 · 1280 ขึ้นไปและตอนพิมพ์เป็นตารางเดิม */}
+            <DocCards cards={docs.rows.map(salesDocCard)} title="เอกสารขายรายใบ" more={lastPage > 1} />
+            <div className="tablewrap doc-table">
               <table className="tbl">
                 <thead>
                   <tr>

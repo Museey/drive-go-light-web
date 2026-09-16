@@ -9,6 +9,28 @@ import { getTaxSummary } from '@/lib/reports';
 import { listPendingItems } from '@/lib/pending';
 import { baht, KIND_SHORT, monthLabel } from '@/lib/format';
 import { OwingList, SalesBars } from '@/components/sales-bars';
+import { partyKey } from '@/lib/party-groups';
+
+/**
+ * การ์ดตัวเลขเล็กของจอแคบ (ต้นแบบ `a.mstat`) — ไม่มีสิทธิ์ไปหน้านั้นก็เป็นการ์ดเฉย ๆ ไม่ใช่ลิงก์
+ * `k` ใช้ผูกกับเทสต์ที่ตรวจว่าการ์ดเล็กพาไปที่เดียวกับปุ่มบนการ์ดใหญ่
+ */
+function MStat({ k, href, lbl, val, unit, sub, tone, wide }: {
+  k: string; href?: string | null; lbl: string; val: string; unit?: string; sub?: string;
+  tone?: 'ok' | 'warn' | 'due' | ''; wide?: boolean;
+}) {
+  const body = (
+    <>
+      <span className="lbl">{lbl}</span>
+      <span className={tone ? `val ${tone}` : 'val'}>{val}{unit ? <> <small>{unit}</small></> : null}</span>
+      {sub ? <span className="sub">{sub}</span> : null}
+    </>
+  );
+  const cls = wide ? 'mstat wide' : 'mstat';
+  return href
+    ? <Link className={cls} data-k={k} href={href}>{body}</Link>
+    : <div className={cls} data-k={k}>{body}</div>;
+}
 
 const PERM_LABEL: Record<string, string> = {
   customer: 'ข้อมูลลูกค้า / ผู้ขาย', income: 'รายรับ', expense: 'รายจ่าย',
@@ -51,6 +73,108 @@ export default async function HomePage({
       {seesReport ? (
         <div className="card" style={{ marginBottom: 18 }}>
           <DateRange base="/" from={sp.from} to={sp.to} />
+        </div>
+      ) : null}
+
+      {/* ---------- จอต่ำกว่า 1280: การ์ดเล็กตามต้นแบบทั้งหมด (ผู้ใช้เลือก · ต้นแบบ mHome) ----------
+           ทุกใบพาไปที่เดียวกับปุ่มบนการ์ดใหญ่ และใช้เงื่อนไขสิทธิ์ชุดเดียวกัน
+           เรนเดอร์ทั้งสองแบบเสมอแล้วสลับด้วย CSS — เซิร์ฟเวอร์ไม่รู้ความกว้างจอ (สเปก §2) */}
+      {seesReport ? (
+        <div className="mhome">
+          <section className="m-sec">
+            <h2>ภาพรวมการเงิน</h2>
+            <div className="mstat-grid">
+              <MStat k="sales" href={seesIncome ? '/income?kind=RC&hist=1' : null} lbl="📈 ยอดขาย"
+                     val={baht(summary.salesThisYear)} unit="บาท"
+                     sub={`${summary.salesDocCount.toLocaleString('en-US')} ใบ`} tone="ok" />
+              <MStat k="spend" href={can(session, 'expense') ? '/expense' : null} lbl="🛒 รายจ่าย"
+                     val={baht(summary.spendTotal)} unit="บาท" sub="ซื้อสินค้า + ค่าใช้จ่าย" />
+              <MStat k="ar" href={seesFinance ? '/finance/ar' : null} lbl="📥 ลูกหนี้"
+                     val={baht(summary.arOutstanding)} unit="บาท" sub={`${summary.ar.count} ใบค้าง`}
+                     tone={summary.arOutstanding > 0.004 ? 'warn' : ''} />
+              <MStat k="ap" href={seesFinance ? '/finance/ap' : null} lbl="📤 เจ้าหนี้"
+                     val={baht(summary.apOutstanding)} unit="บาท" sub={`${summary.ap.count} ใบค้าง`}
+                     tone={summary.apOutstanding > 0.004 ? 'due' : ''} />
+            </div>
+          </section>
+
+          {([
+            { title: 'ลูกหนี้จากการขาย', side: summary.ar, base: '/finance/ar', empty: 'ไม่มีลูกหนี้คงค้าง' },
+            { title: 'เจ้าหนี้การค้า', side: summary.ap, base: '/finance/ap', empty: 'ไม่มีเจ้าหนี้คงค้าง' },
+          ] as const).map((sec) => (
+            <section key={sec.base} className="m-sec">
+              <h2>{sec.title}<span className="cnt">รวม {baht(sec.side.total)}</span></h2>
+              {sec.side.top.length === 0 ? <div className="m-empty">{sec.empty}</div> : (
+                <div className="mcards">
+                  {sec.side.top.map((r) => {
+                    const body = (
+                      <>
+                        <span className="who">
+                          <b className="nm">{r.name}</b>
+                          <span className="meta">{r.count} ใบ</span>
+                        </span>
+                        <span className="amt"><span className="n">{baht(r.amount)}</span><span className="u">บาท คงค้าง</span></span>
+                        <span className="chev" aria-hidden="true">›</span>
+                      </>
+                    );
+                    const key = partyKey({ partyId: r.partyId, partyName: r.name });
+                    return seesFinance
+                      ? <Link key={key} className="mparty" href={`${sec.base}?party=${encodeURIComponent(key)}`}>{body}</Link>
+                      : <div key={key} className="mparty">{body}</div>;
+                  })}
+                </div>
+              )}
+            </section>
+          ))}
+
+          <section className="m-sec">
+            <h2>ค้างดำเนินการ</h2>
+            <div className="mstat-grid">
+              <MStat k="reorder" href={seesStock ? '/stock?reorder=1' : null} lbl="📦 สินค้าที่ต้องสั่งซื้อ"
+                     val={String(summary.reorderCount)} unit="รายการ" sub="ควรสั่งเพิ่ม"
+                     tone={summary.reorderCount > 0 ? 'warn' : ''} />
+              {seesIncome ? (
+                <MStat k="openqt" href="/income?kind=QT&open=1&hist=1" lbl="🚚 งานค้างส่งมอบ"
+                       val={String(summary.openQuoteCount)} unit="ใบ" sub="ยังไม่ออกใบต่อ"
+                       tone={summary.openQuoteCount > 0 ? 'warn' : ''} />
+              ) : null}
+              {seesStock ? (
+                <MStat k="pending" href="/stock/pending" lbl="⏳ รายการค้างทำ"
+                       val={String(pendingNames.length)} unit="ชื่อ" sub="ยังไม่ผูกทะเบียน"
+                       tone={pendingNames.length > 0 ? 'warn' : ''} />
+              ) : null}
+              <MStat k="dead" href={seesStock ? '/stock?flag=dead' : null} lbl="🗄 ค้างสต๊อก ≥ 6 เดือน"
+                     val={String(summary.deadCount)} unit="รายการ" sub={`เงินจม ${baht(summary.deadValue)}`}
+                     tone={summary.deadCount > 0 ? 'warn' : ''} />
+              {summary.expiringCount > 0 ? (
+                <MStat k="expiring" href={seesStock ? '/stock/expiry' : null} lbl="⌛ ของใกล้หมดอายุ"
+                       val={String(summary.expiringCount)} unit="ล็อต"
+                       sub={summary.expiredCount > 0 ? `หมดอายุแล้ว ${summary.expiredCount} ล็อต` : undefined}
+                       tone={summary.expiredCount > 0 ? 'due' : 'warn'} />
+              ) : null}
+            </div>
+          </section>
+
+          {tax?.latest ? (
+            <section className="m-sec">
+              <h2>ภาษีงวดล่าสุด<span className="cnt">{monthLabel(tax.latest.key)}</span></h2>
+              <div className="mtax">
+                <div className="mstat"><span className="lbl">ภาษีขาย</span><span className="val">{baht(tax.latest.out)}</span></div>
+                <div className="mstat"><span className="lbl">ภาษีซื้อ</span><span className="val">{baht(tax.latest.in)}</span></div>
+                <div className="mstat net">
+                  <span className="lbl">{tax.latest.payable > 0.004 ? 'ต้องนำส่ง' : 'เครดิตยกไป'}</span>
+                  <span className={tax.latest.payable > 0.004 ? 'val due' : 'val ok'}>
+                    {baht(tax.latest.payable > 0.004 ? tax.latest.payable : tax.carryForward)}
+                  </span>
+                </div>
+              </div>
+              {/* ต้นแบบไม่มี — แต่เป็นยอดที่ต้องนำส่งจริงตามกฎหมาย จึงไม่ตัดทิ้ง */}
+              <div className="mstat-grid" style={{ marginTop: 12 }}>
+                <MStat k="wht" href="/finance/sales" lbl="หัก ณ ที่จ่ายที่ต้องนำส่ง" wide
+                       val={baht(tax.whtToRemit)} unit="บาท" sub={`ลูกค้าหักจากอู่ไว้ ${baht(tax.whtWithheld)}`} />
+              </div>
+            </section>
+          ) : null}
         </div>
       ) : null}
 
@@ -253,7 +377,7 @@ export default async function HomePage({
 
       {/* ---------- ของที่ควรสั่งก่อน ---------- */}
       {seesReport && seesStock && summary.reorderTop.length > 0 ? (
-        <div className="card">
+        <div className="card mhome-hide">
           <header>
             <h2>สินค้าที่ควรสั่งก่อน</h2>
             <div className="spacer" />
@@ -291,7 +415,7 @@ export default async function HomePage({
 
       {/* ---------- สรุปภาษีงวดล่าสุด ---------- */}
       {tax?.latest ? (
-        <div className="card">
+        <div className="card mhome-tax-src">
           <header>
             <h2>ภาษีงวดล่าสุด — {monthLabel(tax.latest.key)}</h2>
             <div className="spacer" />
@@ -355,7 +479,7 @@ export default async function HomePage({
         </div>
       ) : null}
 
-      <div className="card">
+      <div className="card mhome-hide">
         <header><h2>เอกสารในระบบ</h2></header>
         <div className="tablewrap">
           <table className="tbl">

@@ -149,3 +149,57 @@ export function billingDocCard(r: BillingCardRow): DocCard {
     voided,
   };
 }
+
+export interface OwingCardRow {
+  id: string;
+  kind: string;
+  docNo: string;
+  docDate: string;
+  partyName: string;
+  /** ลูกหนี้มีทะเบียนรถ · เจ้าหนี้ไม่มี */
+  vehiclePlate?: string;
+  payable: number;
+  paid: number;
+  outstanding: number;
+  /** ค่าลบหรือศูนย์ = ยังไม่เกินกำหนด */
+  daysOverdue: number;
+}
+
+/** ใบค้างหนึ่งใบในหน้าลูกหนี้/เจ้าหนี้รายคน (เฟส 5) — สถานะบอกจำนวนวันที่เกินแบบเดียวกับชิปในตาราง */
+export function owingDocCard(r: OwingCardRow, side: 'sell' | 'buy'): DocCard {
+  const status: CardStatus = r.daysOverdue > 0
+    ? { label: `เกิน ${r.daysOverdue} วัน`, tone: 'due' }
+    : r.paid > 0.004 ? { label: 'ชำระบางส่วน', tone: 'warn' } : { label: 'ค้างชำระ', tone: 'warn' };
+  return {
+    href: side === 'buy' ? `/expense/${r.id}` : `/income/${r.id}`,
+    kind: r.kind,
+    no: r.docNo,
+    name: r.partyName || '-',
+    plate: r.vehiclePlate ?? '',
+    date: r.docDate,
+    amount: r.payable,
+    outstanding: r.outstanding,
+    status,
+    voided: false,
+  };
+}
+
+/** เอกสารขายรายใบในหน้ายอดขาย — ยอดบนการ์ดคือ "สุทธิรับ" เหมือนคอลัมน์ในตาราง */
+export function salesDocCard(r: {
+  id: string; kind: string; docNo: string; docDate: string; partyName: string;
+  payable: number; outstanding: number;
+}): DocCard {
+  const owing = r.outstanding > 0.004;
+  return {
+    href: `/income/${r.id}`,
+    kind: r.kind,
+    no: r.docNo,
+    name: r.partyName || '-',
+    plate: '',
+    date: r.docDate,
+    amount: r.payable,
+    outstanding: r.outstanding,
+    status: owing ? { label: 'ค้างชำระ', tone: 'warn' } : { label: 'ชำระครบ', tone: 'ok' },
+    voided: false,
+  };
+}

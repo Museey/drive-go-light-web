@@ -8,6 +8,8 @@ import { PagePrintButton } from '@/components/print-button';
 import { listPayables } from '@/lib/receivables';
 import { baht } from '@/lib/format';
 import { BulkPay } from '../bulk-pay';
+import { PartyList } from '../party-list';
+import { rowsOfParty } from '@/lib/party-groups';
 import { ApRow } from './ap-row';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +17,10 @@ export const dynamic = 'force-dynamic';
 export default async function ApPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; overdue?: string; bulk?: string }>;
+  searchParams: Promise<{ q?: string; overdue?: string; bulk?: string;
+    /** คีย์ของคน (ทะเบียนผู้ติดต่อ หรือ `n:ชื่อ`) — หน้ารายคน · ใช้ได้ทั้งจอแคบและเดสก์ท็อป */
+    party?: string;
+  }>;
 }) {
   const session = await requireTab('finance', 'ap');
   const sp = await searchParams;
@@ -29,6 +34,13 @@ export default async function ApPage({
 
   const { rows, total, overdueTotal, overdueCount, count } =
     await listPayables({ search: sp.q, onlyOverdue });
+  /* หน้ารายคน — กรองจากใบค้างที่ดึงมาแล้ว ไม่แตะคิวรี (lib/party-groups.ts)
+     ตัวเลขสี่ใบด้านบนยังเป็นยอดของทุกคน เพื่อให้เทียบได้ว่าคนนี้กินสัดส่วนเท่าไร */
+  const shown = sp.party ? rowsOfParty(rows, sp.party) : rows;
+  const keep: Record<string, string> = {
+    ...(sp.q ? { q: sp.q } : {}),
+    ...(onlyOverdue ? { overdue: '1' } : {}),
+  };
 
   return (
     <Shell tools={<><PrintReport />{" "}
@@ -66,7 +78,7 @@ export default async function ApPage({
       <BulkPay
         defaultOpen={sp.bulk === '1'}
         direction="buy"
-        rows={rows.map((r) => ({
+        rows={shown.map((r) => ({
           id: r.id, docNo: r.docNo, partyName: r.partyName,
           dueDate: r.dueDate, outstanding: r.outstanding, daysOverdue: r.daysOverdue,
         }))}
@@ -90,7 +102,10 @@ export default async function ApPage({
             {onlyOverdue ? 'ไม่มีเจ้าหนี้ที่เกินกำหนดชำระ' : 'ไม่มีเจ้าหนี้คงค้าง'}
           </div>
         ) : (
-          <div className="tablewrap">
+          <>
+          {/* จอต่ำกว่า 1280: การ์ดรายคน / ใบค้างของคนนั้น · 1280 ขึ้นไปและตอนพิมพ์: ตารางรายใบเดิม */}
+          <PartyList base="/finance/ap" rows={shown} party={sp.party} direction="buy" keep={keep} />
+          <div className="tablewrap doc-table">
             <table className="tbl">
               <thead>
                 <tr>
@@ -101,10 +116,11 @@ export default async function ApPage({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => <ApRow key={r.id} row={r} />)}
+                {shown.map((r) => <ApRow key={r.id} row={r} />)}
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
       </SubNav>
