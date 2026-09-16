@@ -21,6 +21,8 @@ export interface ShopRow {
   createdOn: string;
   userCount: number;
   maxUsers: number | null;
+  /** อีเมลเจ้าของอู่ — คอนโซลต้องรู้ว่าลิงก์ตั้งรหัสผ่านจะเข้าบัญชีไหน (ผู้ใช้ขอ) · ไม่มีเจ้าของที่เปิดใช้อยู่ = null */
+  ownerEmail: string | null;
   license: LicenseStatus;
 }
 
@@ -38,6 +40,7 @@ export async function listShops(s: OperatorSession): Promise<ShopRow[]> {
       createdOn: iso(r.created_on),
       userCount: Number(r.user_count),
       maxUsers: r.max_users === null ? null : Number(r.max_users),
+      ownerEmail: r.owner_email ? String(r.owner_email) : null,
       license: computeLicense({
         today,
         tenantCreated: iso(r.created_on),

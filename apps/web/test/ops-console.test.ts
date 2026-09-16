@@ -135,6 +135,7 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
 
     await freshSchema(admin, [
       'db/001_init.sql', 'db/002_auth.sql', 'db/008_ops.sql', 'db/011_ops_console.sql',
+      'db/031_ops_owner_scope.sql',
     ]);
     await admin.query(`
       do $$ begin
@@ -284,9 +285,11 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
     const { fields } = await app.query('select * from ops.list_shops($1)', [good]);
     const cols = fields.map((f) => f.name);
 
-    /* รายการที่อนุญาต — เพิ่มคอลัมน์ใหม่ต้องมาแก้ตรงนี้ ซึ่งเป็นจุดที่ตั้งใจให้สะดุด */
+    /* รายการที่อนุญาต — เพิ่มคอลัมน์ใหม่ต้องมาแก้ตรงนี้ ซึ่งเป็นจุดที่ตั้งใจให้สะดุด
+       owner_email เพิ่มตามที่ผู้ใช้ขอ (16 ก.ย. 2569) — คอนโซลต้องรู้ว่าลิงก์ตั้งรหัสผ่านจะเข้าบัญชีไหน
+       เป็นอีเมลของเจ้าของอู่เท่านั้น ไม่ใช่การเปิดตาราง users ให้อ่าน */
     expect(cols.sort()).toEqual([
-      'created_on', 'ever_paid', 'expires_on', 'max_users', 'name', 'plan',
+      'created_on', 'ever_paid', 'expires_on', 'max_users', 'name', 'owner_email', 'plan',
       'tenant_id', 'user_count',
     ]);
 
@@ -438,6 +441,53 @@ describe.skipIf(!DB_URL)('งานของคอนโซล', () => {
     expect(now.rows[0].token_hash).not.toEqual(first.rows[0].token_hash);
     expect(now.rows[0].purpose).toBe('reset');
   });
+  /**
+   * ลิงก์ตั้งรหัสผ่านต้องผูกกับ "อู่ที่กด" เท่านั้น (ผู้ใช้แจ้ง 16 ก.ย. 2569)
+   *
+   * ฟังก์ชันเป็น SECURITY DEFINER และ users ปิด force RLS ไว้ (db/012_auth_rls.sql)
+   * การค้นเจ้าของโดยพึ่ง app.tenant_id จึงเห็นผู้ใช้ทุกอู่ — ต้องกรอง tenant_id ตรง ๆ
+   */
+  it('ออกลิงก์ให้อู่ไหน ต้องได้เจ้าของอู่นั้น ไม่ใช่เจ้าของอู่อื่น', async () => {
+    const a = (await openShop('อู่ ก', 'a@example.com')).rows[0].id;
+    const b = (await openShop('อู่ ข', 'b@example.com')).rows[0].id;
+
+    const email = await app.query(
+      `select ops.issue_owner_reset($1,$2,$3, now()+interval '7 days') as email`,
+      [good, b, randomBytes(32)]);
+    expect(String(email.rows[0].email), 'อีเมลที่ขึ้นบนจอ').toBe('b@example.com');
+
+    /* สำคัญกว่าข้อความบนจอ — โทเคนต้องเปิดบัญชีของอู่ ข เท่านั้น */
+    const tok = await admin.query(
+      `select x.tenant_id, x.email from auth.setup_tokens s
+         join users x on x.id = s.user_id
+        where s.purpose = 'reset' and s.used_at is null`);
+    expect(tok.rows, 'มีลิงก์ตั้งรหัสผ่านใหม่ใบเดียว').toHaveLength(1);
+    expect(tok.rows[0].tenant_id, 'โทเคนผูกกับอู่ที่กด').toBe(b);
+    expect(String(tok.rows[0].email)).toBe('b@example.com');
+
+    const other = await admin.query(
+      `select count(*)::int n from auth.setup_tokens s join users x on x.id = s.user_id
+        where x.tenant_id = $1 and s.purpose = 'reset'`, [a]);
+    expect(other.rows[0].n, 'อู่อื่นต้องไม่ถูกออกลิงก์ไปด้วย').toBe(0);
+  });
+
+  it('รายชื่ออู่ — นับผู้ใช้เฉพาะอู่ตัวเอง และบอกอีเมลเจ้าของของอู่นั้น', async () => {
+    const a = (await openShop('อู่ ก', 'a@example.com')).rows[0].id;
+    const b = (await openShop('อู่ ข', 'b@example.com')).rows[0].id;
+    /* อู่ ข มีพนักงานเพิ่มอีกคน — ถ้านับข้ามอู่ ตัวเลขของทั้งสองอู่จะเท่ากัน */
+    await admin.query(
+      `insert into users (tenant_id, code, name, email, role, active)
+       values ($1, 'U-002', 'พนักงาน', 'staff-b@example.com', 'staff', true)`, [b]);
+
+    const rows = await app.query('select * from ops.list_shops($1)', [good]);
+    const by = new Map(rows.rows.map((r: { tenant_id: string }) => [r.tenant_id, r as Record<string, unknown>]));
+
+    expect(by.get(a)!.user_count, 'อู่ ก มีเจ้าของคนเดียว').toBe(1);
+    expect(by.get(b)!.user_count, 'อู่ ข มีเจ้าของกับพนักงาน').toBe(2);
+    expect(String(by.get(a)!.owner_email)).toBe('a@example.com');
+    expect(String(by.get(b)!.owner_email)).toBe('b@example.com');
+  });
+
 
   it('ต่ออายุแล้ววันหมดอายุถูกบันทึก', async () => {
     const id = (await openShop('อู่ ก', 'o@example.com')).rows[0].id;

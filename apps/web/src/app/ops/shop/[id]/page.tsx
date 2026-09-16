@@ -50,6 +50,9 @@ export default async function OpsShopPage({
           <div className="body">
             <dl className="kv">
               <dt>บัญชีที่เปิดอยู่</dt><dd>{shop.userCount} บัญชี</dd>
+              {/* อีเมลเจ้าของ — ดูได้ก่อนกดออกลิงก์ตั้งรหัสผ่าน จะได้รู้ว่าลิงก์จะเข้าบัญชีไหน (ผู้ใช้ขอ) */}
+              <dt>อีเมลเจ้าของ</dt>
+              <dd className="mono">{shop.ownerEmail ?? 'ยังไม่มีบัญชีเจ้าของที่เปิดใช้'}</dd>
               <dt>ที่นั่งพนักงาน</dt>
               <dd>{shop.maxUsers === null ? 'ไม่จำกัด' : `${shop.maxUsers} ที่นั่ง`}</dd>
             </dl>
