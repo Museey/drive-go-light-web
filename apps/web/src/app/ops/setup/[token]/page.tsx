@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { consumeOpsSetupToken, OPS_MIN_PASSWORD, peekOpsSetupToken } from '@/lib/ops-auth';
+import { consumeOpsSetupToken, OPS_MIN_PASSWORD, opsSignOut, peekOpsSetupToken } from '@/lib/ops-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +25,8 @@ export default async function OpsSetupPage({
 
     const result = await consumeOpsSetupToken(token, password);
     if (!result.ok) back(result.message);
+    /* ออกจากบัญชีคอนโซลที่ค้างอยู่ก่อน — เหมือนฝั่งอู่ ไม่งั้นหน้าล็อกอินเด้งเข้าบัญชีเดิม */
+    await opsSignOut();
     redirect('/ops/login');
   }
 
