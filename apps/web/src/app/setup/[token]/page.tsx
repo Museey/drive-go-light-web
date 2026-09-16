@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { consumeSetupToken, peekSetupToken } from '@/lib/auth';
+import { consumeSetupToken, peekSetupToken, signOut } from '@/lib/auth';
 import { checkPasswordStrength, hashPassword } from '@/lib/password';
 
 export const dynamic = 'force-dynamic';
@@ -48,6 +48,9 @@ export default async function SetupPage({
     const ok = await consumeSetupToken(t, await hashPassword(password));
     if (!ok) fail('ลิงก์นี้ใช้ไม่ได้แล้ว กรุณาขอลิงก์ใหม่');
 
+    /* ออกจากบัญชีที่ค้างอยู่ในเบราว์เซอร์ก่อน — ไม่งั้น /login เห็นเซสชันเดิมแล้วเด้งเข้าอู่นั้นทันที
+       คนที่เพิ่งตั้งรหัสของอู่ใหม่จะงงว่าทำไมเข้าไปอยู่อีกอู่ (ผู้ใช้แจ้ง 16 ก.ย. 2569) */
+    await signOut();
     redirect('/login');
   }
 
