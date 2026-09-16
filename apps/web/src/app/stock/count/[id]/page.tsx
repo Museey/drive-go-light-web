@@ -25,7 +25,7 @@ export default async function CountDetailPage({ params }: { params: Promise<{ id
       current="/stock"
       title={`ใบตรวจนับ ${count.no}`}
       sub={`วันที่ ${thDate(count.countDate)}${count.note ? ` · ${count.note}` : ''}`}
-      actions={
+      tools={
         <div className="tag-row">
           <Link className="btn" href={`/stock/count/${id}/print`}>พิมพ์ใบนับ</Link>
         </div>

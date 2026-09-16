@@ -17,7 +17,7 @@ import type { BLANK_FORM } from './nav-data';
  * เลื่อนตามต่อ ซึ่งทำให้ปิดลิ้นชักแล้วอยู่คนละที่กับตอนเปิด
  */
 export function NavDrawer({
-  items, blank, current, name, role, note, open, onClose,
+  items, blank, current, name, role, note, tools, open, onClose,
 }: {
   items: NavItem[];
   blank: typeof BLANK_FORM;
@@ -26,6 +26,8 @@ export function NavDrawer({
   role: string;
   /** บรรทัดสองใต้ชื่อ เช่น นับถอยหลังวันหมดอายุ */
   note?: React.ReactNode;
+  /** ปุ่มเครื่องมือของหน้าที่เปิดอยู่ — หัวหน้าบนจอแคบไม่มีที่พอ (ดู .page-acts) */
+  tools?: React.ReactNode;
   open: boolean;
   onClose: () => void;
 }) {
@@ -64,6 +66,16 @@ export function NavDrawer({
         </header>
 
         <div className="body">
+          {/* เครื่องมือของหน้าอยู่บนสุด — คนกดเพิ่มเติมตอนอยู่หน้ารายงานส่วนใหญ่มาหาปุ่มพิมพ์
+              ไม่ปิดลิ้นชักให้อัตโนมัติ: ปุ่มพิมพ์เปิดกล่องพิมพ์ของเบราว์เซอร์ทับอยู่แล้ว
+              และลิงก์ส่งออก CSV โหลดไฟล์โดยไม่เปลี่ยนหน้า ปิดให้เองจะดูเหมือนกดพลาด */}
+          {tools ? (
+            <div className="grp tools">
+              <div className="ttl">เครื่องมือของหน้านี้</div>
+              <div className="acts">{tools}</div>
+            </div>
+          ) : null}
+
           {items.map(({ menu, subs }) => (
             <div className="grp" key={menu.key}>
               <Link className="lead" href={menu.href} aria-current={isCurrent(menu, current)}

@@ -72,7 +72,7 @@ export default async function BillingPage({
       current="/income"
       title="ใบวางบิล"
       sub={`${live} ใบที่ยังไม่ยกเลิก จากทั้งหมด ${total} ใบ`}
-      actions={<PrintReport />}
+      tools={<PrintReport />}
     >
       <SubNav menu="income" current="billing">
         {/* ตัวเลขที่ตอบว่า "ยังต้องทำอะไรต่อ" ไม่ใช่ยอดลูกหนี้ทั้งหมด

@@ -6,12 +6,21 @@ import { BackFab } from './back-fab';
 import { MenuBar } from './menu-bar';
 
 export async function Shell({
-  current, title, sub, actions, doc, children,
+  current, title, sub, actions, tools, doc, children,
 }: {
   current: string;
   title: string;
   sub?: string;
+  /** ปุ่มหลักของหน้า — อยู่ในหัวหน้าทุกขนาดจอ (เช่น "+ ตรวจนับสินค้า" ชิปเลือกชนิดเอกสาร) */
   actions?: React.ReactNode;
+  /**
+   * ปุ่มเครื่องมือของหน้า (พิมพ์รายงาน · ส่งออก CSV) — จอต่ำกว่า 1280 ย้ายไปอยู่ในลิ้นชัก
+   *
+   * **แยกจาก actions โดยตั้งใจ** — เดิมย้ายทุกอย่างใน actions ลงลิ้นชัก
+   * ปุ่ม "+ ตรวจนับสินค้า" กับชิปเลือกชนิดเอกสารเลยหายไปจากหน้าจอมือถือด้วย
+   * (e2e scan-count จับได้) ของสองอย่างนี้ไม่ใช่เครื่องมือ แต่เป็นทางเดินหลักของหน้า
+   */
+  tools?: React.ReactNode;
   /** หน้าเอกสารรายใบ — หัวแถบเป็นสีเขียวเหมือนหน้าต่างเอกสารของรุ่น 6.4 */
   doc?: boolean;
   children: React.ReactNode;
@@ -22,7 +31,9 @@ export async function Shell({
 
   return (
     <div className="app">
-      <MenuBar session={session} current={current}
+      {/* ปุ่มเครื่องมือของหน้าไปโผล่สองที่: หัวหน้า (เดสก์ท็อป) และลิ้นชัก (จอแคบ)
+          เรนเดอร์ทีละที่ตามขนาดจอไม่ได้ — เซิร์ฟเวอร์ไม่รู้ความกว้างจอของผู้ใช้ */}
+      <MenuBar session={session} current={current} tools={tools}
                license={{ mode: license.mode, until: license.until, daysLeft: license.daysLeft }} />
       <div className="main">
         <div className={doc ? 'topbar doc' : 'topbar'}>
@@ -33,6 +44,7 @@ export async function Shell({
           {/* ช่องรับแถบเมนูย่อย (แท็บเล็ต/เดสก์ท็อป) — SubnavPortal ย้ายเข้ามาที่นี่ */}
           <div id="topbar-subnav" className="topbar-subnav" />
           <div className="spacer" />
+          <div className="page-acts">{tools}</div>
           {actions}
         </div>
         <div className="wrap">{children}</div>

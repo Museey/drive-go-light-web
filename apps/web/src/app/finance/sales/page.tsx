@@ -50,7 +50,7 @@ export default async function SalesReportPage({
   }).toString();
 
   return (
-    <Shell actions={<><PrintReport />{" "}
+    <Shell tools={<><PrintReport />{" "}
       <div className="tag-row">
         <a className="btn" href={`/finance/csv${csvQuery ? `?${csvQuery}` : ''}`} download>ส่งออก CSV</a>
         <Link className="btn" href={`/finance/print${csvQuery ? `?${csvQuery}` : ''}`}>พิมพ์ / PDF</Link>

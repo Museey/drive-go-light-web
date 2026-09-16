@@ -39,7 +39,7 @@ export default async function ExpiryPage({
       current="/stock"
       title="ของใกล้หมดอายุ"
       sub={`เตือนล่วงหน้า ${shop.expiryWarnDays} วัน — ตั้งเกณฑ์ได้ที่หน้าตั้งค่าร้าน`}
-      actions={
+      tools={
         <div className="tag-row">
           {mayExport(session, 'stock', 'list') && rows.length > 0 ? (
             <Link className="btn" href={{ pathname: '/stock/expiry/print', query: onlyExpired ? { only: 'expired' } : {} }}>

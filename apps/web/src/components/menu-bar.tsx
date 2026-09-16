@@ -11,8 +11,8 @@ import { licenseLine, type LicenseBrief } from './license-line';
 /**
  * การนำทาง — เมนูหลักอยู่ด้านบน เมนูย่อยอยู่ซ้าย (ตามที่ผู้ใช้ขอ)
  *
- *   มือถือ   แถบล่างห้าช่องในระยะนิ้วโป้ง + ลิ้นชักสำหรับเมนูที่เหลือ
- *   แท็บเล็ต  แถบบน (เลข+ไอคอน ครบทุกตัวในจอ ไม่ต้องปัด) + เมนูย่อยคอลัมน์ซ้าย
+ *   มือถือ   แถบล่างหกช่องในระยะนิ้วโป้ง + ลิ้นชักสำหรับเมนูที่เหลือ
+ *   แท็บเล็ต  เหมือนมือถือทุกอย่าง (ต้นแบบของทีม 16 ก.ย. 2569)
  *   เดสก์ท็อป แถบบนเต็ม (เลข+ไอคอน+ชื่อ) + เมนูย่อยคอลัมน์ซ้าย
  *
  * **กดเมนูหลักแล้วไปหน้าแรกของเมนูนั้นทันที** — เมนูหลักทุกตัวเป็นลิงก์ที่พาไป
@@ -36,8 +36,10 @@ const RAIL_LABEL: Record<string, string> = {
   blankform: 'ฟอร์มเปล่า',
 };
 
-export function MenuBar({ session, current, license }: {
+export function MenuBar({ session, current, license, tools }: {
   session: Session; current: string; license?: LicenseBrief;
+  /** ปุ่มเครื่องมือของหน้า (พิมพ์ · ส่งออก CSV) — จอแคบไม่มีที่ในหัวหน้า จึงไปอยู่ในลิ้นชัก */
+  tools?: React.ReactNode;
 }) {
   const lic = license ? licenseLine(license) : null;
   const items = navItems(session);
@@ -94,7 +96,7 @@ export function MenuBar({ session, current, license }: {
         </div>
       </nav>
 
-      {/* แถบล่างบนมือถือ — อยู่ในระยะที่นิ้วโป้งเอื้อมถึงตอนถือมือเดียว */}
+      {/* แถบล่าง (มือถือ/แท็บเล็ต) — อยู่ในระยะที่นิ้วโป้งเอื้อมถึงตอนถือมือเดียว */}
       <nav className="tabbar" aria-label="เมนูหลัก">
         {tabs.map(({ menu }) => (
           <Link key={menu.key} className="tab" href={menu.href}
@@ -111,7 +113,7 @@ export function MenuBar({ session, current, license }: {
         </button>
       </nav>
 
-      <NavDrawer items={items} blank={BLANK_FORM} current={current}
+      <NavDrawer items={items} blank={BLANK_FORM} current={current} tools={tools}
                  name={session.name} role={role}
                  note={lic ? <span className={`lic ${lic.tone}`}>{lic.text}</span> : null}
                  open={drawer} onClose={() => setDrawer(false)} />

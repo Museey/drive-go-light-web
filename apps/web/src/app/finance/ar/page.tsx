@@ -31,7 +31,7 @@ export default async function ArPage({
     await listReceivables({ search: sp.q, onlyOverdue });
 
   return (
-    <Shell actions={<><PrintReport />{" "}
+    <Shell tools={<><PrintReport />{" "}
       <div className="tag-row">
         {mayExportOf(session, 'finance', 'ar') ? (
           <a className="btn" href={`/finance/ar/csv${csvQuery ? `?${csvQuery}` : ''}`} download>

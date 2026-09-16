@@ -51,9 +51,9 @@
 /*
  * จุดตัดขนาดจอ — **มีสองค่าเท่านั้น**
  *
- *   มือถือ    < 768px
- *   แท็บเล็ต   768px – 1279px
- *   เดสก์ท็อป  ≥ 1280px
+ *   มือถือ    < 768px          แถบล่าง + ลิ้นชัก
+ *   แท็บเล็ต   768px – 1279px   **หน้าตาเดียวกับมือถือ** ต่างแค่เนื้อหากว้างสุด 560px กึ่งกลางจอ
+ *   เดสก์ท็อป  ≥ 1280px         แถบเมนูบน + เมนูย่อยคอลัมน์ซ้าย
  *
  * เลือกจากอุปกรณ์จริง ไม่ใช่เลขที่คิดเอง — iPad กว้าง 768 พอดี
  * โน้ตบุ๊ก 13 นิ้วกว้าง 1280 ของเดิมมีสี่ค่า (560/820/980/1000) ซึ่งสองค่ากลาง
@@ -244,8 +244,14 @@ a { color: inherit; text-decoration: none; }
 }
 .drawer .foot .signout:hover { background: #FCF1F1; border-color: #EEC4C4; color: var(--due); }
 
-/* ---------- แท็บเล็ต 768px ขึ้นไป ---------- */
-@media (min-width: 768px) {
+/* ---------- เดสก์ท็อป 1280px ขึ้นไป (และตอนพิมพ์) ----------
+   ต้นแบบของทีม (16 ก.ย. 2569) สลับโหมดด้วยบรรทัดเดียว — **โหมดแท็บเล็ตคือโหมดมือถือ**
+   แถบล่าง + ลิ้นชักจึงอยู่กับเราถึง 1279px ไม่ใช่แค่ถึง 767px อย่างเดิม
+
+   **`, print` ไม่ใช่ของแถม** — หน้ากระดาษ A4 กว้างราว 794px ตอนพิมพ์
+   กฎชุดนี้เคยมีผลตอนพิมพ์เพราะเขียนไว้ที่ 768px ถ้าย้ายเป็น 1280px เฉย ๆ
+   งานพิมพ์จะกลายเป็นหน้าตามือถือทั้งระบบ (ทะเบียนสินค้าจะพิมพ์เป็นการ์ด ไม่ใช่ตาราง) */
+@media (min-width: 1280px), print {
   .tabbar { display: none; }
 
   /* เมนูหลักย้ายขึ้นแถบบน — แท็บเล็ตและเดสก์ท็อปใช้ร่วมกัน ต่างกันแค่ป้ายชื่อ */
@@ -328,7 +334,7 @@ a { color: inherit; text-decoration: none; }
 /* แท็บเล็ตขึ้นไป — เมนูย่อยเป็น "คอลัมน์ซ้าย" (ตามที่ผู้ใช้ขอ)
    ติดหนึบใต้แถบเมนูหลัก + หัวหน้า จึงเผื่อความสูงของทั้งสองแถบไว้
    (--h-topbar หนึ่งเท่าคือแถบเมนูหลักบนสุด อีกหนึ่งเท่าคือหัวหน้าที่ติดใต้มัน) */
-@media (min-width: 768px) {
+@media (min-width: 1280px), print {
   .subwrap { grid-template-columns: 172px minmax(0, 1fr); gap: 14px; }
   .subnav {
     position: sticky; top: calc(var(--h-topbar) * 2 + 12px);
@@ -366,7 +372,7 @@ a { color: inherit; text-decoration: none; }
 
 /* ---------- การ์ดหน้าแรก ---------- */
 .hgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-@media (min-width: 768px) { .hgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px), print { .hgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .hcard {
   background: var(--card); border: 1px solid var(--line); border-radius: 10px;
@@ -434,7 +440,7 @@ a { color: inherit; text-decoration: none; }
 /* แท็บเล็ตมีแถบเมนูติดขอบบนอยู่แล้ว หัวหน้าจึงต้องลงมาอยู่ใต้มัน ไม่ใช่ทับกัน
    เดสก์ท็อปแถบเมนูอยู่ซ้าย ไม่กินที่ด้านบน หัวหน้าจึงกลับไปติดขอบได้ */
 /* หัวหน้าติดใต้แถบเมนูหลักที่อยู่บนสุด — ทั้งแท็บเล็ตและเดสก์ท็อป (เมนูหลักย้ายขึ้นบนแล้ว) */
-@media (min-width: 768px) { .topbar { top: var(--h-topbar); } }
+@media (min-width: 1280px), print { .topbar { top: var(--h-topbar); } }
 .topbar h1 { margin: 0; font-size: 18px; }
 .topbar .sub { color: var(--ink-3); font-size: 13px; }
 .spacer { flex: 1; }
@@ -771,10 +777,14 @@ body { font-size: 15px; }
    ชื่อค้างขอบบน (ขายหน้าร้าน 375px: ว่างบน 0 ล่าง 12) · ใช้ margin-left: auto ดันปุ่มขวาแทน (≥ 768 ซ่อนตัวดันอยู่แล้ว) */
 .topbar > .spacer { display: none; }
 .topbar > .spacer + * { margin-left: auto; }
-.topbar h1 { font-size: 16px; }
+/* ต้นแบบของทีม: ชื่อหน้า 18px คำบรรยาย 12.5px ทุกจอที่ยังไม่ใช่เดสก์ท็อป */
+.topbar h1 { font-size: 18px; }
+.topbar .sub { font-size: 12.5px; }
 
 .grid.g2, .grid.g4 { grid-template-columns: minmax(0, 1fr); }
-.row-fields.f2, .row-fields.f3, .row-fields.f4 { grid-template-columns: minmax(0, 1fr); }
+/* ต้นแบบ: สามและสี่ช่องยุบเหลือสองคอลัมน์ ไม่ใช่คอลัมน์เดียว (.frame.m .f3/.f4) */
+.row-fields.f2 { grid-template-columns: minmax(0, 1fr); }
+.row-fields.f3, .row-fields.f4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .totals { width: 100%; margin-left: 0; }
 .paper { width: auto; min-height: auto; padding: 10mm; }
 
@@ -806,8 +816,8 @@ input[type='date'], input[type='search'] {
 .in:not(input):not(select):not(textarea) { display: flex; align-items: center; }
 input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px; }
 
-/* ---------- แท็บเล็ต 768px ขึ้นไป ---------- */
-@media (min-width: 768px) {
+/* ---------- เดสก์ท็อป 1280px ขึ้นไป (และตอนพิมพ์) ---------- */
+@media (min-width: 1280px), print {
   body { font-size: 15px; }
   .wrap { padding: 14px; padding-bottom: 22px; }
   .topbar h1 { font-size: 17px; }
@@ -826,6 +836,7 @@ input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px;
   .wrap { padding: 18px 22px 26px; }
   .topbar { padding: 14px 22px; }
   .topbar h1 { font-size: 19px; }
+  .topbar .sub { font-size: 13px; }
 
   .grid.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .row-fields.f3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -864,7 +875,7 @@ input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px;
 /* ลูกตรงเท่านั้น (กรอบหน้าใน shell.tsx) — เดิม .main .wrap โดนช่องตาราง td.wrap ทั้ง 40 จุดด้วย
    ช่องชื่อได้ padding ล่าง 80px แถวทะเบียนสินค้าสูง 111px ชื่อค้างขอบบน */
 .main > .wrap { padding-bottom: calc(var(--h-tabbar) + 72px); }
-@media (min-width: 768px) {
+@media (min-width: 1280px), print {
   .main > .wrap { padding-bottom: 80px; }
 }
 
@@ -883,7 +894,7 @@ input[type='checkbox'], input[type='radio'] { min-width: 22px; min-height: 22px;
 
 /* หัว/ท้ายเอกสารสองคอลัมน์ — มือถือซ้อนเป็นคอลัมน์เดียว */
 .docgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
-@media (min-width: 768px) { .docgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px), print { .docgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .docgrid .card { margin-bottom: 0; }
 .card > header .ic { display: inline-flex; margin-right: 2px; }
 
@@ -1042,7 +1053,7 @@ table.tbl tr.pick.voided { opacity: .55; }
 .tiles .tile .k, .tiles .tile input { vertical-align: middle; margin: 0 4px 0 0; }
 /* ตัวเลือกข้อความยาว (วิธีคิดต้นทุน) — ครึ่งแถว 147px ขึ้น 4 บรรทัดที่ 360px จึงเต็มแถวบนมือถือ */
 .tiles .tile.radio { flex-basis: 100%; justify-content: flex-start; }
-@media (min-width: 768px) {
+@media (min-width: 1280px), print {
   /* แท็บเล็ตขึ้นไปกลับเป็นไทล์ inline-flex แบบเดิมทุกค่า */
   .tiles .tile {
     flex: 0 1 auto; display: inline-flex; text-align: left; line-height: normal; align-content: normal;
@@ -1069,7 +1080,7 @@ table.tbl tr.pick.voided { opacity: .55; }
 .subnav .sl { font-size: 13.5px; line-height: 1.3; }
 .subnav u { grid-column: 2; line-height: 1.2; }
 /* แท็บเล็ตขึ้นไปกลับเป็นแบบเดิมทุกค่า (ระยะในไทล์คุมที่กฎแถบเมนูย่อยด้านล่าง) */
-@media (min-width: 768px) {
+@media (min-width: 1280px), print {
   .subnav a, .subnav .item { display: flex; gap: 10px; }
   .subnav a[aria-current='true'] { padding: 13px 14px; }
   .subnav .si svg { width: 28px; height: 28px; }
@@ -1130,7 +1141,7 @@ a.chip:not(table *) .mono, button.chip:not(table *) .mono { font-size: 12px; fon
 .seg-btn[aria-current='true'] { background: var(--steel-dk); color: #fff; }
 .range-form { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
 .range-f { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-@media (min-width: 768px) {
+@media (min-width: 1280px), print {
   .seg { display: inline-flex; }
   .seg-btn { border-bottom: 0; }
   .seg-btn:nth-child(3n) { border-right: 1px solid var(--line); }
@@ -1169,7 +1180,7 @@ button.tile { font-family: inherit; cursor: pointer; }
 
 /* ปุ่มย้อนกลับมีที่เดียวทั้งระบบ = ปุ่มอำพันล่างขวา — มือถือก็เห็น (ลอยเหนือแถบล่าง) */
 .backfab { display: inline-flex; bottom: calc(58px + 14px); right: 12px; }
-@media (min-width: 768px) { .backfab { bottom: 18px; right: 18px; } }
+@media (min-width: 1280px), print { .backfab { bottom: 18px; right: 18px; } }
 
 /* ---------- ตัวเลื่อนหน้าแบบตัวเลข ‹ 1 2 3 › ---------- */
 .pagenav { display: inline-flex; align-items: center; gap: 4px; }
@@ -1202,7 +1213,7 @@ button.tile { font-family: inherit; cursor: pointer; }
 .scard .code { color: #2F80ED; font-weight: 700; font-size: 16px; white-space: nowrap; }
 .scard .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 16px; padding: 3px 0; }
 .scard .kv span { color: var(--ink-2); }
-@media (min-width: 768px) { .stock-cards { display: none; } .stock-table { display: block; } }
+@media (min-width: 1280px), print { .stock-cards { display: none; } .stock-table { display: block; } }
 
 /* ---------- ประวัติรายรับแบบใหม่ ---------- */
 table.hist .kindchip { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; background: #E9F8F0; color: var(--ok); }
@@ -1275,7 +1286,7 @@ table.hist.fit .opt { display: none; }
    แท็บเล็ต/เดสก์ท็อป: เมนูย่อยเป็นแถบไทล์ใต้เมนูหลัก (ไม่ใช่คอลัมน์ซ้าย) — เนื้อหาเต็มความกว้าง (ผู้ใช้กำหนด)
    ทับกฎคอลัมน์ซ้ายด้านบน (ประกาศทีหลังจึงชนะ) · มือถือคงแบบตาราง 2 คอลัมน์เดิม
    ===================================================================== */
-@media (min-width: 768px) {
+@media (min-width: 1280px), print {
   .subwrap { display: block; }
   .subnav {
     position: static; display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px;
@@ -1293,11 +1304,11 @@ table.hist.fit .opt { display: none; }
   .subnav .sd { display: none; }
 }
 /* การ์ดเครื่องมือ (CSV ฯลฯ) ชิดขวาสุดของแถบเมนูย่อย */
-@media (min-width: 768px) { .subnav a.tool { margin-left: auto; } .subnav a.tool ~ a.tool { margin-left: 0; } }
+@media (min-width: 1280px), print { .subnav a.tool { margin-left: auto; } .subnav a.tool ~ a.tool { margin-left: 0; } }
 
 /* ---------- แถบเมนูย่อยในแถวหัวหน้า (แท็บเล็ต/เดสก์ท็อป) ---------- */
 .topbar-subnav { display: contents; }
-@media (min-width: 768px) {
+@media (min-width: 1280px), print {
   /* เมนูย่อยบรรทัดเดียวในแถวหัวหน้า (ผู้ใช้กำหนด) — ไม่ตัดบรรทัด ถ้าจอแคบเลื่อนแนวนอนในแถบได้ ไอคอน/คำอธิบายซ่อน */
   .topbar { flex-wrap: nowrap; align-items: center; gap: 8px; }
   .topbar h1 { font-size: 15px; white-space: nowrap; }
@@ -1324,7 +1335,7 @@ table.hist.fit.cust td, table.hist.fit.cust th { vertical-align: middle; }
 
 /* ---------- ลูกค้าบนเอกสาร: ที่อยู่ | โทร (ที่อยู่กว้าง 2 เท่า) ---------- */
 .row-fields.addr-tel { grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 768px) { .row-fields.addr-tel { grid-template-columns: 2fr 1fr; } .row-fields.f4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1280px), print { .row-fields.addr-tel { grid-template-columns: 2fr 1fr; } .row-fields.f4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 /* ---------- เอกสาร A4: หัวเอกสาร + กรอบ 1 (ลูกค้า|เอกสาร) + กรอบ 2 (รถ 3 คอลัมน์) + อาการ 3 บรรทัด ---------- */
 .paper .doc-meta .docno-big { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 15px; font-weight: 700; margin-top: 4px; }
@@ -1471,7 +1482,7 @@ table.hist.fit.cust td, table.hist.fit.cust th { vertical-align: middle; }
 
 /* ---------- ชุดอะไหล่ซ่อมบำรุง (05.10) ---------- */
 .row-fields.kit-head { grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 768px) { .row-fields.kit-head { grid-template-columns: 130px 1fr 300px; } }
+@media (min-width: 1280px), print { .row-fields.kit-head { grid-template-columns: 130px 1fr 300px; } }
 .kitrow { display: grid; grid-template-columns: minmax(0, 1fr) 70px 70px 110px 110px 36px; gap: 6px; align-items: end; margin-bottom: 6px; }
 .kitrow.head { font-size: 12px; color: var(--ink-3); font-weight: 600; margin-bottom: 2px; }
 .kitrow .field { margin: 0; }
@@ -1479,7 +1490,7 @@ table.hist.fit.cust td, table.hist.fit.cust th { vertical-align: middle; }
 /* ---------- ฟอร์มสินค้า: โครงตามต้นแบบ ---------- */
 .row-fields.pf-top, .row-fields.pf-price { grid-template-columns: minmax(0, 1fr); }
 .row-fields.pf-bc { grid-template-columns: 150px minmax(0, 1fr); gap: 6px; }
-@media (min-width: 768px) {
+@media (min-width: 1280px), print {
   .row-fields.pf-top { grid-template-columns: 1fr 1.6fr 0.6fr; align-items: start; }
   .row-fields.pf-price { grid-template-columns: 1.4fr 1fr 1.2fr; }
 }
@@ -1511,3 +1522,36 @@ table.hist.fit .row-acts .btn { word-break: keep-all; overflow-wrap: normal; whi
 .details-card .body.tight { padding-top: 0; }
 .bc-preview { max-width: 240px; margin-top: 4px; }
 .link { text-decoration: underline; }
+
+/* =====================================================================
+   โครงหน้าจอตามต้นแบบของทีม — เฟส 1 (16 ก.ย. 2569)
+   ===================================================================== */
+
+/* ---------- แท็บเล็ต: หน้าตามือถือ แต่เนื้อหาไม่ยืดเต็มจอ ----------
+   ต้นแบบ `.frame.m.mt` = กรอบ 720px เนื้อหากว้างสุด 560px กึ่งกลาง
+   ตัวหนังสือแถบล่างใหญ่ขึ้นเพราะช่องกว้างขึ้น (10px → 12px)
+
+   เขียนเป็น `screen and` ตั้งใจ — ตอนพิมพ์หน้ากระดาษกว้างราว 794px
+   ถ้าไม่กัน เนื้อหาบนกระดาษจะถูกบีบเหลือ 560px */
+@media screen and (min-width: 768px) {
+  .main > .wrap { max-width: 560px; margin-left: auto; margin-right: auto; }
+  .tabbar .tab b { font-size: 12px; }
+}
+@media (min-width: 1280px), print {
+  .main > .wrap { max-width: none; }
+}
+
+/* ---------- ปุ่มเครื่องมือของหน้า (พิมพ์รายงาน · ส่งออก CSV · ฯลฯ) ----------
+   ต้นแบบซ่อนปุ่มพวกนี้จากหัวหน้าบนมือถือ (`.frame.m .js-report{display:none}`)
+   แต่เราไม่ตัดทิ้ง — ย้ายไปอยู่ในลิ้นชัก "เพิ่มเติม" ใต้หัวข้อ "เครื่องมือของหน้านี้"
+   ปุ่มที่หายไปโดยไม่มีที่ไปคือฟีเจอร์ที่หายไปสำหรับคนใช้แท็บเล็ต */
+.page-acts { display: none; }
+@media (min-width: 1280px), print {
+  .page-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+}
+
+.drawer .tools { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.drawer .tools .ttl { font-size: 12px; color: var(--ink-3); padding: 0 2px 6px; }
+.drawer .tools .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.drawer .tools .acts .tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.drawer .tools .acts .btn { flex: 1 1 auto; justify-content: center; }

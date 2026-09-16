@@ -83,7 +83,7 @@ export default async function ExpensePage({
       current="/expense"
       title="รายจ่าย"
       sub={`${total.toLocaleString('en-US')} รายการ`}
-      actions={<>
+      tools={<>
         <div className="tag-row">
           <Link className="btn" href={`/expense/print${printQuery ? `?${printQuery}` : ''}`}>พิมพ์รายการ</Link>
         </div>
