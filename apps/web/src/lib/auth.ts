@@ -41,6 +41,31 @@ export type SignInResult =
   | { ok: true }
   | { ok: false; message: string };
 
+/**
+ * เปิดเซสชันให้ผู้ใช้คนหนึ่ง — ออกโทเคน บันทึกลงฐาน แล้วตั้งคุกกี้
+ *
+ * ใช้ทั้งตอนล็อกอินด้วยรหัสผ่าน และตอนตั้งรหัสผ่านตามลิงก์เสร็จ (setup/[token])
+ * ที่นั่นผู้ใช้เพิ่งพิสูจน์ตัวด้วยโทเคนใช้ครั้งเดียวและตั้งรหัสเอง จึงพาเข้าระบบต่อได้เลย
+ */
+async function openSession(c: pg.PoolClient, userId: string, userAgent?: string): Promise<void> {
+  const token = randomBytes(32).toString('base64url');
+  const expires = new Date(Date.now() + SESSION_DAYS * 86400_000);
+
+  await c.query(
+    `select auth.create_session($1, $2, $3, $4)`,
+    [userId, hashToken(token), expires, userAgent?.slice(0, 300) ?? null],
+  );
+
+  const jar = await cookies();
+  jar.set(COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    expires,
+  });
+}
+
 export async function signIn(email: string, password: string, userAgent?: string): Promise<SignInResult> {
   const clean = email.trim().toLowerCase();
 
@@ -80,25 +105,14 @@ export async function signIn(email: string, password: string, userAgent?: string
       return wrong;
     }
 
-    const token = randomBytes(32).toString('base64url');
-    const expires = new Date(Date.now() + SESSION_DAYS * 86400_000);
-
-    await c.query(
-      `select auth.create_session($1, $2, $3, $4)`,
-      [user.user_id, hashToken(token), expires, userAgent?.slice(0, 300) ?? null],
-    );
-
-    const jar = await cookies();
-    jar.set(COOKIE, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      expires,
-    });
-
+    await openSession(c, user.user_id, userAgent);
     return { ok: true as const };
   });
+}
+
+/** เปิดเซสชันให้ผู้ใช้ที่พิสูจน์ตัวด้วยวิธีอื่นมาแล้ว — ตอนนี้มีที่เดียวคือหน้าตั้งรหัสผ่านตามลิงก์ */
+export async function startSessionFor(userId: string, userAgent?: string): Promise<void> {
+  await withoutTenant((c) => openSession(c, userId, userAgent));
 }
 
 export async function signOut(): Promise<void> {
@@ -251,13 +265,14 @@ export async function peekSetupToken(token: string): Promise<SetupTokenInfo | nu
 }
 
 /** ตั้งรหัสผ่านตามลิงก์ — คืน false ถ้าลิงก์หมดอายุหรือถูกใช้ไปแล้ว */
-export async function consumeSetupToken(token: string, passwordHash: string): Promise<boolean> {
+/** ใช้โทเคนตั้งรหัสผ่าน — คืน id ของผู้ใช้ที่ตั้งสำเร็จ (เอาไปเปิดเซสชันต่อ) หรือ null ถ้าลิงก์ใช้ไม่ได้ */
+export async function consumeSetupToken(token: string, passwordHash: string): Promise<string | null> {
   return withoutTenant(async (c) => {
     const { rows } = await c.query(
       `select auth.consume_setup_token($1, $2) as user_id`,
       [hashToken(token), passwordHash],
     );
-    return rows[0]?.user_id != null;
+    return (rows[0]?.user_id as string | undefined) ?? null;
   });
 }
 
