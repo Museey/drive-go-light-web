@@ -92,7 +92,8 @@ test('ใบเสนอราคาไม่มีบรรทัดคงค�
 test('ตัวกรองช่วงเวลาบนจอแคบเป็น dropdown เดียว', async ({ page }) => {
   await page.goto('/income?kind=RC&hist=1');
   const picker = page.locator('.mdate');
-  const chips = page.locator('.toolbar .tag-row .chip', { hasText: 'เดือนที่แล้ว' });
+  /* เดสก์ท็อปเป็นแถบปุ่มต่อกันแบบหน้ายอดขาย (17 ก.ย. 2569 — เดิมชิปแยก) */
+  const chips = page.locator('.toolbar.dfilter nav.seg a.seg-btn', { hasText: 'เดือนที่แล้ว' });
 
   if (!แคบ(page)) {
     await expect(picker, 'เดสก์ท็อปยังใช้ชิปเหมือนเดิม').toBeHidden();

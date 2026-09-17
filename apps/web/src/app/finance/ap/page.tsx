@@ -4,7 +4,6 @@ import { PrintReport } from '@/components/print-report';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { PrintHeader } from '@/components/print-header';
-import { PagePrintButton } from '@/components/print-button';
 import { listPayables } from '@/lib/receivables';
 import { baht } from '@/lib/format';
 import { BulkPay } from '../bulk-pay';
@@ -50,7 +49,6 @@ export default async function ApPage({
             ส่งออก CSV
           </a>
         ) : null}
-        <PagePrintButton />
       </div>
     </>} current="/finance" title="เจ้าหนี้" sub="ใบซื้อและค่าใช้จ่ายที่ยังจ่ายไม่ครบ">
       <SubNav menu="finance" current="ap">

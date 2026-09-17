@@ -5,7 +5,6 @@ import { canCost, HIDDEN_COST } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { PrintHeader } from '@/components/print-header';
-import { PagePrintButton } from '@/components/print-button';
 import { DateRange } from '@/components/date-range';
 import { getSalesReport, getVatChain } from '@/lib/reports';
 import { query } from '@/lib/auth';
@@ -56,7 +55,6 @@ export default async function SalesReportPage({
       <div className="tag-row">
         <a className="btn" href={`/finance/csv${csvQuery ? `?${csvQuery}` : ''}`} download>ส่งออก CSV</a>
         <Link className="btn" href={`/finance/print${csvQuery ? `?${csvQuery}` : ''}`}>พิมพ์ / PDF</Link>
-        <PagePrintButton />
       </div>
     </>} current="/finance" title="ยอดขาย" sub="มูลค่าก่อนภาษีและภาษีขายรายงวด">
       <SubNav menu="finance" current="sales">
