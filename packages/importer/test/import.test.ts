@@ -17,7 +17,7 @@ import pg from 'pg';
 // ถ้าปล่อยให้เป็น Date แล้วเรียก toISOString() จะเพี้ยนไป 1 วันในเขตเวลาไทย (UTC+7)
 pg.types.setTypeParser(1082, (v) => v);
 import {
-  arDue, exTotals, poTotals, recTotals, salesDocs, vatChain,
+  exTotals, paidOf, poTotals, recTotals, salesDocs, vatChain,
 } from '@drivegolight/core';
 import { importBackup, normalizeBackup } from '../src/index.js';
 import type { ImportResult } from '../src/index.js';
@@ -120,7 +120,8 @@ describe.skipIf(!DB_URL)('นำเข้าไฟล์สำรองข้อ
 
     const byLegacy = new Map(rows.map((r) => [r.legacy_id, r]));
     for (const d of [...db.invoices, ...db.receipts]) {
-      const t = recTotals(d, ctx);
+      /* ไฟล์ของโปรแกรมเดิมไม่มียอดหักเก็บไว้ → คิดแบบโปรแกรมเดิม ไม่มีขั้นต่ำ 1,000 (ผู้ใช้กำหนด 17 ก.ย. 2569) */
+      const t = recTotals(d, ctx, { whtMinBase: 0 });
       const row = byLegacy.get(`${d.kind}:${d.id}`);
       expect(row, `ไม่พบเอกสาร ${d.no} ใน DB`).toBeTruthy();
       expect(n(row.net_amount), `net ${d.no}`).toBe(t.net);
@@ -155,8 +156,9 @@ describe.skipIf(!DB_URL)('นำเข้าไฟล์สำรองข้อ
   });
 
   it('ยอดลูกหนี้คงค้างรวมตรงกับที่คำนวณจากไฟล์', async () => {
+    /* ไฟล์ของโปรแกรมเดิม → ยอดตั้งลูกหนี้คิดแบบโปรแกรมเดิม ไม่มีขั้นต่ำหัก ณ ที่จ่าย 1,000 (ผู้ใช้กำหนด 17 ก.ย. 2569) */
     const expected = [...db.invoices, ...db.receipts]
-      .map((d: any) => arDue(d, ctx))
+      .map((d: any) => Math.round((recTotals(d, ctx, { whtMinBase: 0 }).payable - paidOf(d)) * 100) / 100)
       .filter((v) => v > 0.004)
       .reduce((a, b) => a + b, 0);
 

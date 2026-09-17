@@ -172,6 +172,23 @@ async function insertRows(
  * นำเข้าไฟล์สำรองข้อมูลหนึ่งไฟล์เป็นอู่หนึ่งราย
  * โยน Error พร้อมรายละเอียดถ้าไฟล์ไม่ผ่านการตรวจโครงสร้าง
  */
+/**
+ * ยอดเอกสารขายจากไฟล์สำรอง — ของเก่าที่กู้คืนมาจากไฟล์ไม่แตะ (ผู้ใช้กำหนด 17 ก.ย. 2569)
+ *
+ *   ไฟล์เก็บยอดหัก ณ ที่จ่ายไว้ (`whtAmount` — ไฟล์ที่เว็บนี้ส่งออก) → ใช้ค่านั้นตรง ๆ
+ *   ไม่มี (ไฟล์ของโปรแกรมเดิม) → คิดแบบโปรแกรมเดิม ไม่มีขั้นต่ำ 1,000 บาท
+ *
+ * เดิมคิดใหม่ด้วยขั้นต่ำ 1,000 ที่ตั้งทีหลัง ใบเก่าค่าแรงต่ำกว่า 1,000 ยอดหักหายไปตอนกู้คืน
+ * ใบใหม่และการแก้ใบในระบบยังใช้ขั้นต่ำตามปกติ (recTotals ค่าตั้งต้น)
+ */
+function fileSalesTotals(d: any, ctx: ShopContext) {
+  const t = recTotals(d, ctx, { whtMinBase: 0 });
+  const stored = d?.whtAmount;
+  if (stored === undefined || stored === null || stored === '' || !Number.isFinite(Number(stored))) return t;
+  const wht = round2(Math.max(0, Number(stored)));
+  return { ...t, wht, payable: round2(t.grand - wht) };
+}
+
 export async function importBackup(
   client: SqlClient,
   raw: BackupFile,
@@ -716,7 +733,7 @@ export async function importBackup(
         warnings.push(`เอกสาร ${inv.no} มี vatMode = "${inv.vatMode}" ซึ่งขัดกับชนิด ${kind} — แก้เป็น "${forced}"`);
         inv.vatMode = forced;
       }
-      const t = recTotals(inv, ctx);
+      const t = fileSalesTotals(inv, ctx);
       const creditDays = Math.max(0, Math.trunc(num(inv.creditDays)));
       addDoc(inv, kind, {
         parent: inv.quoteId ? quoteByLegacy.get(inv.quoteId) : null,
@@ -737,7 +754,7 @@ export async function importBackup(
 
     /* ใบเสร็จรับเงิน */
     for (const r of db.receipts) {
-      const t = recTotals(r, ctx);
+      const t = fileSalesTotals(r, ctx);
       const onCredit = !!r.pay?.credit;
       const creditDays = onCredit ? Math.max(0, Math.trunc(num(r.pay?.days))) : 0;
       addDoc(r, 'RC', {

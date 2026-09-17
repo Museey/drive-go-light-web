@@ -142,6 +142,8 @@ describe('เทียบยอดเอกสารกับโปรแกร�
         expect(whtBaseOf(sale, ctx), `whtBaseOf ใบที่ ${i}`).toBe(legacy.whtBaseOf(sale));
         /* หัก ณ ที่จ่าย: ผลของเดิม + ขั้นต่ำ 1,000 บาทที่ตั้งใจเพิ่ม (ดู wht-minimum.ts) — ช่องอื่นเท่าของเดิมทุกช่อง */
         expect(recTotals(sale, ctx), `recTotals ใบที่ ${i}`).toEqual(legacyRecWithMinimum(legacy, sale));
+        /* ไฟล์สำรองของโปรแกรมเดิม (กู้คืน/นำเข้า) คิดแบบโปรแกรมเดิมทุกช่อง — ไม่มีขั้นต่ำ (ผู้ใช้กำหนด 17 ก.ย. 2569) */
+        expect(recTotals(sale, ctx, { whtMinBase: 0 }), `recTotals แบบโปรแกรมเดิม ใบที่ ${i}`).toEqual(legacy.recTotals(sale));
         expect(paidOf(sale)).toBe(legacy.paidOf(sale));
         expect(laterPaidOf(sale)).toBe(legacy.laterPaidOf(sale));
         const ar = legacyArWithMinimum(legacy, sale);

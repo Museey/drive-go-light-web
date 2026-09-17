@@ -172,6 +172,14 @@ describe('recTotals — ขั้นต่ำหัก ณ ที่จ่าย
     expect(recTotals(doc, VAT7).wht).toBe(0);
   });
 
+  it('ตัวเลือก whtMinBase: 0 (กู้คืนไฟล์ของโปรแกรมเดิม) — ค่าแรง 500 หัก 15 เหมือนโปรแกรมเดิม · ไม่ส่งตัวเลือก ยังใช้ขั้นต่ำ', () => {
+    const legacy = recTotals(svc(500), VAT7, { whtMinBase: 0 });
+    expect(legacy.wht).toBe(15);
+    expect(legacy.payable).toBe(520);
+    expect(recTotals(svc(500), VAT7).wht).toBe(0);
+    expect(recTotals(svc(500), VAT7, {}).wht, 'ส่งตัวเลือกว่าง = ค่าตั้งต้น').toBe(0);
+  });
+
   it('ค่าใช้จ่าย (อู่เป็นผู้จ่าย) ไม่ใช้ขั้นต่ำนี้ — 500 บาทยังหัก 3% เท่าเดิม', () => {
     const t = exTotals({ date: '2026-09-16', cat: 'other', items: [{ qty: 1, price: 500 }], vatMode: 'ex', whtRate: 3 }, VAT7);
     expect(t.wht).toBe(15);

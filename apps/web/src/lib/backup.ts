@@ -222,6 +222,9 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
       discount: n(d.discount),
       vatMode: d.vat_mode_text,
       whtRate: n(d.wht_rate),
+      /* ยอดหัก ณ ที่จ่ายที่บันทึกไว้ — กู้คืนแล้วใช้ค่านี้ตรง ๆ ไม่คิดใหม่ (ผู้ใช้กำหนด 17 ก.ย. 2569)
+         ไม่มีในไฟล์ของโปรแกรมเดิม · โปรแกรมเดิมเปิดไฟล์นี้ได้ ช่องที่ไม่รู้จักถูกข้าม */
+      whtAmount: n(d.wht_amount),
       creditDays: Number(d.credit_days),
       warranty: d.warranty_text ?? '',
       receivedBy: d.received_by,
