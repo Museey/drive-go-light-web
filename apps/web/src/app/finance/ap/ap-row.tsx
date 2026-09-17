@@ -25,7 +25,9 @@ export function ApRow({ row }: { row: PayableRow }) {
         <td>{thDate(row.docDate)}</td>
         <td>
           {thDate(row.dueDate)}
-          {late ? <span className="chip due" style={{ marginLeft: 6 }}>เกิน {row.daysOverdue} วัน</span> : null}
+          {/* ชิปลงบรรทัดใต้วันที่ — ต่อท้ายในบรรทัดเดียวทำให้ช่องกว้าง 194px ตารางเจ้าหนี้ล้นกรอบที่จอ 1280
+              ปุ่ม จ่ายชำระ ท้ายแถวโดนตัด (ผู้ใช้แจ้ง 17 ก.ย. 2569) · ลูกหนี้ใช้แบบเดียวกัน */}
+          {late ? <span className="chip due under">เกิน {row.daysOverdue} วัน</span> : null}
         </td>
         <td className="num">{baht(row.payable)}</td>
         <td className="num">{row.paid > 0.004 ? baht(row.paid) : '-'}</td>
