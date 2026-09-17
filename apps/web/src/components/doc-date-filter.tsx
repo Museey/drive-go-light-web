@@ -50,17 +50,16 @@ export function DocDateFilter({
     <DateRangeSelect base={base} from={from} to={to} keep={keep} />
 
     <div className="toolbar dfilter" style={{ borderTop: '1px solid var(--line)' }}>
-      {/* .tag-row — ลูกตรงของ .toolbar บนมือถือยืดเต็มจอ ชิปเรียงลงทีละปุ่ม */}
-      <div className="tag-row">
-        <span className="subtle">ช่วงวันที่</span>
+      {/* แถบปุ่มต่อกันแบบหน้ายอดขาย (components/date-range.tsx) — ผู้ใช้กำหนด 17 ก.ย. 2569
+          เดิมเป็นชิปแยกห่างกันพร้อมป้าย "ช่วงวันที่" ดูไม่เป็นชุดเดียวกับหน้ายอดขาย */}
+      <nav className="seg" aria-label="ช่วงวันที่">
         {presets.map((p) => (
-          <Link key={p.label} className="chip"
-                href={{ pathname: base, query: { ...keep, ...(p.from ? { from: p.from, to: p.to } : {}) } }}
-                style={on(p) ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
+          <Link key={p.label} className="seg-btn" aria-current={on(p) ? 'true' : undefined}
+                href={{ pathname: base, query: { ...keep, ...(p.from ? { from: p.from, to: p.to } : {}) } }}>
             {p.label}
           </Link>
         ))}
-      </div>
+      </nav>
 
       <div className="spacer" />
 
