@@ -12,6 +12,7 @@ import type { DiscountMode, DocItemInput, PickedContact, PickedProduct, SalesDoc
 import { baht, KIND_LABEL, thDate } from '@/lib/format';
 import { ThaiDateField } from '@/components/thai-date-input';
 import { formatDocNo } from '@/lib/doc-no';
+import { BLANK_QTY, patchLine } from '@/lib/line-qty';
 import { VehicleFields } from './vehicle-fields';
 import { ExpiryChip } from '@/components/expiry-chip';
 import { ScanBox } from '@/components/scan-box';
@@ -44,7 +45,7 @@ const KIND_HELP: Record<SalesKind, string> = {
 
 const emptyItem = (): DocItemInput => ({
   productId: null, kitId: null, code: '', oem: '', name: '', unit: '',
-  qty: 1, unitPrice: 0, isService: false, discPct: 0,
+  qty: BLANK_QTY, unitPrice: 0, isService: false, discPct: 0,
 });
 
 /** บรรทัดที่มีของจริง — บรรทัดว่างที่เตรียมไว้ไม่ถูกส่งไปบันทึก */
@@ -277,8 +278,9 @@ export function DocEditor({
 
   const set = <K extends keyof SalesDocInput>(k: K, v: SalesDocInput[K]) =>
     setDoc((d) => ({ ...d, [k]: v }));
+  /* บรรทัดว่างจำนวน 0 · เริ่มมีของขึ้น 1 · ลบจนว่างกลับ 0 — กติกาที่ lib/line-qty.ts ใช้ร่วมทุกฟอร์ม */
   const setItem = (i: number, patch: Partial<DocItemInput>) =>
-    setDoc((d) => ({ ...d, items: d.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
+    setDoc((d) => ({ ...d, items: d.items.map((it, j) => (j === i ? patchLine(it, patch, isRealItem) : it)) }));
 
   const priceOf = (p: PickedProduct) =>
     doc.priceTier === 'C' ? p.priceC : doc.priceTier === 'B' ? p.priceB : p.priceA;
@@ -368,7 +370,7 @@ export function DocEditor({
   };
 
   const addRow = (patch: Partial<DocItemInput> = {}) =>
-    setDoc((d) => ({ ...d, items: [...d.items, { ...emptyItem(), ...patch }] }));
+    setDoc((d) => ({ ...d, items: [...d.items, patchLine(emptyItem(), patch, isRealItem)] }));
   const removeRow = (i: number) =>
     setDoc((d) => ({ ...d, items: padRows(d.items.filter((_, j) => j !== i)) }));
 

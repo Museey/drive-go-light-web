@@ -8,10 +8,13 @@ import { kitCost, kitLineName, type KitItemInput } from '@/lib/kit-calc';
 import type { FormResult } from '@/lib/mutate';
 import type { KitPart } from '@/lib/kits';
 import { saveKitAction, searchKitPartsAction } from './actions';
+import { BLANK_QTY, patchLine } from '@/lib/line-qty';
 
 type Line = KitItemInput & { code: string };
 
-const emptyLine = (): Line => ({ productId: null, code: '', name: '', unit: '', qty: 1, unitCost: 0 });
+const emptyLine = (): Line => ({ productId: null, code: '', name: '', unit: '', qty: BLANK_QTY, unitCost: 0 });
+/** บรรทัดที่มีของ — ตรงกับ withBlank และที่ตัวบันทึกนับเฉพาะบรรทัดที่มีชื่อ */
+const isRealLine = (l: Line) => Boolean(l.productId) || l.name.trim() !== '';
 
 /** ตารางมีบรรทัดว่างท้ายเสมอ พิมพ์เองต่อได้ทันทีโดยไม่ต้องกดเพิ่ม (แบบเดียวกับฟอร์มเอกสาร) */
 const withBlank = (ls: Line[]) => (ls.some((l) => !l.productId && !l.name.trim()) ? ls : [...ls, emptyLine()]);
@@ -35,7 +38,7 @@ export function KitEditor({ initial, code, showCost, mayEdit, returnTo }: {
   const { results: hits, busy, clear } = useLiveSearch(query, (q) => searchKitPartsAction(q) as Promise<KitPart[]>);
 
   const setLine = (i: number, patch: Partial<Line>) =>
-    setLines((ls) => withBlank(ls.map((l, j) => (j === i ? { ...l, ...patch } : l))));
+    setLines((ls) => withBlank(ls.map((l, j) => (j === i ? patchLine(l, patch, isRealLine) : l))));
   const removeLine = (i: number) => setLines((ls) => withBlank(ls.filter((_, j) => j !== i)));
 
   const addPart = (p: KitPart) => {
