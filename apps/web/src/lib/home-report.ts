@@ -235,7 +235,8 @@ export async function salesDocsWith(
                    where m.reason in ('sale','return') and m.doc_id is not null
                    group by m.doc_id) cost on cost.doc_id = d.id
       where ${SALES_DOCS}${range}
-      order by d.doc_date desc, d.doc_no desc
+      /* ใบที่บันทึกล่าสุดอยู่บนสุด (ผู้ใช้กำหนด 17 ก.ย. 2569) — เวลาเท่ากัน (นำเข้า/กู้คืนทั้งชุด) ค่อยเรียงวันที่ → เลขที่ */
+      order by d.created_at desc, d.doc_date desc, d.doc_no desc
       limit $${params.length - 1} offset $${params.length}`,
     params,
   );
