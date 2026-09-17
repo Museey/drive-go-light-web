@@ -9,6 +9,7 @@ import { CLAIM_KINDS, CLAIM_SIDE, type ClaimSide } from '@/lib/claims';
 import type { FormResult } from '@/lib/mutate';
 import { baht } from '@/lib/format';
 import { ThaiDateInput } from '@/components/thai-date-input';
+import { BLANK_QTY, patchLine } from '@/lib/line-qty';
 
 /**
  * ฟอร์มออกใบเคลม — ทั้งฝั่งลูกค้าและฝั่งผู้ขายใช้ตัวเดียวกัน ต่างกันแค่ side
@@ -38,8 +39,10 @@ interface Party {
 }
 
 const emptyLine = (): Line => ({
-  productId: null, code: '', oem: '', name: '', unit: '', qty: 1, unitCost: 0, onHand: null,
+  productId: null, code: '', oem: '', name: '', unit: '', qty: BLANK_QTY, unitCost: 0, onHand: null,
 });
+/** บรรทัดที่มีของ — ตรงกับที่ saveClaimAction ข้ามบรรทัดที่ไม่มีทั้งชื่อและสินค้า */
+const isRealLine = (l: Line) => Boolean(l.productId) || l.name.trim() !== '';
 
 
 export function ClaimEditor({ side, today }: { side: ClaimSide; today: string }) {
@@ -65,8 +68,9 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
   const { results: partHits, busy: partBusy, clear: clearParts } =
     useLiveSearch(partQuery, searchClaimPartsAction);
 
+  /* บรรทัดว่างจำนวน 0 · เริ่มมีของขึ้น 1 · ลบจนว่างกลับ 0 — lib/line-qty.ts */
   const setLine = (i: number, patch: Partial<Line>) =>
-    setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+    setLines((ls) => ls.map((l, j) => (j === i ? patchLine(l, patch, isRealLine) : l)));
 
   const total = lines.reduce((s, l) => s + l.qty * l.unitCost, 0);
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);

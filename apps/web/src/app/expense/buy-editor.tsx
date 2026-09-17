@@ -17,6 +17,7 @@ import type { BuyDocInput, BuyItemInput, ExpenseCat, PickedVendor } from '@/lib/
 import type { PickedProduct } from '@/lib/sales';
 import { baht, thDate } from '@/lib/format';
 import { formatDocNo } from '@/lib/doc-no';
+import { BLANK_QTY, patchLine } from '@/lib/line-qty';
 
 /**
  * ฟอร์มใบซื้อ / บันทึกค่าใช้จ่าย — โครงเดียวกับฟอร์มขาย (13 ก.ย. 69)
@@ -33,7 +34,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const MIN_ROWS = 5;
 
 const emptyItem = (): BuyItemInput => ({
-  productId: null, code: '', oem: '', name: '', unit: '', qty: 1, unitPrice: 0, expiresOn: null, discPct: 0,
+  productId: null, code: '', oem: '', name: '', unit: '', qty: BLANK_QTY, unitPrice: 0, expiresOn: null, discPct: 0,
 });
 const isRealItem = (it: BuyItemInput) => Boolean(it.productId) || it.name.trim() !== '' || it.code.trim() !== '';
 const padRows = (items: BuyItemInput[]) =>
@@ -188,8 +189,9 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
   const { results: vendors, busy: vendorBusy, clear: clearVendors } = useLiveSearch(vendorQuery, searchVendorsAction);
 
   const set = <K extends keyof BuyDocInput>(k: K, v: BuyDocInput[K]) => setDoc((d) => ({ ...d, [k]: v }));
+  /* บรรทัดว่างจำนวน 0 · เริ่มมีของขึ้น 1 · ลบจนว่างกลับ 0 — กติกาที่ lib/line-qty.ts ใช้ร่วมทุกฟอร์ม */
   const setItem = (i: number, patch: Partial<BuyItemInput>) =>
-    setDoc((d) => ({ ...d, items: d.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
+    setDoc((d) => ({ ...d, items: d.items.map((it, j) => (j === i ? patchLine(it, patch, isRealItem) : it)) }));
 
   /* ---------- ยอด (สูตรเดียวกับเซิร์ฟเวอร์) ---------- */
   const realItems = doc.items.filter(isRealItem);
@@ -239,7 +241,7 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
     const blank = d.items.findIndex((i) => !isRealItem(i));
     return blank >= 0 ? { ...d, items: d.items.map((i, j) => (j === blank ? line : i)) } : { ...d, items: [...d.items, line] };
   });
-  const addRow = (patch: Partial<BuyItemInput> = {}) => setDoc((d) => ({ ...d, items: [...d.items, { ...emptyItem(), ...patch }] }));
+  const addRow = (patch: Partial<BuyItemInput> = {}) => setDoc((d) => ({ ...d, items: [...d.items, patchLine(emptyItem(), patch, isRealItem)] }));
   const removeRow = (i: number) => setDoc((d) => ({ ...d, items: padRows(d.items.filter((_, j) => j !== i)) }));
 
   const onScan = async (raw: string) => {
