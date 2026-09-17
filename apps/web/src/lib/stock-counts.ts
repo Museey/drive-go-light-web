@@ -150,7 +150,8 @@ export async function listCounts(
   const { rows } = await c.query(
     `${HEAD} ${filter}
      group by c.id
-     order by c.count_date desc, c.no desc
+     /* ใบที่บันทึกล่าสุดอยู่บนสุด (ผู้ใช้กำหนด 17 ก.ย. 2569) — เวลาเท่ากัน (นำเข้า/กู้คืนทั้งชุด) ค่อยเรียงวันที่ → เลขที่ */
+     order by c.created_at desc, c.count_date desc, c.no desc
      limit ${Math.min(opts.limit ?? 200, 500)}`,
     params,
   );

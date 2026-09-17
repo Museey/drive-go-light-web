@@ -344,7 +344,8 @@ export async function listBuyDocs(opts: {
        left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
               on p.doc_id = d.id
        where ${whereSql}
-       order by d.doc_date desc, d.doc_no desc
+       /* ใบที่บันทึกล่าสุดอยู่บนสุด (ผู้ใช้กำหนด 17 ก.ย. 2569) — เวลาเท่ากัน (นำเข้า/กู้คืนทั้งชุด) ค่อยเรียงวันที่ → เลขที่ */
+       order by d.created_at desc, d.doc_date desc, d.doc_no desc
        ${limitSql}`,
       params,
     );

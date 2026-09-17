@@ -207,7 +207,8 @@ export async function listBillnotes(
   const { rows } = await c.query(
     `select ${ROW} from billnotes b
      ${whereSql}
-     order by b.bill_date desc, b.no desc
+     /* ใบที่บันทึกล่าสุดอยู่บนสุด (ผู้ใช้กำหนด 17 ก.ย. 2569) — เวลาเท่ากัน (นำเข้า/กู้คืนทั้งชุด) ค่อยเรียงวันที่ → เลขที่ */
+     order by b.created_at desc, b.bill_date desc, b.no desc
      limit $${params.length - 1} offset $${params.length}`,
     params,
   );

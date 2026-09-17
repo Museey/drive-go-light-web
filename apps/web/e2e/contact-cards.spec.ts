@@ -100,7 +100,8 @@ test('ตัวเลขบนการ์ดสองใบตรงกับ�
 
 test('ปุ่มแบ่งหน้าลอยบนรายชื่อเปลี่ยนหน้าได้และไม่บังการ์ด', async ({ page }) => {
   test.skip(!แคบ(page), 'เดสก์ท็อปใช้แถวแบ่งหน้าเดิม');
-  await page.goto('/customers?size=5');
+  /* หน้าละ 10 เป็นค่าตั้งต้น (ผู้ใช้กำหนด 17 ก.ย. 2569 — เดิมเปิดด้วย size=5 เพื่อให้มีหลายหน้า) */
+  await page.goto('/customers');
 
   const pager = page.locator('.mpager');
   await expect(pager).toBeVisible();
@@ -179,7 +180,7 @@ test('จอแคบ: ทุกเมนูย่อยที่ซ่อนไ
 
 test('เดสก์ท็อป: เมนูย่อย ชิปประเภท และแถวแบ่งหน้า (แสดงต่อหน้า) ยังอยู่ครบ', async ({ page }) => {
   test.skip(แคบ(page), 'ข้อนี้ถามเฉพาะเดสก์ท็อป');
-  await page.goto('/customers?size=5');
+  await page.goto('/customers');
   await expect(page.locator('.subnav')).toBeVisible();
   /* ลิงก์ CSV ที่เพิ่มในเครื่องมือของหน้าเป็นของจอแคบ — เดสก์ท็อปมีการ์ด 02.4 ในแถบเมนูย่อยอยู่แล้ว ไม่ซ้ำในหัวหน้า */
   await expect(page.locator('.page-acts').getByRole('link', { name: /นำเข้า \/ ส่งออก CSV/ })).toBeHidden();
@@ -194,7 +195,7 @@ test('เดสก์ท็อป: เมนูย่อย ชิปประ�
   const size = page.locator('.pager .tag-row').filter({ hasText: 'แสดงต่อหน้า' }).first();
   await expect(size).toBeVisible();
   await size.getByRole('link', { name: '20', exact: true }).click();
-  await expect(page).not.toHaveURL(/[?&]size=5/);
+  await expect(page).toHaveURL(/[?&]size=20/);
 });
 
 test('เดสก์ท็อปไม่เปลี่ยน — ตาราง · ฟอร์มเปิดมาเลย · ตารางประวัติ', async ({ page }) => {

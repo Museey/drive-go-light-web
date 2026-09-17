@@ -79,7 +79,8 @@ export async function receivablesWith(c: Client, opts: {
               on p.doc_id = d.id
        where ${where.join(' and ')}
          and d.payable - coalesce(p.paid, 0) > 0.004
-       order by d.due_date nulls last, d.doc_no`,
+       /* ใบที่บันทึกล่าสุดอยู่บนสุด (ผู้ใช้กำหนด 17 ก.ย. 2569 — เดิมครบกำหนดก่อน ใบเครดิตที่เพิ่งบันทึกไปอยู่ล่างสุด) · เกินกำหนดยังมีชิปและตัวกรองของมัน */
+       order by d.created_at desc, d.doc_date desc, d.doc_no desc`,
       params,
     );
 
@@ -152,7 +153,8 @@ export async function payablesWith(c: Client, opts: {
               on p.doc_id = d.id
        where ${where.join(' and ')}
          and d.payable - coalesce(p.paid, 0) > 0.004
-       order by d.due_date nulls last, d.doc_no`,
+       /* ใบที่บันทึกล่าสุดอยู่บนสุด (ผู้ใช้กำหนด 17 ก.ย. 2569 — เดิมครบกำหนดก่อน ใบเครดิตที่เพิ่งบันทึกไปอยู่ล่างสุด) · เกินกำหนดยังมีชิปและตัวกรองของมัน */
+       order by d.created_at desc, d.doc_date desc, d.doc_no desc`,
       params,
     );
 

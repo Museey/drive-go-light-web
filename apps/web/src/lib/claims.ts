@@ -207,7 +207,8 @@ export async function listClaims(
   const { rows } = await c.query(
     `${ROW} ${filter}
      group by c.id
-     order by c.claim_date desc, c.no desc
+     /* ใบที่บันทึกล่าสุดอยู่บนสุด (ผู้ใช้กำหนด 17 ก.ย. 2569) — เวลาเท่ากัน (นำเข้า/กู้คืนทั้งชุด) ค่อยเรียงวันที่ → เลขที่ */
+     order by c.created_at desc, c.claim_date desc, c.no desc
      limit $${page.length - 1} offset $${page.length}`,
     page,
   );
