@@ -42,7 +42,9 @@ export default async function CustomersPage({
     listContacts({ search: sp.q, kind: sp.kind, type: sp.type, page, pageSize }),
   ]);
   const show = (k: CustCol) => !hidden.includes(k);
-  /* คอลัมน์ที่ได้พื้นที่ที่เหลือ: ที่อยู่ถ้าเปิด · ไม่งั้นทะเบียนรถ · ปิดทั้งคู่ให้ชื่อ */
+  /* คอลัมน์ที่ได้พื้นที่ที่เหลือ: ที่อยู่ถ้าเปิด · ไม่งั้นทะเบียนรถ · ปิดทั้งคู่ให้ชื่อ
+     **ชื่อไม่รับที่ว่าง** — ผู้ใช้สั่งไว้ว่าคอลัมน์ชื่อพอดีข้อมูล ไม่ขยายตามจอ (ยืนยันซ้ำ 18 ก.ย. 2569)
+     คุมด้วย e2e/more-ui.spec.ts "คอลัมน์ชื่อไม่กว้างเกินข้อมูล" */
   const flex: CustCol = show('addr') ? 'addr' : show('plate') ? 'plate' : 'name';
   const w = (k: CustCol, px: number) => (flex === k ? undefined : { width: px });
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
@@ -169,7 +171,10 @@ export default async function CustomersPage({
                 {show('credit') ? <col style={{ width: 64 }} /> : null}
                 {show('spent') ? <col className="opt" style={{ width: 104 }} /> : null}
                 {show('owe') ? <col style={{ width: 104 }} /> : null}
-                <col style={{ width: 176 }} />
+                {/* คอลัมน์ปุ่มกว้างเท่าปุ่มจริง (2×2 ชิดขวา) — ปุ่มแรกคนละคำระหว่างลูกค้ากับผู้ขาย
+                    ลูกค้า "ใบเสนอราคา" 81 + ช่องไฟ 4 + "แก้ไข" 43 = 128 · ผู้ขาย "ใบซื้อ" 43 + 4 + 43 = 90
+                    บวกระยะขอบในช่อง 12 แล้วเผื่ออีกเล็กน้อยกันฟอนต์เรนเดอร์ต่างเครื่องแล้วปุ่มโดนตัด */}
+                <col style={{ width: sp.kind === 'vendor' ? 106 : 144 }} />
               </colgroup>
               <thead>
                 <tr>
