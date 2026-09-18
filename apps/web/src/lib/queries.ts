@@ -502,7 +502,8 @@ export async function getDocDetail(id: string): Promise<DocDetail | null> {
               pd.id as parent_id, pd.kind::text as parent_kind, pd.doc_no as parent_no
        from documents d
        left join documents pd on pd.id = d.parent_doc_id
-       where d.id = $1`,
+       /* ลบถาวรแล้วต้องเปิดไม่ได้อีก แม้จะรู้ลิงก์ (ผู้ใช้แจ้ง 19 ก.ย. 2569) */
+       where d.id = $1 and d.purged_at is null`,
       [id],
     );
     const d = rows[0];

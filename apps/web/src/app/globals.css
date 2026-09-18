@@ -978,6 +978,11 @@ table.lines tr.hitrow table.tbl td { padding: 6px 10px; }
 .confirm dl.kv { grid-template-columns: max-content 1fr; gap: 6px 14px; }
 .confirm .kvrow { display: contents; }
 .confirm dd { font-weight: 600; text-align: right; }
+/* รายการใบในสายเดียวกันในแผงยกเลิกเอกสาร (ผู้ใช้กำหนด 19 ก.ย. 2569) */
+.chain-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.chain-list li { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
+.chain-list .k { color: var(--ink-3); min-width: 88px; }
+
 /* ช่องเลขประจำตัวผู้เสียภาษี 13 ช่อง (ผู้ใช้กำหนด 19 ก.ย. 2569)
    ช่องย่อตามที่มีจริงด้วย flex — จอ 375 ต้องอยู่บรรทัดเดียวไม่ล้นขอบ */
 .taxid { display: flex; gap: 3px; }
