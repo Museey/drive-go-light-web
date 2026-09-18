@@ -4,7 +4,7 @@ import { kitLineName, searchKits } from '@/lib/kits';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
-  saveSalesDoc, scanForDoc, searchCustomers, searchProducts, voidSalesDoc,
+  saveSalesDoc, scanForDoc, searchCustomers, searchProducts, voidSalesChain, voidSalesDoc,
   type DocScan, type PickedContact, type PickedProduct, type SalesDocInput, openDocsFor, loadDocForCopy, type OpenDoc } from '@/lib/sales';
 import { friendlyDbError, type FormResult } from '@/lib/mutate';
 import { safeBack, withSaved } from '@/lib/saved-target';
@@ -59,9 +59,14 @@ export async function saveDocAction(_prev: FormResult, fd: FormData): Promise<Fo
   redirect(withSaved(safeBack(fd.get('returnTo'), ['/income']) ?? fallback, 'sales', saved.id));
 }
 
-export async function voidDocAction(id: string, reason: string): Promise<void> {
+/**
+ * ยกเลิกเอกสาร — `cascade` มาจากปุ่มในแผงยืนยัน
+ * ("ยกเลิกทั้งสาย N ใบ" หรือ "ยกเลิกเฉพาะใบนี้" · ผู้ใช้กำหนด 19 ก.ย. 2569)
+ */
+export async function voidDocAction(id: string, reason: string, cascade = false): Promise<void> {
   try {
-    await voidSalesDoc(id, reason);
+    if (cascade) await voidSalesChain(id, reason);
+    else await voidSalesDoc(id, reason);
   } catch (err) {
     redirect(`/income/${id}?error=${encodeURIComponent(describe(err, 'ยกเลิกไม่สำเร็จ'))}`);
   }

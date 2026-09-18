@@ -246,12 +246,14 @@ test('กดแก้ไขใบที่ออกใบต่อแล้ว �
     expect(after.rows[0], 'แก้ในใบเดิม ไม่ได้สร้างใบใหม่').toMatchObject({ n: 1, no: ids.qt.doc_no });
     expect(Number(after.rows[0].total)).not.toBe(1000);
 
-    /* popup → ยกเลิกเอกสาร (ใบที่มีใบต่อก็ยกเลิกได้ตามต้นแบบ) */
+    /* popup → ยกเลิกเอกสาร (ใบที่มีใบต่อก็ยกเลิกได้ตามต้นแบบ)
+       ตั้งแต่ 19 ก.ย. 2569 ใบที่มีสายจะถามก่อนว่าจะยกเลิกทั้งสายหรือเฉพาะใบนี้ —
+       ที่นี่เลือก "เฉพาะใบนี้" ซึ่งต้องได้ผลเหมือนกติกาเดิมทุกอย่าง (ใบต่อยังอยู่) */
     await page.goto(`/income/${ids.qt.id}`);
     await page.getByRole('button', { name: 'แก้ไข', exact: true }).click();
     await gate(page).getByRole('button', { name: 'ยกเลิกเอกสาร' }).click();
     await page.locator('#void-reason').fill('ทดสอบยกเลิกจาก popup');
-    await page.getByRole('button', { name: 'ยืนยันยกเลิกเอกสาร' }).click();
+    await page.getByRole('button', { name: 'ยกเลิกเฉพาะใบนี้' }).click();
     await expect(page.getByText('เอกสารนี้ถูกยกเลิกแล้ว')).toBeVisible();
     await expect(page.locator('.chip.doc-status')).toHaveText('ยกเลิก');
 

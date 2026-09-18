@@ -10,6 +10,7 @@ import { canEdit, childOf } from '@/lib/sales';
 import { listPayments } from '@/lib/receivables';
 import { PaymentsPanel } from '../../finance/payments-panel';
 import { DocActions } from '../doc-actions';
+import { docChainOf } from '@/lib/sales';
 import { baht, KIND_LABEL, thDate, thDateLong, VAT_MODE_LABEL } from '@/lib/format';
 import { incomeStatus } from '@/lib/doc-card';
 import { DocHistory } from '@/components/doc-history';
@@ -33,6 +34,8 @@ export default async function DocPage({
     childOf(id),
   ]);
   if (!doc) notFound();
+  /* หลังรู้ว่าเอกสารมีจริงแล้วเท่านั้น — ใบที่ลบถาวรไปแล้วต้องจบที่ 404 ไม่ใช่ 500 จากตัวหาสายเอกสาร */
+  const chain = await docChainOf(id);
 
   const paid = doc.payments.reduce((s, p) => s + p.amount, 0);
   const outstanding = Math.round((doc.payable - paid) * 100) / 100;
@@ -77,6 +80,7 @@ export default async function DocPage({
         <div style={{ marginBottom: 16 }}>
           <DocActions id={doc.id} kind={doc.kind} docNo={doc.docNo} partyName={doc.partyName}
                       canEdit={editable.ok} editReason={editable.reason} hasChild={!!child}
+                      chain={chain.related} blocked={chain.blocked}
                       startVoiding={sp.void === '1'} />
         </div>
       )}

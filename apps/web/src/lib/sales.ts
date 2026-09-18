@@ -12,7 +12,7 @@ import { kitComponents } from './kits';
 import { addrLineOf } from './contacts';
 import { consumeStock, returnDocStock } from './stock-cost';
 import { billnoteOfDoc } from './billnotes';
-import { voidSalesDocWith } from './sales-void';
+import { docChainWith, voidSalesChainWith, voidSalesDocWith, type DocChainInfo } from './sales-void';
 import { activeChildWith, claimParentWith, editRuleWith, markParentBilledWith, type ChildRef } from './doc-lock';
 import { REMAINING_LOTS_SQL } from './expiry';
 import { findByScanWith, parseScan } from './scan';
@@ -326,6 +326,22 @@ function addDays(dateIso: string, days: number): string {
  */
 export async function voidSalesDoc(id: string, reason: string): Promise<void> {
   return mutate('income', (c, userId) => voidSalesDocWith(c, id, reason, userId), { sub: 'receipt' });
+}
+
+/**
+ * ยกเลิกทั้งสายเอกสาร — ลูกค้ายกเลิกงาน ใบที่เกิดจากงานนั้นต้องขึ้นยกเลิกให้ครบ
+ * (ผู้ใช้กำหนด 19 ก.ย. 2569 · ถามก่อนทุกครั้งผ่านแผงยืนยัน)
+ */
+export async function voidSalesChain(id: string, reason: string): Promise<void> {
+  return mutate('income', async (c, userId) => {
+    const chain = await docChainWith(c, id);
+    await voidSalesChainWith(c, [chain.self.id, ...chain.related.map((d) => d.id)], reason, userId);
+  }, { sub: 'receipt' });
+}
+
+/** ใบทั้งสายของเอกสารใบหนึ่ง — ไว้ให้แผงยืนยันบอกว่าจะยกเลิกอะไรบ้าง */
+export async function docChainOf(id: string): Promise<DocChainInfo> {
+  return query((c) => docChainWith(c, id));
 }
 
 
