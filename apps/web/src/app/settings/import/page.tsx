@@ -1,3 +1,4 @@
+import { productLimitHint } from '@drivegolight/core';
 import { can, requireTab } from '@/lib/auth';
 import { canEdit, canExport } from '@/lib/perms';
 import { Shell } from '@/components/shell';
@@ -5,6 +6,8 @@ import { SubNav } from '@/components/sub-nav';
 import { ContactsImport } from './contacts-import';
 import { CsvImport } from './csv-import';
 import { RestoreForm } from './restore-form';
+import { activeProductCount } from '@/lib/products';
+import { IMPORT_LIMIT } from '@/lib/contacts-csv';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +23,10 @@ export default async function ImportPage() {
 
   const seesStock = can(session, 'stock');
   const seesContacts = can(session, 'customer');
+  /* ขีดจำกัดสินค้าเป็นของทั้งอู่ ไม่ใช่ต่อไฟล์ — บอกที่ว่างที่เหลือจริงตั้งแต่ก่อนเลือกไฟล์
+     ไม่งั้นอู่เตรียมไฟล์มาเสร็จแล้วค่อยรู้ตอนกดนำเข้าว่าเข้าไม่ได้ทั้งไฟล์ */
+  const activeProducts = seesStock ? await activeProductCount() : 0;
+  const contactsHint = `นำเข้าได้ครั้งละไม่เกิน ${IMPORT_LIMIT.toLocaleString('en-US')} รายต่อไฟล์`;
 
   return (
     <Shell
@@ -33,7 +40,7 @@ export default async function ImportPage() {
             <header>
               <h2>สินค้าและอะไหล่</h2>
               <div className="spacer" />
-              <span className="hint">นำเข้าได้ครั้งละไม่เกิน 3,000 รายการต่อไฟล์</span>
+              <span className="hint">{productLimitHint(activeProducts)}</span>
             </header>
             <div className="body">
               <div className="tag-row" style={{ marginBottom: 14 }}>
@@ -63,7 +70,7 @@ export default async function ImportPage() {
               <header>
                 <h2>ทะเบียนลูกค้า</h2>
                 <div className="spacer" />
-                <span className="hint">หนึ่งแถวต่อหนึ่งคัน · ลูกค้าหลายคันพิมพ์ชื่อซ้ำได้</span>
+                <span className="hint">หนึ่งแถวต่อหนึ่งคัน · ลูกค้าหลายคันพิมพ์ชื่อซ้ำได้ · {contactsHint}</span>
               </header>
               <div className="body">
                 <div className="tag-row" style={{ marginBottom: 14 }}>
@@ -91,7 +98,7 @@ export default async function ImportPage() {
               <header>
                 <h2>ทะเบียนผู้ขาย</h2>
                 <div className="spacer" />
-                <span className="hint">เพิ่มและปรับปรุงตามรหัสหรือเลขผู้เสียภาษี</span>
+                <span className="hint">เพิ่มและปรับปรุงตามรหัสหรือเลขผู้เสียภาษี · {contactsHint}</span>
               </header>
               <div className="body">
                 <div className="tag-row" style={{ marginBottom: 14 }}>
