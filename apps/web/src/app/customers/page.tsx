@@ -2,11 +2,12 @@ import { addrLineOf } from '@/lib/contacts';
 import Link from 'next/link';
 import { PrintReport } from '@/components/print-report';
 import { RowLink } from '@/components/row-link';
-import { requireTab } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listContacts } from '@/lib/contacts';
+import { searchVehiclesWith } from '@/lib/vehicles';
 import { baht } from '@/lib/format';
 import { ColPicker } from '@/components/col-picker';
 import { CUST_COLS, CUST_COLS_FIXED, getCustHiddenCols, type CustCol } from '@/lib/ui-prefs';
@@ -37,9 +38,12 @@ export default async function CustomersPage({
   const page = Number(sp.page ?? '1') || 1;
 
   const pageSize = pageSizeOf(sp.size);
-  const [hidden, { rows, total }] = await Promise.all([
+  const [hidden, { rows, total }, plateHits] = await Promise.all([
     getCustHiddenCols(),
     listContacts({ search: sp.q, kind: sp.kind, type: sp.type, page, pageSize }),
+    /* ค้นด้วยทะเบียนรถ (4 ตัวท้ายเป็นท่าที่ใช้บ่อยที่สุดหน้าเคาน์เตอร์ · ผู้ใช้กำหนด 19 ก.ย. 2569)
+       ลูกค้าคันเดียวกันกลับมาซ่อมซ้ำ สิ่งที่อยากเห็นคือประวัติของรถคันนั้น ไม่ใช่รายชื่อลูกค้า */
+    sp.q ? query((c) => searchVehiclesWith(c, sp.q!)) : Promise.resolve([]),
   ]);
   const show = (k: CustCol) => !hidden.includes(k);
   /* คอลัมน์ที่ได้พื้นที่ที่เหลือ: ที่อยู่ถ้าเปิด · ไม่งั้นทะเบียนรถ · ปิดทั้งคู่ให้ชื่อ
@@ -98,6 +102,29 @@ export default async function CustomersPage({
                placeholder="ค้นหา — ชื่อ รหัส เบอร์ หรือทะเบียนรถ" aria-label="ค้นหาผู้ติดต่อ" />
         <Link className="mc-add" href={`/customers/new?kind=${sp.kind === 'vendor' ? 'vendor' : 'customer'}`}>＋ เพิ่ม</Link>
       </form>
+
+      {plateHits.length ? (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <header>
+            <h2>รถที่ตรงกับ “{sp.q}”</h2>
+            <div className="spacer" />
+            <span className="subtle">กดการ์ดเพื่อดูประวัติของรถคันนั้น</span>
+          </header>
+          <div className="body vcards">
+            {plateHits.map((v) => (
+              <Link key={v.id} className="vcard" href={`/vehicles/${v.id}`}>
+                <span className="plate mono">{v.plate}</span>
+                <span className="spec">{[v.brand, v.model, v.color].filter(Boolean).join(' · ') || 'ไม่ระบุรุ่น'}</span>
+                <span className="owner">{v.ownerName}</span>
+                <span className="foot">
+                  <span>{v.docCount} ใบ</span>
+                  {v.outstanding > 0.004 ? <span className="due-text">ค้าง {baht(v.outstanding)}</span> : null}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="card cust-list">
         <div className="toolbar cust-toolbar">
@@ -209,7 +236,17 @@ export default async function CustomersPage({
                         {c.kind === 'customer' ? (
                           <>
                             <div>
-                              {c.plates.length ? c.plates.slice(0, 2).join(' · ') : '-'}
+                              {/* กดทะเบียนแล้วไปประวัติของรถคันนั้น (ผู้ใช้กำหนด 19 ก.ย. 2569)
+                                  ใบที่ไม่มี id ของรถ (ข้อมูลเก่าก่อนมีทะเบียนรถ) ยังเป็นข้อความเฉย ๆ */}
+                              {c.plates.length ? c.plates.slice(0, 2).map((p, i) => (
+                                <span key={p}>
+                                  {i > 0 ? ' · ' : ''}
+                                  {/* RowLink ปล่อยให้ลิงก์ในแถวทำงานเองอยู่แล้ว ไม่ต้องกันคลิกซ้อน */}
+                                  {c.vehicleIds?.[i]
+                                    ? <Link href={`/vehicles/${c.vehicleIds[i]}`} className="plate-link">{p}</Link>
+                                    : p}
+                                </span>
+                              )) : '-'}
                               {c.plates.length > 2 ? <span className="subtle fs-12"> · อีก {c.plates.length - 2} คัน</span> : null}
                             </div>
                             {c.taxId ? <div className="subtle fs-12">{c.taxId}</div> : null}

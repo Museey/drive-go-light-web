@@ -50,6 +50,8 @@ export interface Contact {
   vehicleCount: number;
   /** ทะเบียนรถที่ดูแล เช่น "1กก 1234 กรุงเทพมหานคร" เรียงตามที่เพิ่ม — มีเฉพาะรายการจาก listContacts */
   plates: string[];
+  /** id ของรถเรียงคู่กับ plates — ไว้ลิงก์ไปหน้าประวัติของรถคันนั้น */
+  vehicleIds: string[];
   vehicles?: Vehicle[];
   /**
    * ยอดสะสม — ผลรวมยอดที่ต้องชำระของเอกสารที่ผูกกับผู้ติดต่อรายนี้
@@ -113,6 +115,7 @@ function toContact(r: any): Contact {
     displayName: displayName(base),
     vehicleCount: Number(r.vehicle_count ?? 0),
     plates: Array.isArray(r.plates) ? r.plates : [],
+    vehicleIds: Array.isArray(r.vehicle_ids) ? r.vehicle_ids : [],
     spent: n(r.spent),
     owe: n(r.owe),
   };
@@ -175,6 +178,9 @@ export async function listContacts(opts: {
                       from vehicles v
                      where v.contact_id = k.id and coalesce(v.plate_a, '') || coalesce(v.plate_b, '') <> ''
                      order by v.created_at) as plates,
+              array(select v.id::text from vehicles v
+                     where v.contact_id = k.id and coalesce(v.plate_a, '') || coalesce(v.plate_b, '') <> ''
+                     order by v.created_at) as vehicle_ids,
               coalesce(m.spent, 0) as spent,
               coalesce(m.owe, 0)   as owe
        from contacts k
