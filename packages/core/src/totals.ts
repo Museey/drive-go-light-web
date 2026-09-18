@@ -82,10 +82,19 @@ export const WHT_MIN_BASE = 1000;
  * (ไม่ใช่ `round2(whtBase * rate / 100)`) — เป็นพฤติกรรมของโปรแกรมเดิม ห้ามเปลี่ยน
  * ฐานต่ำกว่า `WHT_MIN_BASE` ไม่หัก — `whtBase` ยังคืนค่าจริงไว้ให้หน้าจอแจ้งว่าไม่ถึง
  */
-export function recTotals(doc: SalesDoc, ctx: ShopContext): SalesTotals {
+export function recTotals(
+  doc: SalesDoc,
+  ctx: ShopContext,
+  /**
+   * `whtMinBase: 0` = คิดแบบโปรแกรมเดิม (ไม่มีขั้นต่ำ) — ใช้ตอนกู้คืน/นำเข้าไฟล์สำรองที่ไม่มียอดเก็บไว้
+   * ผู้ใช้กำหนด 17 ก.ย. 2569: "ถ้าเป็นของเก่าที่กู้คืนมาจากไฟล์ เราจะไม่ยุ่งเลย" — ใบเก่าต้องได้ยอดเท่าที่ร้านเห็นตอนออกใบ
+   */
+  opts: { whtMinBase?: number } = {},
+): SalesTotals {
   const t = totalsOf(doc, ctx);
   const whtBase = whtBaseOf(doc, ctx);
-  const wht = whtBase < WHT_MIN_BASE ? 0 : Math.round(whtBase * num(doc.whtRate)) / 100;
+  const minBase = opts.whtMinBase ?? WHT_MIN_BASE;
+  const wht = whtBase < minBase ? 0 : Math.round(whtBase * num(doc.whtRate)) / 100;
   return { ...t, whtBase, wht, payable: round2(t.grand - wht) };
 }
 

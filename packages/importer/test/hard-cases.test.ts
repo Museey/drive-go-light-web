@@ -17,7 +17,7 @@ import { importBackup, normalizeBackup } from '../src/index.js';
 import type { ImportResult } from '../src/index.js';
 import {
   billnoteBackup, claimBackup, countBackup, duplicateDocNoBackup, emptyBackup, largeChainBackup, legacyV1Backup,
-  messyBackup, vatInclusiveBackup, wrongVatModeBackup,
+  messyBackup, receipt, vatInclusiveBackup, wrongVatModeBackup,
 } from './hard-cases.js';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
@@ -165,6 +165,50 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
     });
   });
 
+  /**
+   * ไฟล์ที่เว็บนี้ส่งออกเก็บยอดหัก ณ ที่จ่ายไว้ (whtAmount) — ใช้ค่านั้นตรง ๆ ไม่คำนวณใหม่
+   * ใบที่ออกในเว็บหลังตั้งขั้นต่ำ 1,000 (ค่าแรงไม่ถึง ยอดหัก 0) ต้องกลับมาเป็น 0 ไม่ใช่ถูกคิดแบบโปรแกรมเดิม
+   */
+  describe('ยอดหัก ณ ที่จ่ายที่ไฟล์เก็บไว้', () => {
+    const labor = (price: number) => [{ pid: null, code: 'LAB', oem: '', name: 'ค่าแรง', unit: 'รายการ', qty: 1, price, svc: true }];
+    const backup = emptyBackup({
+      receipts: [
+        receipt('W1', { whtRate: 3, items: labor(500) }),                    // ไฟล์โปรแกรมเดิม ไม่มียอด → 15
+        receipt('W2', { whtRate: 3, items: labor(500), whtAmount: 0 }),      // เว็บบันทึก 0 → 0
+        receipt('W3', { whtRate: 3, items: labor(1500), whtAmount: 40 }),    // ยอดที่เก็บไว้ต่างจากที่คิดได้ (45) → ใช้ 40 ที่เก็บไว้
+      ],
+      invoices: [
+        { ...receipt('V1', { whtRate: 3, items: labor(800), whtAmount: 0 }), kind: 'IV', no: 'IV-202601-V1', vatMode: 'none' },
+      ],
+      seq: { q: 0, r: 3, c: 0, p: 0, v: 0, e: 0, iv: 1, ivt: 0 },
+    });
+    beforeAll(async () => { await load(backup); });
+
+    const docOf = async (no: string) =>
+      (await app.query(`select wht_amount, grand_total, payable from documents where doc_no = $1`, [no])).rows[0];
+
+    it('ไม่มียอดในไฟล์ — คิดแบบโปรแกรมเดิม ค่าแรง 500 หัก 15', async () => {
+      const d = await docOf('RC-202601-W1');
+      expect(n(d.wht_amount)).toBe(15);
+      expect(n(d.payable)).toBe(n(d.grand_total) - 15);
+    });
+
+    it('ไฟล์เก็บยอด 0 — คงเป็น 0 ยอดชำระ = รวมทั้งสิ้น', async () => {
+      const d = await docOf('RC-202601-W2');
+      expect(n(d.wht_amount)).toBe(0);
+      expect(n(d.payable)).toBe(n(d.grand_total));
+      const iv = await docOf('IV-202601-V1');
+      expect(n(iv.wht_amount), 'ใบส่งมอบก็ใช้ยอดที่เก็บไว้').toBe(0);
+      expect(n(iv.payable)).toBe(n(iv.grand_total));
+    });
+
+    it('ไฟล์เก็บยอด 40 ทั้งที่สูตรคิดได้ 45 — ใช้ 40 ที่เก็บไว้ ไม่คำนวณใหม่', async () => {
+      const d = await docOf('RC-202601-W3');
+      expect(n(d.wht_amount)).toBe(40);
+      expect(n(d.payable)).toBe(n(d.grand_total) - 40);
+    });
+  });
+
   describe('เอกสารที่ราคารวมภาษีมูลค่าเพิ่มแล้ว', () => {
     const backup = vatInclusiveBackup();
     let result: ImportResult;
@@ -193,7 +237,8 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
       const byLegacy = new Map(rows.map((r) => [r.legacy_id, r]));
 
       for (const r of backup.receipts) {
-        const t = recTotals(r, ctx);
+        /* ไฟล์สำรองไม่มียอดเก็บไว้ → คิดแบบโปรแกรมเดิม ไม่มีขั้นต่ำ 1,000 (ผู้ใช้กำหนด 17 ก.ย. 2569) */
+        const t = recTotals(r, ctx, { whtMinBase: 0 });
         const row = byLegacy.get(`RC:${r.id}`);
         expect(n(row.net_amount), `net ${r.no}`).toBe(t.net);
         expect(n(row.vat_amount), `vat ${r.no}`).toBe(t.vat);
@@ -206,6 +251,14 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
         expect(n(row.net_amount), `net ${e.no}`).toBe(t.net);
         expect(n(row.wht_amount), `wht ${e.no}`).toBe(t.wht);
       }
+    });
+
+    it('ส่วนลดทำให้ฐานค่าแรงต่ำกว่า 1,000 — ยังหักแบบโปรแกรมเดิม (ของเก่าจากไฟล์ไม่แตะ)', async () => {
+      const t = recTotals(backup.receipts[1], { vatRate: 7 }, { whtMinBase: 0 });
+      expect(t.whtBase, 'ใบนี้ฐานต่ำกว่า 1,000 จริง — ไม่งั้นข้อนี้พิสูจน์อะไรไม่ได้').toBeLessThan(1000);
+      expect(t.wht).toBeGreaterThan(0);
+      const { rows } = await app.query(`select wht_amount from documents where doc_no = 'RC-202601-2'`);
+      expect(n(rows[0].wht_amount)).toBe(t.wht);
     });
 
     it('บันทึกโหมดภาษีไว้ในเอกสาร ไม่ได้แปลงทิ้ง', async () => {

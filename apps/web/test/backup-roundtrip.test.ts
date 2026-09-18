@@ -46,6 +46,7 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
   let countedTo = 0;
   let picProductCode = '';
   let discDocNo = '';
+  let zeroWhtDocNo = '';
   let voidDocNo = '';
   let purgedDocNo = '';
   let supplierProductCode = '';
@@ -264,6 +265,15 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     await admin.query(`select next_claim_no($1, 'customer', '6907')`, [firstTenant]);
     await admin.query(`select next_count_no($1, '6907')`, [firstTenant]);
 
+    /* ใบที่ยอดหัก ณ ที่จ่ายที่บันทึกไว้ต่างจากที่สูตรคิดได้ — แบบใบที่บันทึกในเว็บหลังตั้งขั้นต่ำ 1,000 (ค่าแรงไม่ถึง หัก 0)
+       ถ้าไฟล์ของเว็บไม่เก็บยอดไว้ ตอนกู้คืนจะถูกคิดใหม่แบบโปรแกรมเดิมแล้วได้ยอดหักกลับมา (ผู้ใช้กำหนด 17 ก.ย. 2569) */
+    const small = (await admin.query(
+      `select d.id, d.doc_no, d.grand_total from documents d
+        where d.tenant_id = $1 and d.kind = 'RC' and d.status = 'issued' and d.wht_amount > 0 and d.doc_no <> $2
+        order by d.doc_no limit 1`, [firstTenant, discDocNo])).rows[0];
+    zeroWhtDocNo = small.doc_no;
+    await admin.query(`update documents set wht_amount = 0, payable = grand_total where id = $1`, [small.id]);
+
     /* ส่งออกจากอู่แรก แล้วนำเข้าเป็นอู่ที่สอง */
     const exported = await exportBackupWith(app);
 
@@ -321,6 +331,21 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     expect(n(b.buy_total)).toBe(n(a.buy_total));
     expect(n(b.paid)).toBe(n(a.paid));
     expect(n(a.sell_total)).toBeGreaterThan(0);
+  });
+
+  it('ใบที่บันทึกยอดหัก ณ ที่จ่ายไว้ 0 — กลับมาเป็น 0 ไม่ถูกคิดใหม่ · ใบเก่าจากไฟล์โปรแกรมเดิมยังมียอดหัก', async () => {
+    const row = async (tenant: string, no: string) => (await admin.query(
+      `select wht_amount, payable, grand_total from documents where tenant_id = $1 and doc_no = $2`, [tenant, no])).rows[0];
+    const back = await row(secondTenant, zeroWhtDocNo);
+    expect(n(back.wht_amount)).toBe(0);
+    expect(n(back.payable)).toBe(n(back.grand_total));
+
+    /* ไฟล์ตัวอย่างเป็นไฟล์ของโปรแกรมเดิม — ใบที่ค่าแรงต่ำกว่า 1,000 ต้องได้ยอดหักแบบโปรแกรมเดิม (เดิมหายไป 75 ใบ) */
+    const small = await admin.query(
+      `select count(*)::int as n from documents
+        where tenant_id = $1 and kind in ('IV','IVT','RC') and wht_rate > 0 and wht_amount > 0
+          and wht_amount < wht_rate * 10`, [firstTenant]);
+    expect(small.rows[0].n, 'มีใบที่ฐานค่าแรงต่ำกว่า 1,000 แต่ยังมียอดหัก').toBeGreaterThan(0);
   });
 
   it('ยอดสต๊อกรวมเท่ากัน', async () => {
