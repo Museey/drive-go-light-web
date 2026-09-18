@@ -311,8 +311,12 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
       expect(rows[0].price_tier).toBe('A');
     });
 
-    it('เตือนเรื่องโลโก้ที่ต้องย้ายไป object storage', () => {
-      expect(has(result.warnings, 'โลโก้')).toBe(true);
+    /* โลโก้เก็บเป็น data URI ในคอลัมน์เดียว ตั้งแต่ 18 ก.ย. 2569 จึงนำเข้าให้เลย
+       ไม่ต้องเตือนให้ไปตั้งเอง — คำเตือนที่ไม่ต้องทำอะไรทำให้คนเลิกอ่านคำเตือนทั้งชุด */
+    it('โลโก้เข้าไปอยู่ในร้านเลย ไม่เตือนให้ไปตั้งเอง', async () => {
+      const { rows } = await app.query(`select logo_url from tenants where id = current_tenant_id()`);
+      expect(rows[0].logo_url).toBe('data:image/png;base64,iVBORw0KGgo=');
+      expect(has(result.warnings, 'โลโก้')).toBe(false);
     });
 
     it('สต๊อกติดลบยกมาได้ ส่วนสินค้าที่ไม่มีของไม่ต้องลงรายการ', async () => {

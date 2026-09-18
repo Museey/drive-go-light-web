@@ -17,7 +17,7 @@ import pg from 'pg';
 // ถ้าปล่อยให้เป็น Date แล้วเรียก toISOString() จะเพี้ยนไป 1 วันในเขตเวลาไทย (UTC+7)
 pg.types.setTypeParser(1082, (v) => v);
 import {
-  exTotals, paidOf, poTotals, recTotals, salesDocs, vatChain,
+  exTotals, LOGO_MAX_BYTES, paidOf, poTotals, recTotals, salesDocs, vatChain,
 } from '@drivegolight/core';
 import { importBackup, normalizeBackup } from '../src/index.js';
 import type { ImportResult } from '../src/index.js';
@@ -310,6 +310,49 @@ describe.skipIf(!DB_URL)('นำเข้าไฟล์สำรองข้อ
       await app.query(`select set_config('app.tenant_id', $1, false)`, [result.tenantId]);
     }
   }, 60_000);
+
+  /**
+   * โลโก้ร้าน — คอลัมน์ logo_url เก็บ data URI อยู่แล้ว (หน้า 07.1 บันทึกแบบนี้)
+   * ถ้านำเข้าแล้วไม่ตั้งให้ อู่ที่ย้ายมาจะพิมพ์เอกสารออกมาไม่มีโลโก้โดยไม่รู้ตัว
+   */
+  describe('โลโก้จากไฟล์สำรอง', () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg' + 'A'.repeat(200);
+
+    /** นำเข้าไฟล์ที่แก้เฉพาะ shop.logo แล้วคืนค่าที่เข้าฐานจริง */
+    const importWithLogo = async (logo: unknown) => {
+      let tenantId = '';
+      try {
+        const r = await importBackup(app, { ...raw, shop: { ...raw.shop, logo } } as any,
+          { openingStockDate: '2026-08-28', ownerFollows: true });
+        tenantId = r.tenantId;
+        const { rows } = await admin.query('select logo_url from tenants where id = $1', [tenantId]);
+        return { stored: rows[0].logo_url as string | null, warnings: r.warnings };
+      } finally {
+        if (tenantId) await admin.query('delete from tenants where id = $1', [tenantId]);
+        await app.query(`select set_config('app.tenant_id', $1, false)`, [result.tenantId]);
+      }
+    };
+
+    it('โลโก้ในไฟล์เข้าไปอยู่ในร้านเลย ไม่ต้องไปตั้งเอง', async () => {
+      const { stored, warnings } = await importWithLogo(PNG);
+      expect(stored).toBe(PNG);
+      expect(warnings.some((w) => w.includes('โลโก้'))).toBe(false);
+    }, 120_000);
+
+    it('โลโก้ที่ไม่ใช่รูปที่รองรับ ไม่ถูกเขียนลงฐาน และเตือนให้รู้', async () => {
+      const { stored, warnings } = await importWithLogo('https://example.com/logo.png');
+      expect(stored).toBeNull();
+      expect(warnings.some((w) => w.includes('โลโก้') && w.includes('ไม่ใช่รูป'))).toBe(true);
+    }, 120_000);
+
+    it('โลโก้ที่ใหญ่เกินขีดจำกัด ไม่ถูกเขียนลงฐาน และบอกว่าใหญ่เกิน', async () => {
+      const big = 'data:image/png;base64,' + 'A'.repeat(LOGO_MAX_BYTES);
+      const { stored, warnings } = await importWithLogo(big);
+      expect(stored).toBeNull();
+      expect(warnings.some((w) => w.includes('โลโก้') && w.includes('ใหญ่'))).toBe(true);
+    }, 120_000);
+
+  });
 
   it('นำเข้าไฟล์เดิมซ้ำได้เป็นอู่ใหม่ ไม่ชนกับของเดิม', async () => {
     const second = await importBackup(app, raw, { openingStockDate: '2026-08-28' });

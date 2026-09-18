@@ -12,7 +12,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  exTotals, isServiceItem, num, poTotals, recTotals, round2, totalsOf,
+  exTotals, isLogoDataUri, isServiceItem, LOGO_MAX_BYTES, num, poTotals, recTotals, round2, totalsOf,
 } from '@drivegolight/core';
 import { permsFromLegacy, type PermKey, type ShopContext, type VatMode } from '@drivegolight/core';
 import { picsFromBackup } from './pics.js';
@@ -220,6 +220,7 @@ export async function importBackup(
   }
   const periods = seqPeriodsOf((db as any)._seqPeriods);
   const shop = db.shop as Record<string, any>;
+  const rawShop = ((raw as Record<string, any>).shop ?? {}) as Record<string, any>;
   const ctx: ShopContext = { vatRate: shop.vatRate };
   const warnings: string[] = [...unsupportedWarnings(dropped)];
 
@@ -238,13 +239,27 @@ export async function importBackup(
     if (shop.taxId && taxId.length !== 13) {
       warnings.push(`เลขประจำตัวผู้เสียภาษีของร้าน "${shop.taxId}" ไม่ครบ 13 หลัก — บันทึกเป็นค่าว่าง`);
     }
-    if (shop.logo) {
-      warnings.push('โลโก้เดิมฝังเป็น base64 ในไฟล์ — ต้องอัปโหลดขึ้น object storage แล้วตั้ง logo_url เอง');
-    }
 
     /* ข้อมูลร้านที่รุ่น 6.4 ไม่มี — ตั้งเฉพาะเมื่อไฟล์มีคีย์นั้นจริง
        ไฟล์เก่าไม่มีคีย์เหล่านี้ ถ้าตั้งทุกครั้ง การกู้จากไฟล์เก่าจะล้างลายเซ็นกับบัญชีธนาคารที่ตั้งไว้ในเว็บทิ้ง */
     const extraShop: [string, unknown][] = [];
+
+    /* โลโก้ — คอลัมน์ logo_url เก็บ data URI อยู่แล้ว (หน้า 07.1 บันทึกแบบเดียวกัน)
+       ใช้เกณฑ์ชุดเดียวกับช่องอัปโหลด ไม่งั้นทางนี้จะรับของที่อีกทางปฏิเสธ
+       ไฟล์ที่ไม่มีคีย์ logo เลยจะไม่แตะของเดิม เหมือนคีย์อื่นในบล็อกนี้ */
+    /* ดูจากไฟล์ดิบ ไม่ใช่ค่าที่ normalize แล้ว — normalizeBackup เติม logo: '' ให้ทุกไฟล์
+       ถ้าเช็คจากตรงนั้น ไฟล์รุ่นเก่าที่ไม่มีคีย์นี้จะกลายเป็น "สั่งให้ลบโลโก้" */
+    if ('logo' in rawShop) {
+      const logo = text(rawShop.logo);
+      if (!logo) extraShop.push(['logo_url', null]);
+      else if (!isLogoDataUri(logo)) {
+        warnings.push('โลโก้ในไฟล์ไม่ใช่รูปที่ระบบรับ (PNG, JPG, WebP, SVG) — ข้ามไว้ อัปโหลดใหม่ได้ที่ 07.1 ตั้งค่าร้าน');
+      } else if (logo.length > LOGO_MAX_BYTES) {
+        warnings.push(
+          `โลโก้ในไฟล์ใหญ่เกิน ${Math.round(LOGO_MAX_BYTES / 1024)} KB — ข้ามไว้ ย่อรูปแล้วอัปโหลดใหม่ได้ที่ 07.1 ตั้งค่าร้าน`,
+        );
+      } else extraShop.push(['logo_url', logo]);
+    }
     if ('_ownerName' in shop) extraShop.push(['owner_name', text(shop._ownerName)]);
     if ('_signature' in shop) extraShop.push(['signature_url', text(shop._signature) || null]);
     if ('_noteDefault' in shop) extraShop.push(['note_default', text(shop._noteDefault)]);

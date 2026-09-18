@@ -60,6 +60,46 @@ export async function salesByMonthWith(c: Client, months = 6): Promise<SalesMont
   return rows.map((r) => ({ key: r.key as string, amount: round2(n(r.amount)) }));
 }
 
+/** ตัวเลขการ์ด "สรุปยอดขาย" หน้าแรก */
+export interface SalesSummary {
+  /** ยอดสุทธิรับ — รวม VAT แล้วหักภาษี ณ ที่จ่าย เท่ากับ recTotals().payable ของรุ่น 6.4 */
+  total: number;
+  count: number;
+  /** เงินที่รับเข้ามาแล้วของใบชุดเดียวกัน */
+  paid: number;
+  /** เฉลี่ยต่อใบ คิดจาก total ตัวเดียวกับที่แสดง ไม่ใช่ฐานอื่น */
+  avg: number;
+}
+
+/**
+ * สรุปยอดขายของช่วงที่เลือก
+ *
+ * **ยอดที่แสดงคือยอดสุทธิรับ ไม่ใช่ยอดก่อนภาษี** (ผู้ใช้กำหนด 18 ก.ย. 2569) —
+ * อู่เปิดหน้านี้เทียบกับรุ่น 6.4 ที่ใช้อยู่เดิม ถ้าคนละฐานจะกลายเป็นว่าข้อมูลกู้คืนมาไม่ครบ
+ * ทั้งที่ครบ ยอดก่อนภาษียังดูได้ที่หน้า 06.1 ซึ่งแยกช่องให้อยู่แล้ว
+ */
+export async function salesSummaryWith(c: Client, from?: string, to?: string): Promise<SalesSummary> {
+  const params: unknown[] = [];
+  let range = '';
+  if (from) { params.push(from); range += ` and d.doc_date >= $${params.length}`; }
+  if (to) { params.push(to); range += ` and d.doc_date <= $${params.length}`; }
+
+  const { rows } = await c.query(
+    `select coalesce(sum(d.payable), 0) as total,
+            count(*)::int as n,
+            coalesce(sum(coalesce(pay.paid, 0)), 0) as paid
+       from documents d
+       left join (select doc_id, sum(amount) as paid from payments group by doc_id) pay
+              on pay.doc_id = d.id
+      where ${SALES_DOCS}${range}`,
+    params,
+  );
+
+  const total = round2(n(rows[0].total));
+  const count = rows[0].n as number;
+  return { total, count, paid: round2(n(rows[0].paid)), avg: count ? round2(total / count) : 0 };
+}
+
 export interface PartyOwing {
   partyId: string | null;
   name: string;

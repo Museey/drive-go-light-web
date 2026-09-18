@@ -13,7 +13,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { payablesWith, receivablesWith } from '../src/lib/ar-ap';
 import {
-  owingSidesWith, salesByMonthWith, salesDocsWith, topOwing, whtByRateWith,
+  owingSidesWith, salesByMonthWith, salesDocsWith, salesSummaryWith, topOwing, whtByRateWith,
 } from '../src/lib/home-report';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
@@ -119,6 +119,70 @@ describe.skipIf(!DB_URL)('ตัวเลขรายงานหน้าแร
   const pay = (docId: string, amount: number) => admin.query(
     `insert into payments (tenant_id, doc_id, paid_on, method, amount)
      values ($1,$2,current_date,'เงินโอน',$3)`, [tenantId, docId, amount]);
+
+  /**
+   * การ์ด "สรุปยอดขาย" บนหน้าแรก — ผู้ใช้กำหนด 18 ก.ย. 2569 ว่าต้องเป็นยอดเดียวกับรุ่น 6.4
+   * (recTotals().payable = รวม VAT แล้วหักภาษี ณ ที่จ่าย) ไม่ใช่ยอดก่อนภาษี
+   * เปิดสองโปรแกรมเทียบกันแล้วเลขต้องตรง ไม่งั้นอู่จะไม่เชื่อตัวเลขทั้งหน้า
+   */
+  describe('สรุปยอดขายหน้าแรก', () => {
+    it('เป็นยอดสุทธิรับแบบรุ่น 6.4 ไม่ใช่ยอดก่อนภาษี', async () => {
+      await doc('IVT-1', { kind: 'IVT', net: 1000, vat: 70, wht: 30 });
+      const s = await salesSummaryWith(app);
+      expect(s.total, 'net 1,000 + VAT 70 − หัก ณ ที่จ่าย 30').toBe(1040);
+      expect(s.count).toBe(1);
+    });
+
+    it('เฉลี่ยต่อใบคิดจากยอดเดียวกับตัวเลขใหญ่', async () => {
+      await doc('IVT-1', { kind: 'IVT', net: 1000, vat: 70, wht: 30 });
+      await doc('RC-1', { kind: 'RC', net: 500, vat: 35 });
+      const s = await salesSummaryWith(app);
+      expect(s.total).toBe(1040 + 535);
+      expect(s.avg).toBe(Math.round(((1040 + 535) / 2) * 100) / 100);
+    });
+
+    it('ไม่มีใบขายเลย เฉลี่ยต่อใบเป็นศูนย์ ไม่ใช่หารด้วยศูนย์', async () => {
+      const s = await salesSummaryWith(app);
+      expect(s).toEqual({ total: 0, count: 0, paid: 0, avg: 0 });
+    });
+
+    it('ใบเสร็จที่ออกต่อจากใบส่งมอบไม่ถูกนับซ้ำ และใบที่ยกเลิกไม่ถูกนับ', async () => {
+      const iv = await doc('IVT-1', { kind: 'IVT', net: 1000, vat: 70 });
+      const rc = await doc('RC-1', { kind: 'RC', net: 1000, vat: 70 });
+      await admin.query(`update documents set parent_doc_id = $2 where id = $1`, [rc, iv]);
+      await doc('RC-2', { kind: 'RC', net: 300 });
+      await admin.query(`update documents set status = 'void', voided_at = now() where doc_no = 'RC-2'`);
+
+      const s = await salesSummaryWith(app);
+      expect(s.count, 'เหลือใบส่งมอบใบเดียว').toBe(1);
+      expect(s.total).toBe(1070);
+    });
+
+    it('กรองตามช่วงวันที่บนเอกสาร', async () => {
+      await doc('IVT-1', { kind: 'IVT', net: 1000, vat: 70, date: await day(-40) });
+      await doc('IVT-2', { kind: 'IVT', net: 2000, vat: 140, date: await day(-2) });
+
+      const s = await salesSummaryWith(app, await day(-7), await day(0));
+      expect(s.count).toBe(1);
+      expect(s.total).toBe(2140);
+    });
+
+    it('รับชำระแล้วนับเฉพาะเงินที่รับเข้าใบในชุดเดียวกัน', async () => {
+      const iv = await doc('IVT-1', { kind: 'IVT', net: 1000, vat: 70 });
+      await pay(iv, 400);
+      const po = await doc('PO-1', { kind: 'PO', net: 900 });   /* direction มาจาก kind เอง */
+      await pay(po, 900);
+
+      const s = await salesSummaryWith(app);
+      expect(s.paid, 'เงินที่จ่ายใบซื้อไม่ใช่เงินที่รับจากการขาย').toBe(400);
+    });
+
+    it('ของอู่อื่นไม่โผล่มา', async () => {
+      await doc('IVT-อื่น', { kind: 'IVT', net: 5000, vat: 350, tenant: otherTenant, partyId: null });
+      const s = await salesSummaryWith(app);
+      expect(s).toEqual({ total: 0, count: 0, paid: 0, avg: 0 });
+    });
+  });
 
   describe('ยอดขายหกเดือนล่าสุด', () => {
     it('ได้ครบหกเดือนเสมอ เรียงเก่าไปใหม่ และเดือนล่าสุดอยู่ท้าย', async () => {

@@ -27,6 +27,9 @@ pg.types.setTypeParser(1082, (v) => v);
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '../../..');
 const DB_URL = process.env.DATABASE_URL;
+
+/** โลโก้ทดสอบ — data URI สั้น ๆ ที่ผ่านเกณฑ์เดียวกับช่องอัปโหลดหน้า 07.1 */
+const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const n = (v: unknown) => Number(v);
 
 const PICS = resolve(here, 'fixtures/pics');
@@ -274,6 +277,10 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     zeroWhtDocNo = small.doc_no;
     await admin.query(`update documents set wht_amount = 0, payable = grand_total where id = $1`, [small.id]);
 
+    /* โลโก้ร้าน — เก็บเป็น data URI ในคอลัมน์เดียว ต้องติดไฟล์สำรองไปด้วย
+       ไม่งั้นอู่ที่ย้ายเครื่องจะพิมพ์เอกสารออกมาไม่มีโลโก้โดยไม่รู้ตัว */
+    await admin.query(`update tenants set logo_url = $2 where id = $1`, [firstTenant, LOGO]);
+
     /* ส่งออกจากอู่แรก แล้วนำเข้าเป็นอู่ที่สอง */
     const exported = await exportBackupWith(app);
 
@@ -308,6 +315,13 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     );
     return rows[0];
   }
+
+  it('โลโก้ร้านไปกลับแล้วยังเท่าเดิมทุกไบต์', async () => {
+    const logoOf = async (id: string) =>
+      (await admin.query(`select logo_url from tenants where id = $1`, [id])).rows[0].logo_url;
+    expect(await logoOf(firstTenant)).toBe(LOGO);
+    expect(await logoOf(secondTenant), 'อู่ที่นำเข้าจากไฟล์ต้องได้โลโก้เดียวกัน').toBe(LOGO);
+  });
 
   it('จำนวนแถวเท่ากันทุกตาราง', async () => {
     const a = await summary(firstTenant);
