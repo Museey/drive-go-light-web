@@ -6,6 +6,7 @@ import { getShop } from '@/lib/queries';
 import { BackFab } from '@/components/back-fab';
 import { PrintButton } from '../../../../income/[id]/print/print-button';
 import { baht, thDateLong } from '@/lib/format';
+import { COPY_LABELS } from '@/components/doc-paper';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +41,9 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
       <BackFab solo fallbackHref={`/stock/claim/${id}`} />
 
       <div className="printview">
-        <div className="paper">
+        {/* ต้นฉบับแล้วตามด้วยสำเนา (ผู้ใช้กำหนด 19 ก.ย. 2569) */}
+        {COPY_LABELS.map((copy) => (
+        <div className="paper" key={copy}>
           <div className="doc-head">
             <div className="co">
               <b>{shop.name}</b>
@@ -55,6 +58,7 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
               <div style={{ fontSize: 11, letterSpacing: '.08em' }}>
                 {vendor ? 'SUPPLIER CLAIM / GOODS RETURN' : 'CLAIM / STOCK WRITE-OFF'}
               </div>
+              <div className="copy-tag">{copy}</div>
               <table style={{ marginTop: 4 }}>
                 <tbody>
                   <tr><td>เลขที่</td><td style={{ textAlign: 'right' }}><b>{claim.no}</b></td></tr>
@@ -180,6 +184,7 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
             )}
           </div>
         </div>
+        ))}
       </div>
     </>
   );

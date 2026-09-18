@@ -27,6 +27,9 @@ type Brand = { logoUrl: string; ownerName: string; signatureUrl: string; warrant
 
 const CAPN = 26;
 
+/** ทุกเอกสารพิมพ์สองชุด — ต้นฉบับให้ลูกค้า สำเนาเก็บเข้าแฟ้ม (ผู้ใช้กำหนด 19 ก.ย. 2569) */
+export const COPY_LABELS = ['ต้นฉบับ', 'สำเนา'] as const;
+
 function Kv({ l, v, mono, bold }: { l: string; v: string | number | null | undefined; mono?: boolean; bold?: boolean }) {
   return (
     <div className="kv">
@@ -52,6 +55,10 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
   }
   const N = pages.length;
 
+  /* ต้นฉบับทั้งชุด แล้วสำเนาทั้งชุด (ผู้ใช้กำหนด 19 ก.ย. 2569)
+     เอกสารสามหน้าจึงพิมพ์ออกมาหกแผ่น ไม่ใช่สลับต้นฉบับ/สำเนาทีละหน้า */
+  const sheets = COPY_LABELS.flatMap((copy) => pages.map((chunk, pi) => ({ copy, chunk, pi })));
+
   const v = doc.vehicle ?? {};
   const plate = [v.plateA, v.plateB].filter(Boolean).join(' ') || doc.vehiclePlate || '';
   const prov = v.plateProv || v.plateProvince || '';
@@ -72,15 +79,16 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
       <div className="printbar">
         <PrintButton label="🖨 พิมพ์ / บันทึก PDF" />
         <span className="subtle">
-          กระดาษ A4{N > 1 ? ` · ${N} หน้า (รายการเกินหน้าแรก ระบบขึ้นหน้าใหม่ให้)` : ''}
+          กระดาษ A4 · ต้นฉบับ {N} หน้า แล้วสำเนาอีก {N} หน้า
+          {N > 1 ? ' (รายการเกินหน้าแรก ระบบขึ้นหน้าใหม่ให้)' : ''}
         </span>
       </div>
 
       <BackFab solo fallbackHref={buy ? `/expense/${doc.id}` : `/income/${doc.id}`} />
 
       <div className="printview">
-        {pages.map((chunk, pi) => (
-          <div className="paper doc2" key={pi}>
+        {sheets.map(({ copy, chunk, pi }, si) => (
+          <div className="paper doc2" key={si}>
             <div className="doc-head">
               {brand.logoUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
@@ -94,6 +102,7 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
               <div className="doc-meta">
                 <h1>{PRINT_TITLE[kind] ?? kind}</h1>
                 <div className="docno-big mono">{doc.docNo}</div>
+                <div className="copy-tag">{copy}</div>
                 {N > 1 ? <div style={{ fontSize: 11 }}>หน้า {pi + 1} / {N}</div> : null}
               </div>
             </div>

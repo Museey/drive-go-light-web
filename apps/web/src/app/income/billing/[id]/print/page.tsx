@@ -8,6 +8,7 @@ import { getShop } from '@/lib/queries';
 import { BackFab } from '@/components/back-fab';
 import { PrintButton } from '../../../[id]/print/print-button';
 import { baht, KIND_SHORT, thDate, thDateLong } from '@/lib/format';
+import { COPY_LABELS } from '@/components/doc-paper';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,8 +45,10 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
       <BackFab solo fallbackHref={`/income/billing/${id}`} />
 
       <div className="printview">
-        {pages.map((chunk, pi) => { const start = runningIndex; runningIndex += chunk.length; return (
-        <div className="paper" key={pi}>
+        {/* ต้นฉบับทั้งชุดก่อน แล้วสำเนาทั้งชุด (ผู้ใช้กำหนด 19 ก.ย. 2569) */}
+        {COPY_LABELS.flatMap((copy) => { runningIndex = 0; return pages.map((chunk, pi) => {
+        const start = runningIndex; runningIndex += chunk.length; return (
+        <div className="paper" key={`${copy}-${pi}`}>
           <div className="doc-head">
             <div className="co">
               <b>{shop.name}</b>
@@ -58,6 +61,7 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
             <div className="doc-meta">
               <h1>ใบวางบิล</h1>
               <div style={{ fontSize: 11, letterSpacing: '.08em' }}>BILLING NOTE</div>
+              <div className="copy-tag">{copy}</div>
               <table style={{ marginTop: 4 }}>
                 <tbody>
                   <tr><td>เลขที่</td><td style={{ textAlign: 'right' }}><b>{note.no}</b></td></tr>
@@ -170,7 +174,7 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
             <div style={{ fontSize: 10.5, marginTop: 10, color: '#555', textAlign: 'right' }}>ต่อหน้าถัดไป → (หน้า {pi + 1}/{pages.length})</div>
           )}
         </div>
-        ); })}
+        ); }); })}
       </div>
     </>
   );
