@@ -12,12 +12,22 @@ import { useFormStatus } from 'react-dom';
  *
  * Enter ในช่องกรอกต้องไม่ส่งฟอร์มข้ามแผงนี้ — ฟอร์มต้องกัน implicit submit เอง
  */
-export function ConfirmSave({ open, title, lines, submitLabel = 'บันทึก', onEdit }: {
+export interface ConfirmItem {
+  name: string;
+  qty: number;
+  unit?: string;
+  /** ยอดรวมของบรรทัด (หลังหักส่วนลดรายบรรทัดแล้ว) */
+  amount: number;
+}
+
+export function ConfirmSave({ open, title, lines, items, submitLabel = 'บันทึก', onEdit }: {
   open: boolean;
   /** เช่น "ใบเสนอราคา" */
   title: string;
   /** สรุปสิ่งที่กำลังจะบันทึก ให้ผู้ใช้กวาดตาตรวจก่อน */
   lines: { label: string; value: string }[];
+  /** รายการในเอกสาร — เติมพื้นที่ว่างกลางแผงด้วยของจริงที่กำลังจะบันทึก (ผู้ใช้แจ้ง 19 ก.ย. 2569) */
+  items?: ConfirmItem[];
   submitLabel?: string;
   onEdit: () => void;
 }) {
@@ -43,6 +53,21 @@ export function ConfirmSave({ open, title, lines, submitLabel = 'บันทึ
             <div key={l.label} className="kvrow"><dt>{l.label}</dt><dd>{l.value}</dd></div>
           ))}
         </dl>
+        {items?.length ? (
+          <div className="confirm-items">
+            <div className="ci-head">รายการที่กำลังบันทึก</div>
+            <ol>
+              {items.map((it, i) => (
+                <li key={i}>
+                  <span className="nm">{it.name}</span>
+                  <span className="qt">{fmtQty(it.qty)}{it.unit ? ` ${it.unit}` : ''}</span>
+                  <span className="amt mono">{money(it.amount)}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+
         <div className="acts">
           <SubmitBtn label={submitLabel} />
           <button className="btn amber" type="button" onClick={onEdit}>แก้ไข</button>
@@ -51,6 +76,10 @@ export function ConfirmSave({ open, title, lines, submitLabel = 'บันทึ
     </>
   );
 }
+
+/** ทศนิยมของจำนวนเอาเท่าที่มีจริง — 2 ชิ้นไม่ต้องขึ้นว่า 2.00 */
+const fmtQty = (n: number) => (Number.isInteger(n) ? String(n) : String(Number(n.toFixed(3))));
+const money = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function SubmitBtn({ label }: { label: string }) {
   const { pending } = useFormStatus();

@@ -2,6 +2,7 @@ import { requireSession } from '@/lib/auth';
 import { getLicenseStatus } from '@/lib/subscription';
 import { LicenseNag } from './license-nag';
 import { EnterToNext } from './enter-to-next';
+import { ErrorScroll } from './error-scroll';
 import { BackFab } from './back-fab';
 import { MenuBar } from './menu-bar';
 
@@ -51,6 +52,7 @@ export async function Shell({
         {/* ปุ่มย้อนกลับลอย มุมขวาล่าง (แท็บเล็ต/เดสก์ท็อป) — ดู CSS .backfab */}
         <BackFab />
       <EnterToNext />
+      <ErrorScroll />
       {license.daysLeft < 0 ? <LicenseNag expiredDays={Math.abs(license.daysLeft)} /> : null}
       </div>
     </div>

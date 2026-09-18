@@ -40,7 +40,7 @@ export default async function KitsPage({
               {mayEdit ? <Link className="tile act" href="/stock/kits/new">+ สร้างชุดอะไหล่</Link> : null}
             </div>
             <div className="spacer" />
-            <form autoComplete="off" action="/stock/kits" method="get" style={{ display: 'flex', gap: 6 }}>
+            <form autoComplete="off" action="/stock/kits" method="get" data-enter="own" style={{ display: 'flex', gap: 6 }}>
               <input className="in search" type="search" name="q" defaultValue={search}
                      placeholder="กรอกคำค้นหา — รหัสชุด หรือชื่อชุด" style={{ width: 240 }} />
               <button className="btn" type="submit">ค้นหา</button>

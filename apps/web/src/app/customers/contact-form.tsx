@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { saveContactAction } from './actions';
 import type { FormResult } from '@/lib/mutate';
 import type { Contact, Vehicle } from '@/lib/contacts';
+import { TaxIdBoxes } from '@/components/tax-id-boxes';
 
 const PROVINCES = [
   'กรุงเทพมหานคร', 'กระบี่', 'กาญจนบุรี', 'กาฬสินธุ์', 'กำแพงเพชร', 'ขอนแก่น', 'จันทบุรี',
@@ -141,8 +142,8 @@ export function ContactForm({
         </div>
         <div className={bad('taxId')}>
           <label htmlFor="taxId">เลขประจำตัวผู้เสียภาษี</label>
-          <input className="in mono" id="taxId" name="taxId" inputMode="numeric" maxLength={20}
-                 defaultValue={val('taxId', contact?.taxId)} placeholder="13 หลัก" />
+          {/* 13 ช่องแยกกันแบบแบบฟอร์มสรรพากร — ส่งค่าออกเป็นช่องเดียวชื่อ taxId เหมือนเดิม */}
+          <TaxIdBoxes id="taxId" defaultValue={val('taxId', contact?.taxId)} />
           <span className="hint">ต้องมีถ้าจะออกใบกำกับภาษีให้รายนี้</span>
         </div>
         <div className="field">
