@@ -120,7 +120,7 @@ export default async function ExpensePage({
           ) : null}
 
           <div className="spacer" />
-          <form autoComplete="off" action="/expense" method="get" style={{ display: 'flex', gap: 6 }}>
+          <form autoComplete="off" action="/expense" method="get" data-enter="own" style={{ display: 'flex', gap: 6 }}>
             <input type="hidden" name="hist" value="1" />
             {sp.kind ? <input type="hidden" name="kind" value={sp.kind} /> : null}
             {sp.cat ? <input type="hidden" name="cat" value={sp.cat} /> : null}

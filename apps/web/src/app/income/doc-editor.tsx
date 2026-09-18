@@ -6,6 +6,7 @@ import { bahttext, expiredLines, lineAmount, recTotals, WHT_MIN_BASE, type VatMo
 import { loadSourceAction, saveDocAction, scanPartAction, searchCustomersAction, searchOpenSourcesAction, searchProductsAction } from './actions';
 import { useLiveSearch } from '@/components/use-live-search';
 import { ConfirmSave } from '@/components/confirm-save';
+import { payModeOf } from '@/lib/pay-mode';
 import { DocSteps } from '@/components/doc-steps';
 import type { FormResult } from '@/lib/mutate';
 import type { DiscountMode, DocItemInput, PickedContact, PickedProduct, SalesDocInput, SalesKind } from '@/lib/sales';
@@ -399,6 +400,15 @@ export function DocEditor({
 
   /* ส่งเฉพาะบรรทัดที่มีของ และส่วนลดตามที่ผู้ใช้เลือก (เซิร์ฟเวอร์คำนวณบาทที่มีผลจริงเอง) */
   const payload = useMemo(() => JSON.stringify({ ...doc, items: realItems }), [doc, realItems]);
+
+  /* ปุ่มลัดวิธีรับชำระ — โหมดที่ตรงกับข้อมูลจริงตอนนี้ (lib/pay-mode.ts มีเทสต์คุม) */
+  const payMode = payModeOf(doc.payments, t.payable);
+
+  /* รายการจริงที่กำลังจะบันทึก — เติมพื้นที่ว่างกลางแผงยืนยัน (ผู้ใช้ส่งภาพ 18 ก.ย. 2569) */
+  const confirmItems = realItems.map((it) => ({
+    name: it.name, qty: it.qty, unit: it.unit,
+    amount: lineAmount({ qty: it.qty, price: it.unitPrice, discPct: it.discPct ?? 0 }),
+  }));
 
   const confirmLines = [
     { label: 'ลูกค้า', value: doc.partyName || '(เงินสด / ไม่ระบุ)' },
@@ -874,11 +884,13 @@ export function DocEditor({
                     );
                   })}
                 </div>
+                {/* ปุ่มที่ตรงกับสถานะจริงตอนนี้ติดสีไว้ — อ่านจากรายการรับชำระ ไม่ใช่จำว่าเพิ่งกดปุ่มไหน
+                    กรอกยอดเองในช่องด้านบนแล้วปุ่มขยับตาม (ผู้ใช้แจ้ง 19 ก.ย. 2569) */}
                 <div className="tag-row" style={{ marginTop: 10 }}>
-                  <button className="btn sm" type="button" onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: t.payable, ref: '' }] })); }}>รับเงินสดเต็มจำนวน</button>
-                  <button className="btn sm" type="button" onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินโอน', amount: t.payable, ref: banks?.[0] ? bankRef(banks[0]) : '' }] })); }}>รับโอนเต็มจำนวน</button>
-                  <button className="btn sm" type="button" onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: 0, ref: '' }] })); setFocusPartial(true); }}>ชำระบางส่วน — กรอกยอด</button>
-                  <button className="btn sm" type="button" onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [] })); }}>ยังไม่รับเงิน (เครดิต)</button>
+                  <button className="btn sm" type="button" aria-pressed={payMode === 'cash'} onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: t.payable, ref: '' }] })); }}>รับเงินสดเต็มจำนวน</button>
+                  <button className="btn sm" type="button" aria-pressed={payMode === 'transfer'} onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินโอน', amount: t.payable, ref: banks?.[0] ? bankRef(banks[0]) : '' }] })); }}>รับโอนเต็มจำนวน</button>
+                  <button className="btn sm" type="button" aria-pressed={payMode === 'partial'} onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: 0, ref: '' }] })); setFocusPartial(true); }}>ชำระบางส่วน — กรอกยอด</button>
+                  <button className="btn sm" type="button" aria-pressed={payMode === 'credit'} onClick={() => { setCashAuto(false); setDoc((d) => ({ ...d, payments: [] })); }}>ยังไม่รับเงิน (เครดิต)</button>
                 </div>
               </div>
             ) : null}
@@ -902,7 +914,7 @@ export function DocEditor({
         </div>
       </div>
 
-      <ConfirmSave open={confirm} title={KIND_LABEL[doc.kind]} lines={confirmLines}
+      <ConfirmSave open={confirm} title={KIND_LABEL[doc.kind]} lines={confirmLines} items={confirmItems}
                    submitLabel={mode === 'new' ? 'บันทึก' : 'บันทึกการแก้ไข'}
                    onEdit={() => setConfirm(false)} />
     </form>

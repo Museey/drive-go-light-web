@@ -143,8 +143,9 @@ export function KitEditor({ initial, code, showCost, mayEdit, returnTo }: {
             <tr>
               <th style={{ width: 34 }}>#</th>
               <th className="c-name">รายการในชุด</th>
-              <th className="c-unit">หน่วย</th>
+              {/* จำนวนมาก่อนหน่วย (ผู้ใช้กำหนด 19 ก.ย. 2569) — กรอกจำนวนบ่อยกว่าหน่วยซึ่งมากับทะเบียนสินค้าอยู่แล้ว */}
               <th className="num c-qty">จำนวน</th>
+              <th className="c-unit">หน่วย</th>
               {showCost ? <><th className="num c-price">ทุน/หน่วย</th><th className="num" style={{ width: 110 }}>รวม</th></> : null}
               <th style={{ width: 48 }} />
             </tr>
@@ -161,14 +162,14 @@ export function KitEditor({ initial, code, showCost, mayEdit, returnTo }: {
                   {l.productId ? <span className="chip ok" title="ผูกทะเบียนสินค้า ใบเสร็จตัดสต๊อก">{l.code || 'ทะเบียน'}</span>
                     : l.name.trim() ? <span className="chip warn" title="ไม่ได้ผูกกับทะเบียนสินค้า จะไม่ตัดสต๊อก">ไม่ตัดสต๊อก</span> : null}
                 </td>
-                <td className="c-unit">
-                  <input className="in" name={`it${i}_unit`} value={l.unit} readOnly={!mayEdit || !!l.productId}
-                         onChange={(e) => setLine(i, { unit: e.target.value })} />
-                </td>
                 <td className="num c-qty">
                   <input className="in mono" name={`it${i}_qty`} inputMode="decimal" value={l.qty} readOnly={!mayEdit}
                          style={{ textAlign: 'right', ...(state.field === `it${i}_qty` ? { borderColor: 'var(--due)' } : {}) }}
                          onChange={(e) => setLine(i, { qty: Number(e.target.value) || 0 })} />
+                </td>
+                <td className="c-unit">
+                  <input className="in" name={`it${i}_unit`} value={l.unit} readOnly={!mayEdit || !!l.productId}
+                         onChange={(e) => setLine(i, { unit: e.target.value })} />
                 </td>
                 {showCost ? (
                   <>

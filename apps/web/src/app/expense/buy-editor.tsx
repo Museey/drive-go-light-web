@@ -8,6 +8,7 @@ import {
 import { saveBuyDocAction, searchVendorsAction } from './actions';
 import { scanPartAction, searchProductsAction } from '../income/actions';
 import { useLiveSearch } from '@/components/use-live-search';
+import { payModeOf } from '@/lib/pay-mode';
 import { ScanBox } from '@/components/scan-box';
 import { ConfirmSave } from '@/components/confirm-save';
 import { ThaiDateField } from '@/components/thai-date-input';
@@ -259,6 +260,15 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
 
   const payload = useMemo(() => JSON.stringify({ ...doc, items: realItems }), [doc, realItems]);
   const title = isPurchase ? 'ใบซื้อสินค้า' : 'บันทึกค่าใช้จ่าย';
+
+  /* ปุ่มลัดวิธีจ่ายชำระ — โหมดที่ตรงกับข้อมูลจริงตอนนี้ (lib/pay-mode.ts มีเทสต์คุม) */
+  const payMode = payModeOf(doc.payments, t.payable);
+  /* รายการจริงที่กำลังจะบันทึก — เติมพื้นที่ว่างกลางแผงยืนยันชุดเดียวกับเอกสารขาย */
+  const confirmItems = realItems.map((it) => ({
+    name: it.name, qty: it.qty, unit: it.unit,
+    amount: lineAmount({ qty: it.qty, price: it.unitPrice, discPct: it.discPct ?? 0 }),
+  }));
+
   const confirmLines = [
     { label: isPurchase ? 'ผู้ขาย' : 'ผู้รับเงิน', value: doc.partyName || '(ไม่ระบุ)' },
     { label: 'วันที่', value: thDate(doc.docDate) },
@@ -499,11 +509,12 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
                   );
                 })}
               </div>
+              {/* ปุ่มที่ตรงกับสถานะจริงติดสีไว้ ชุดเดียวกับหน้าใบเสร็จ (ผู้ใช้แจ้ง 19 ก.ย. 2569) */}
               <div className="tag-row" style={{ marginTop: 10 }}>
-                <button className="btn sm" type="button" onClick={() => setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: t.payable, ref: '' }] }))}>จ่ายสดเต็มจำนวน</button>
-                <button className="btn sm" type="button" onClick={() => setDoc((d) => ({ ...d, payments: [{ method: 'เงินโอน', amount: t.payable, ref: '' }] }))}>โอนเต็มจำนวน</button>
-                <button className="btn sm" type="button" onClick={() => { setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: 0, ref: '' }] })); setTimeout(() => (document.getElementById('bpay-เงินสด') as HTMLInputElement | null)?.focus(), 0); }}>ชำระบางส่วน — กรอกยอด</button>
-                <button className="btn sm" type="button" onClick={() => setDoc((d) => ({ ...d, payments: [] }))}>ยังไม่จ่าย (ตั้งเป็นเจ้าหนี้)</button>
+                <button className="btn sm" type="button" aria-pressed={payMode === 'cash'} onClick={() => setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: t.payable, ref: '' }] }))}>จ่ายสดเต็มจำนวน</button>
+                <button className="btn sm" type="button" aria-pressed={payMode === 'transfer'} onClick={() => setDoc((d) => ({ ...d, payments: [{ method: 'เงินโอน', amount: t.payable, ref: '' }] }))}>โอนเต็มจำนวน</button>
+                <button className="btn sm" type="button" aria-pressed={payMode === 'partial'} onClick={() => { setDoc((d) => ({ ...d, payments: [{ method: 'เงินสด', amount: 0, ref: '' }] })); setTimeout(() => (document.getElementById('bpay-เงินสด') as HTMLInputElement | null)?.focus(), 0); }}>ชำระบางส่วน — กรอกยอด</button>
+                <button className="btn sm" type="button" aria-pressed={payMode === 'credit'} onClick={() => setDoc((d) => ({ ...d, payments: [] }))}>ยังไม่จ่าย (ตั้งเป็นเจ้าหนี้)</button>
               </div>
             </div>
 
@@ -518,7 +529,7 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
         </div>
       </div>
 
-      <ConfirmSave open={confirm} title={title} lines={confirmLines}
+      <ConfirmSave open={confirm} title={title} lines={confirmLines} items={confirmItems}
                    submitLabel={mode === 'new' ? 'บันทึก' : 'บันทึกการแก้ไข'} onEdit={() => setConfirm(false)} />
     </form>
   );

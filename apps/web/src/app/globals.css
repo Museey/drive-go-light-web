@@ -954,6 +954,13 @@ table.lines tr.hitrow table.tbl td { padding: 6px 10px; }
 
 /* ปุ่มสีตามความหมาย — เขียว = ยืนยัน, อำพัน = กลับไปแก้ */
 .btn.ok { background: var(--ok); color: #fff; border-color: var(--ok); font-weight: 700; }
+
+/* ปุ่มลัดวิธีรับ/จ่ายชำระที่กำลังเลือกอยู่ (ผู้ใช้แจ้ง 19 ก.ย. 2569)
+   ใช้พื้นเขียวเข้มชุดเดียวกับแถบที่เลือกในระบบ ไม่ใช่แค่เส้นขอบ — บนจอร้านต้องรู้ทันทีว่าเลือกอะไรอยู่ */
+.btn.sm[aria-pressed='true'], .btn[aria-pressed='true'] {
+  background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 700;
+}
+.btn[aria-pressed='true']:hover { border-color: var(--brand); }
 .btn.ok:hover { background: #17603A; border-color: #17603A; }
 .btn.amber { background: var(--accent); color: #2A1F00; border-color: #E0A800; font-weight: 700; }
 .btn.amber:hover { background: #FFCB33; }
@@ -971,6 +978,29 @@ table.lines tr.hitrow table.tbl td { padding: 6px 10px; }
 .confirm dl.kv { grid-template-columns: max-content 1fr; gap: 6px 14px; }
 .confirm .kvrow { display: contents; }
 .confirm dd { font-weight: 600; text-align: right; }
+/* ช่องเลขประจำตัวผู้เสียภาษี 13 ช่อง (ผู้ใช้กำหนด 19 ก.ย. 2569)
+   ช่องย่อตามที่มีจริงด้วย flex — จอ 375 ต้องอยู่บรรทัดเดียวไม่ล้นขอบ */
+.taxid { display: flex; gap: 3px; }
+.taxid-box {
+  flex: 1 1 0; min-width: 0; width: auto; padding: 7px 0; text-align: center;
+  font-variant-numeric: tabular-nums; letter-spacing: 0;
+}
+/* จอแคบไม่ต้องมีกฎแยก — ช่องยืดหดด้วย flex อยู่แล้ว (กติกาของโปรเจกต์: จุดตัดมีแค่ 768 กับ 1280 และใช้ min-width เท่านั้น) */
+
+/* รายการที่กำลังบันทึก — เติมพื้นที่ว่างกลางแผง (ผู้ใช้ส่งภาพ 18 ก.ย. 2569)
+   ยาวเกินก็เลื่อนในกรอบตัวเอง ปุ่มบันทึกยังอยู่ท้ายแผงเสมอ */
+.confirm-items { border-top: 1px solid var(--line); padding-top: 10px; min-height: 0; overflow-y: auto; }
+.confirm-items .ci-head { font-size: 12px; color: var(--ink-3); letter-spacing: .02em; margin-bottom: 6px; }
+.confirm-items ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.confirm-items li {
+  display: grid; grid-template-columns: 1fr max-content max-content; gap: 4px 10px;
+  align-items: baseline; font-size: 13.5px; padding-bottom: 6px; border-bottom: 1px dotted var(--line);
+}
+.confirm-items li:last-child { border-bottom: 0; padding-bottom: 0; }
+.confirm-items .nm { color: var(--ink); word-break: break-word; }
+.confirm-items .qt { color: var(--ink-3); font-size: 12.5px; }
+.confirm-items .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+
 .confirm .acts { display: flex; gap: 10px; margin-top: auto; }
 .confirm .acts .btn { flex: 1; justify-content: center; min-height: 48px; font-size: 15px; }
 /* popup "เอกสารได้บันทึกเรียบร้อยแล้ว" (app/income/edit-gate.tsx) — สามปุ่มเรียงลง ข้อความไม่ถูกบีบในแผง 380px */

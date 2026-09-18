@@ -115,7 +115,9 @@ export default async function CustomersPage({
 
           <div className="spacer" />
 
-          <form autoComplete="off" action="/customers" method="get" className="desk-only" style={{ gap: 6 }}>
+          {/* data-enter="own": กติกาทั้งระบบคือ Enter = ไปช่องถัดไป ช่องค้นหาต้องขอยกเว้นเอง
+              ไม่งั้นพิมพ์แล้วกด Enter จะเด้งไปช่องอื่นแทนที่จะค้นหา (ผู้ใช้แจ้ง 19 ก.ย. 2569) */}
+          <form autoComplete="off" action="/customers" method="get" className="desk-only" data-enter="own" style={{ gap: 6 }}>
             {sp.kind ? <input type="hidden" name="kind" value={sp.kind} /> : null}
             {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
             <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}

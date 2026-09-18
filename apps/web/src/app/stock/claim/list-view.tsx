@@ -63,7 +63,7 @@ export async function ClaimListView({
 
         <div className="card">
           <div className="toolbar">
-            <form autoComplete="off" action={S.href} method="get" style={{ display: 'flex', gap: 6 }}>
+            <form autoComplete="off" action={S.href} method="get" data-enter="own" style={{ display: 'flex', gap: 6 }}>
               <input className="in" type="search" name="q" defaultValue={sp.q ?? ''}
                      placeholder={`เลขที่ ชื่อ${S.party} หรือเหตุผล`} style={{ width: 280 }} />
               <button className="btn" type="submit">ค้นหา</button>
