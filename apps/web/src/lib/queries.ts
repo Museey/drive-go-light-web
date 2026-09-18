@@ -5,7 +5,7 @@ import { quoteFollowUpsWith, receiptsOfWith, type DocRef } from './doc-chain';
 import { expiringSummaryWith } from './expiry';
 import { BOOK_VALUE_SQL } from './stock-cost';
 import {
-  owingSidesWith, salesByMonthWith, whtByRateWith,
+  owingSidesWith, salesByMonthWith, salesSummaryWith, whtByRateWith,
   type OwingSide, type SalesMonthBar, type WhtByRate,
 } from './home-report';
 
@@ -66,7 +66,8 @@ export interface ReorderItem {
 }
 
 export interface HomeSummary {
-  salesThisYear: number;
+  /** ยอดขายของช่วงที่เลือก — ยอดสุทธิรับ (รวม VAT หักภาษี ณ ที่จ่าย) แบบเดียวกับรุ่น 6.4 */
+  salesTotal: number;
   /** จำนวนเอกสารขายในช่วงที่เลือก */
   salesDocCount: number;
   /** รับชำระแล้วจากเอกสารขายในช่วงที่เลือก */
@@ -115,20 +116,8 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
     if (from) { params.push(from); range += ` and doc_date >= $${params.length}`; }
     if (to) { params.push(to); range += ` and doc_date <= $${params.length}`; }
 
-    const sales = await c.query(
-      `select coalesce(sum(d.net_amount), 0) as total,
-              count(*)::int as n,
-              coalesce(sum(coalesce(pay.paid, 0)), 0) as paid
-       from documents d
-       left join (select doc_id, sum(amount) as paid from payments group by doc_id) pay
-              on pay.doc_id = d.id
-       where d.status <> 'void'
-         and (d.kind in ('IV','IVT')
-              or (d.kind = 'RC' and (d.parent_doc_id is null
-                  or (select kind from documents p where p.id = d.parent_doc_id) = 'QT')))
-         ${range.replace(/doc_date/g, 'd.doc_date')}`,
-      params,
-    );
+    /* ยอดขายของการ์ดหน้าแรก — ยอดสุทธิรับแบบรุ่น 6.4 คิดที่ home-report.ts ที่เดียว (มีเทสต์คุม) */
+    const sales = await salesSummaryWith(c, from, to);
 
     /* เงื่อนไขเดียวกับป้าย min ใน core — คงเหลือเท่ากับจุดสั่งซื้อพอดีก็นับแล้ว
        และข้ามสินค้าที่ยังไม่ได้ตั้งจุดสั่งซื้อ ไม่งั้นของหมดสต๊อกทุกตัวจะขึ้นมาเตือน */
@@ -196,9 +185,6 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
     const spendBuy = byKind['PO'] ?? 0;
     const spendExpense = byKind['EX'] ?? 0;
 
-    const salesTotal = money(sales.rows[0].total);
-    const salesDocCount = Number(sales.rows[0].n);
-
     const reorderTop: ReorderItem[] = reorderList.rows.map((r) => ({
       id: r.id,
       code: r.code,
@@ -211,10 +197,10 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
     }));
 
     return {
-      salesThisYear: salesTotal,
-      salesDocCount,
-      salesPaid: money(sales.rows[0].paid),
-      salesAvg: salesDocCount ? Math.round((salesTotal / salesDocCount) * 100) / 100 : 0,
+      salesTotal: sales.total,
+      salesDocCount: sales.count,
+      salesPaid: sales.paid,
+      salesAvg: sales.avg,
       spendTotal: Math.round((spendBuy + spendExpense) * 100) / 100,
       spendBuy,
       spendExpense,

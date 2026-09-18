@@ -375,4 +375,33 @@ describe.skipIf(!DB_URL)('กู้คืนข้อมูลทับอู่
     expect(p.counts.claims).toBe(1);
     expect(p.counts.counts).toBe(1);
   });
+
+  /**
+   * โลโก้ร้าน — อู่ที่ย้ายมาจากรุ่น 6.4 เคยเสียโลโก้ไประหว่างกู้คืน (ผู้ใช้แจ้ง 18 ก.ย. 2569)
+   * เอกสารที่พิมพ์ออกมาเลยไม่มีโลโก้ทั้งที่ไฟล์สำรองมีมาด้วย
+   */
+  it('โลโก้ในไฟล์สำรองมาถึงอู่ปลายทาง · ไฟล์ที่ไม่มีโลโก้ไม่ลบของเดิมทิ้ง', async () => {
+    const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const logoOf = async (id: string) =>
+      (await admin.query(`select logo_url from tenants where id = $1`, [id])).rows[0].logo_url;
+
+    await admin.query(`update tenants set logo_url = $2 where id = $1`, [source, LOGO]);
+    await admin.query(`update tenants set logo_url = null where id = $1`, [target]);
+
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [source]);
+    const file = parseBackupFile(JSON.stringify(await exportBackupWith(app)));
+
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [target]);
+    await app.query('begin');
+    await restoreIntoTenant(app, target, file);
+    await app.query('commit');
+    expect(await logoOf(target), 'กู้คืนแล้วต้องได้โลโก้จากไฟล์').toBe(LOGO);
+
+    /* ไฟล์รุ่นเก่าที่ไม่มีคีย์ logo เลย ต้องไม่ล้างโลโก้ที่ตั้งไว้ในเว็บ — แบบเดียวกับลายเซ็นและบัญชีธนาคาร */
+    const { logo: _drop, ...noLogo } = file.shop as Record<string, unknown>;
+    await app.query('begin');
+    await restoreIntoTenant(app, target, { ...file, shop: noLogo } as typeof file);
+    await app.query('commit');
+    expect(await logoOf(target), 'ไฟล์ที่ไม่มีโลโก้ต้องไม่ลบของเดิม').toBe(LOGO);
+  }, 240_000);
 });

@@ -85,7 +85,7 @@ export default async function HomePage({
             <h2>ภาพรวมการเงิน</h2>
             <div className="mstat-grid">
               <MStat k="sales" href={seesIncome ? '/income?kind=RC&hist=1' : null} lbl="📈 ยอดขาย"
-                     val={baht(summary.salesThisYear)} unit="บาท"
+                     val={baht(summary.salesTotal)} unit="บาท"
                      sub={`${summary.salesDocCount.toLocaleString('en-US')} ใบ`} tone="ok" />
               <MStat k="spend" href={can(session, 'expense') ? '/expense' : null} lbl="🛒 รายจ่าย"
                      val={baht(summary.spendTotal)} unit="บาท" sub="ซื้อสินค้า + ค่าใช้จ่าย" />
@@ -195,7 +195,8 @@ export default async function HomePage({
             ) : null}
           </header>
           <div className="body">
-            <div className="big">{baht(summary.salesThisYear)} <small>บาท ก่อนภาษี</small></div>
+            {/* ยอดสุทธิรับแบบรุ่น 6.4 — ยอดก่อนภาษีดูได้ที่หน้า 06.1 ซึ่งแยกช่องไว้แล้ว */}
+            <div className="big">{baht(summary.salesTotal)} <small>บาท สุทธิรับ</small></div>
             <div className="row"><span>จำนวนใบ</span><b>{summary.salesDocCount.toLocaleString('en-US')}</b></div>
             <div className="row"><span>เฉลี่ยต่อใบ</span><b>{baht(summary.salesAvg)}</b></div>
             <div className="row"><span>รับชำระแล้ว</span><b style={{ color: 'var(--ok)' }}>{baht(summary.salesPaid)}</b></div>

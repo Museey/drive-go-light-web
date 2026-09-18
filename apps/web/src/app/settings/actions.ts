@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { isLogoDataUri, LOGO_MAX_BYTES } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
 import { issueSetupToken } from '@/lib/auth';
 import { saveShopSettings, saveStaff, promoteToOwner, nextUserCode } from '@/lib/settings';
@@ -17,8 +18,8 @@ function describe(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-/** โลโก้เก็บเป็น data URI ในคอลัมน์ logo_url — ดูเหตุผลที่หน้าตั้งค่า */
-const MAX_LOGO_BYTES = 200 * 1024;
+/* โลโก้กับลายเซ็นเก็บเป็น data URI ในคอลัมน์เดียว (logo_url / signature_url)
+   เกณฑ์อยู่ที่ core ที่เดียว — ตัวนำเข้าไฟล์สำรองใช้ชุดเดียวกัน */
 
 export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
   await requirePerm('settings');
@@ -52,16 +53,16 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
   fd.set('bankName', banks[0]?.bank ?? ''); fd.set('bankAccountNo', banks[0]?.no ?? ''); fd.set('bankAccountName', banks[0]?.name ?? '');
   const logoUrl = str(fd, 'logoUrl');
   const signatureUrl = str(fd, 'signatureUrl');
-  if (signatureUrl && (signatureUrl.length > MAX_LOGO_BYTES || !/^data:image\/(png|jpeg|webp|svg\+xml);base64,/.test(signatureUrl))) {
+  if (signatureUrl && (signatureUrl.length > LOGO_MAX_BYTES || !isLogoDataUri(signatureUrl))) {
     return { error: 'รูปลายเซ็นต้องเป็น PNG/JPEG/WebP/SVG ขนาดไม่เกิน 200 KB', field: 'signature' };
   }
-  if (logoUrl && logoUrl.length > MAX_LOGO_BYTES) {
+  if (logoUrl && logoUrl.length > LOGO_MAX_BYTES) {
     return {
-      error: `ไฟล์โลโก้ใหญ่เกินไป (จำกัด ${Math.round(MAX_LOGO_BYTES / 1024)} KB) — ย่อรูปก่อนอัปโหลด`,
+      error: `ไฟล์โลโก้ใหญ่เกินไป (จำกัด ${Math.round(LOGO_MAX_BYTES / 1024)} KB) — ย่อรูปก่อนอัปโหลด`,
       field: 'logo',
     };
   }
-  if (logoUrl && !/^data:image\/(png|jpeg|webp|svg\+xml);base64,/.test(logoUrl)) {
+  if (logoUrl && !isLogoDataUri(logoUrl)) {
     return { error: 'รองรับเฉพาะไฟล์ภาพ PNG, JPG, WebP หรือ SVG', field: 'logo' };
   }
 

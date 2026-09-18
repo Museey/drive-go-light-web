@@ -197,7 +197,7 @@ export function messyBackup(): any {
       name: 'อู่ข้อมูลเพี้ยน',
       taxId: '0105-561-000-444',          // มีขีดคั่น ต้องเหลือแต่ตัวเลข
       addr: '', tel: '', tel2: '', vatRate: 7, whtRate: 3, priceTier: 'Z',   // priceTier ไม่ถูกต้อง
-      logo: 'data:image/png;base64,iVBORw0KGgo=',                            // ต้องเตือนเรื่องโลโก้
+      logo: 'data:image/png;base64,iVBORw0KGgo=',                            // นำเข้าให้เลย ไม่ต้องไปตั้งเอง
       proposerName: '',
     },
     products: [
