@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  activeProductsOf, csvNewProducts, PRODUCT_LIMIT, productLimitMessage, productRoomAfter,
+  activeProductsOf, csvNewProducts, PRODUCT_LIMIT, productLimitHint, productLimitMessage, productRoomAfter,
 } from '../src/index.js';
 
 describe('PRODUCT_LIMIT', () => {
@@ -58,5 +58,35 @@ describe('productLimitMessage', () => {
   it('กู้คืน — บอกว่าข้อมูลเดิมยังอยู่', () => {
     expect(productLimitMessage({ kind: 'restore', total: 3050, over: 50 }))
       .toBe('ไฟล์นี้มีสินค้าใช้งาน 3,050 รายการ เกินกำหนด 3,000 — ไม่ได้กู้คืน ข้อมูลเดิมยังอยู่ครบ');
+  });
+});
+
+/**
+ * ข้อความบนหัวการ์ดนำเข้าสินค้า (07.3) — เดิมเขียนว่า "ครั้งละไม่เกิน 3,000 รายการต่อไฟล์"
+ * ซึ่งไม่จริงสองทาง: ไม่มีเพดานต่อไฟล์แยกต่างหาก และร้านที่มีของอยู่แล้วเหลือที่น้อยกว่านั้น
+ * (ผู้ใช้แจ้ง 18 ก.ย. 2569)
+ */
+describe('ข้อความบอกที่ว่างก่อนนำเข้าสินค้า', () => {
+  it('บอกที่ว่างที่เหลือจริง ไม่ใช่เพดานต่อไฟล์', () => {
+    const t = productLimitHint(2900);
+    expect(t).toContain('2,900');
+    expect(t).toContain('3,000');
+    expect(t, 'ที่เหลือจริงคือ 100 ไม่ใช่ 3,000').toContain('100');
+    expect(t).not.toContain('ต่อไฟล์');
+  });
+
+  it('ร้านเปล่ายังบอกที่ว่างเต็มจำนวน', () => {
+    expect(productLimitHint(0)).toContain('3,000');
+  });
+
+  it('เต็มแล้วบอกว่าต้องปิดใช้งานก่อน ไม่ใช่บอกว่าเหลือ 0', () => {
+    const t = productLimitHint(PRODUCT_LIMIT);
+    expect(t).toContain('ปิดใช้งาน');
+    expect(t).not.toMatch(/เพิ่มได้อีก/);
+  });
+
+  it('อู่ที่เกินอยู่แล้วตั้งแต่ก่อนมีกติกา ไม่บอกที่ว่างติดลบ', () => {
+    expect(productLimitHint(PRODUCT_LIMIT + 50)).toContain('ปิดใช้งาน');
+    expect(productLimitHint(PRODUCT_LIMIT + 50)).not.toContain('-50');
   });
 });
