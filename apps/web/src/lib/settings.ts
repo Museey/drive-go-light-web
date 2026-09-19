@@ -1,6 +1,7 @@
 import 'server-only';
-import { query } from './auth';
+import { query, requirePerm } from './auth';
 import { mutate } from './mutate';
+import { deleteStaffWith, setStaffPasswordWith, transferOwnershipWith } from './staff-admin';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
@@ -114,12 +115,12 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
 export async function listUsers(): Promise<StaffUser[]> {
   return query(async (c) => {
     const { rows } = await c.query(
-      `select id, code, name, email, role::text as role, perms, active,
+      `select id, code, name, job_title, email, role::text as role, perms, active,
               password_hash is not null as has_password, last_login_at, locked_until
        from users order by role, code`,
     );
     return rows.map((r) => ({
-      id: r.id, code: r.code, name: r.name, email: r.email ?? '',
+      id: r.id, code: r.code, name: r.name, jobTitle: r.job_title ?? '', email: r.email ?? '',
       role: r.role, perms: (r.perms ?? {}) as Perms, active: r.active,
       hasPassword: r.has_password, lastLoginAt: r.last_login_at,
       lockedUntil: r.locked_until,
@@ -132,6 +133,8 @@ export interface StaffInput {
   /** รหัสพนักงานสำหรับอ้างอิงในเอกสาร — ไม่ใช่รหัสเข้าระบบ */
   code: string;
   name: string;
+  /** ตำแหน่งงาน — พิมพ์เองอิสระ */
+  jobTitle: string;
   /** อีเมลที่ใช้เข้าระบบจริง */
   email: string;
   perms: Perms;
@@ -183,9 +186,9 @@ export async function saveStaff(input: StaffInput, currentUserId: string): Promi
       }
 
       await c.query(
-        `update users set code=$2, name=$3, email=$4, perms=$5, active=$6 where id=$1`,
+        `update users set code=$2, name=$3, email=$4, perms=$5, active=$6, job_title=$7 where id=$1`,
         [input.id, input.code, input.name, input.email || null,
-         JSON.stringify(input.perms), input.active],
+         JSON.stringify(input.perms), input.active, input.jobTitle],
       );
       return input.id;
     }
@@ -219,17 +222,39 @@ export async function saveStaff(input: StaffInput, currentUserId: string): Promi
 }
 
 /** ให้สิทธิ์เจ้าของกิจการกับพนักงานอีกคน — ใช้ตอนเปลี่ยนมือหรือมีหุ้นส่วน */
-export async function promoteToOwner(userId: string): Promise<void> {
-  return mutate('settings', async (c) => {
-    await c.query(
-      `update users set role = 'owner',
-              perms = jsonb_build_object('menus', jsonb_build_object(
-                'customer', true, 'income', true, 'expense', true,
-                'stock', true, 'finance', true, 'settings', true))
-       where id = $1`,
-      [userId],
-    );
-  }, { sub: 'staff' });
+/**
+ * โอนสิทธิ์เจ้าของกิจการ — อู่มีเจ้าของได้คนเดียว (ผู้ใช้เลือก 19 ก.ย. 2569)
+ * เฉพาะเจ้าของกิจการเท่านั้นที่โอนได้ พนักงานที่มีสิทธิ์ตั้งค่าร้านโอนไม่ได้
+ */
+export async function transferOwnership(userId: string): Promise<void> {
+  const session = await requirePerm('settings');
+  if (session.role !== 'owner') {
+    throw new Error('เฉพาะเจ้าของกิจการเท่านั้นที่โอนสิทธิ์เจ้าของได้');
+  }
+  return mutate('settings', (c) => transferOwnershipWith(c, userId), { sub: 'staff' });
+}
+
+/** ลบพนักงานออกจากระบบ — ประวัติที่เคยทำไว้ยังอยู่ (ดู staff-admin.ts) */
+export async function deleteStaff(userId: string): Promise<void> {
+  const session = await requirePerm('settings');
+  return mutate('settings', (c) => deleteStaffWith(c, userId, session.userId), { sub: 'staff' });
+}
+
+/**
+ * เจ้าของกิจการตั้งรหัสผ่านให้พนักงานเอง โดยไม่ต้องส่งลิงก์ (ผู้ใช้เลือก 19 ก.ย. 2569)
+ *
+ * **เฉพาะ role เจ้าของ** ไม่ใช่แค่มีสิทธิ์เมนูตั้งค่าร้าน — คนที่ตั้งรหัสให้คนอื่นได้
+ * เท่ากับเข้าระบบแทนคนนั้นได้ จึงไม่ควรกระจายไปตามสิทธิ์เมนู
+ */
+export async function setStaffPassword(userId: string, plain: string): Promise<void> {
+  const session = await requirePerm('settings');
+  if (session.role !== 'owner') {
+    throw new Error('เฉพาะเจ้าของกิจการเท่านั้นที่ตั้งรหัสผ่านให้พนักงานได้');
+  }
+  if (userId === session.userId) {
+    throw new Error('ตั้งรหัสผ่านของตัวเองที่นี่ไม่ได้ — ใช้ลิงก์ตั้งรหัสผ่านใหม่แทน');
+  }
+  return mutate('settings', (c) => setStaffPasswordWith(c, userId, plain), { sub: 'staff' });
 }
 
 export async function getUserById(id: string): Promise<StaffUser | null> {

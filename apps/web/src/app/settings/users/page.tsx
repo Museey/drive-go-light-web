@@ -25,7 +25,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       <SubNav menu="settings" current="staff">
       <div className="card">
         <header><h2>รายชื่อผู้ใช้งาน</h2></header>
-        <UserManager users={users} nextCode={nextCode} currentUserId={session.userId} startNew={sp.new === '1'} />
+        <UserManager users={users} nextCode={nextCode} currentUserId={session.userId}
+                     isOwner={session.role === 'owner'} startNew={sp.new === '1'} />
       </div>
 
       <div className="card">

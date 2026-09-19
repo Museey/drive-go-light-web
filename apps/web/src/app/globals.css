@@ -978,6 +978,9 @@ table.lines tr.hitrow table.tbl td { padding: 6px 10px; }
 .confirm dl.kv { grid-template-columns: max-content 1fr; gap: 6px 14px; }
 .confirm .kvrow { display: contents; }
 .confirm dd { font-weight: 600; text-align: right; }
+/* ตำแหน่งงานใต้ชื่อผู้ลงนามบนเอกสาร (033) */
+.paper .sign-title { font-size: 10.5px; color: #555; }
+
 /* ป้ายต้นฉบับ/สำเนาใต้เลขที่เอกสาร (ผู้ใช้กำหนด 19 ก.ย. 2569)
    ตัวโตพอให้เห็นแต่ไม่แย่งความสำคัญของเลขที่เอกสาร */
 .paper .copy-tag {
