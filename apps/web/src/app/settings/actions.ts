@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { isLogoDataUri, LOGO_MAX_BYTES } from '@drivegolight/core';
 import { requirePerm } from '@/lib/auth';
 import { issueSetupToken } from '@/lib/auth';
-import { saveShopSettings, saveStaff, promoteToOwner, nextUserCode } from '@/lib/settings';
+import { saveShopSettings, saveStaff, transferOwnership, deleteStaff, setStaffPassword, nextUserCode } from '@/lib/settings';
 import { PERM_KEYS, type Perms } from '@/lib/perms';
 import { SUB_KEYS } from '@/components/menu-map';
 import { importProductsCsv, type CsvImportResult } from '@/lib/products-csv';
@@ -133,6 +133,7 @@ export async function saveStaffAction(_prev: FormResult, fd: FormData): Promise<
       id: str(fd, 'id') || undefined,
       code: str(fd, 'code') || (await nextUserCode()),
       name, email, perms,
+      jobTitle: str(fd, 'jobTitle'),
       active: fd.get('active') === 'on',
     }, session.userId);
   } catch (err) {
@@ -158,12 +159,47 @@ export async function issueSetupLinkAction(userId: string, purpose: 'initial' | 
   }
 }
 
-export async function promoteAction(userId: string): Promise<FormResult> {
-  await requirePerm('settings');
+/**
+ * โอนสิทธิ์เจ้าของกิจการให้พนักงานคนหนึ่ง — คนเดิมกลายเป็นพนักงาน (ผู้ใช้เลือก 19 ก.ย. 2569)
+ * หน้าจอต้องยืนยันก่อนเรียกเสมอ กดพลาดครั้งเดียวแล้วเสียตำแหน่งตัวเอง
+ */
+export async function transferOwnershipAction(userId: string): Promise<FormResult> {
   try {
-    await promoteToOwner(userId);
+    await transferOwnership(userId);
   } catch (err) {
-    return { error: describe(err, 'เปลี่ยนสิทธิ์ไม่สำเร็จ') };
+    return { error: describe(err, 'โอนสิทธิ์ไม่สำเร็จ') };
+  }
+  revalidatePath('/settings/users');
+  return { ok: true };
+}
+
+/** ลบพนักงาน — ประวัติที่เคยทำไว้ยังอยู่ */
+export async function deleteStaffAction(userId: string): Promise<FormResult> {
+  try {
+    await deleteStaff(userId);
+  } catch (err) {
+    return { error: describe(err, 'ลบพนักงานไม่สำเร็จ') };
+  }
+  revalidatePath('/settings/users');
+  return { ok: true };
+}
+
+/**
+ * เจ้าของกิจการตั้งรหัสผ่านให้พนักงาน
+ * **ห้ามส่งรหัสผ่านกลับไปกับผลลัพธ์หรือใส่ใน URL** — บอกแค่ว่าสำเร็จหรือไม่
+ */
+export async function setStaffPasswordAction(
+  _prev: FormResult, fd: FormData,
+): Promise<FormResult> {
+  const userId = str(fd, 'userId');
+  const password = String(fd.get('password') ?? '');
+  const confirm = String(fd.get('confirm') ?? '');
+  if (password !== confirm) return { error: 'รหัสผ่านสองช่องไม่ตรงกัน', field: 'confirm' };
+
+  try {
+    await setStaffPassword(userId, password);
+  } catch (err) {
+    return { error: describe(err, 'ตั้งรหัสผ่านไม่สำเร็จ'), field: 'password' };
   }
   revalidatePath('/settings/users');
   return { ok: true };

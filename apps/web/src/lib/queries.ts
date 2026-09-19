@@ -489,6 +489,9 @@ export interface DocDetail {
   findings: string[];
   approver: string;
   proposer: string;
+  /** ชื่อและตำแหน่งของคนที่สร้างเอกสาร — ใช้พิมพ์ตำแหน่งใต้ชื่อผู้ลงนาม (033) */
+  creatorName: string;
+  creatorJobTitle: string;
   parent: { id: string; kind: string; docNo: string } | null;
   items: DocItemRow[];
   payments: PaymentRow[];
@@ -499,9 +502,11 @@ export async function getDocDetail(id: string): Promise<DocDetail | null> {
     const { rows } = await c.query(
       `select d.*, d.kind::text as kind_text, d.status::text as status_text,
               d.vat_mode::text as vat_mode_text,
-              pd.id as parent_id, pd.kind::text as parent_kind, pd.doc_no as parent_no
+              pd.id as parent_id, pd.kind::text as parent_kind, pd.doc_no as parent_no,
+              cu.name as creator_name, cu.job_title as creator_job_title
        from documents d
        left join documents pd on pd.id = d.parent_doc_id
+       left join users cu on cu.id = d.created_by
        /* ลบถาวรแล้วต้องเปิดไม่ได้อีก แม้จะรู้ลิงก์ (ผู้ใช้แจ้ง 19 ก.ย. 2569) */
        where d.id = $1 and d.purged_at is null`,
       [id],
@@ -566,6 +571,8 @@ export async function getDocDetail(id: string): Promise<DocDetail | null> {
       findings: (d.findings ?? []).filter((x: string) => x?.trim()),
       approver: d.approver ?? '',
       proposer: d.proposer ?? '',
+      creatorName: d.creator_name ?? '',
+      creatorJobTitle: d.creator_job_title ?? '',
       parent: d.parent_id ? { id: d.parent_id, kind: d.parent_kind, docNo: d.parent_no } : null,
       items: items.rows.map((r) => ({
         lineNo: Number(r.line_no),

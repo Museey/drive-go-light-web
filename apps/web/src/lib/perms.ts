@@ -92,6 +92,8 @@ export interface StaffUser {
   id: string;
   code: string;
   name: string;
+  /** ตำแหน่งงาน — พิมพ์เอง ขึ้นในตารางพนักงานและใต้ชื่อผู้ลงนามบนเอกสารที่พิมพ์ (033) */
+  jobTitle: string;
   email: string;
   role: 'owner' | 'staff';
   perms: Perms;

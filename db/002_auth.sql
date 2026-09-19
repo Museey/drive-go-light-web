@@ -268,6 +268,44 @@ end;
 $$;
 
 /**
+ * เจ้าของกิจการตั้งรหัสผ่านให้พนักงานโดยตรง (ผู้ใช้กำหนด 19 ก.ย. 2569)
+ *
+ * ทำสามอย่างในทรานแซกชันเดียว ไม่งั้นจะเหลือทางเข้าซ้อนกัน:
+ *   1. ตั้งรหัสใหม่และล้างตัวนับล็อก
+ *   2. ไล่ session เดิมของคนนั้นออกทุกเครื่อง — รหัสเปลี่ยนแล้วของเก่าต้องใช้ต่อไม่ได้
+ *   3. ลบลิงก์ตั้งรหัสที่ยังไม่ได้ใช้ทิ้ง — ไม่งั้นลิงก์ที่ค้างอยู่ยังตั้งรหัสทับได้อีก
+ *
+ * ตรวจสิทธิ์ที่ชั้นแอป (เฉพาะ role เจ้าของ) — ฟังก์ชันนี้เป็นแค่การเขียนที่ครบชุด
+ */
+create or replace function auth.set_password(
+  p_user          uuid,
+  p_password_hash text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  update users
+     set password_hash = p_password_hash,
+         failed_attempts = 0,
+         locked_until = null
+   where id = p_user;
+
+  if not found then
+    raise exception 'ไม่พบพนักงานที่จะตั้งรหัสผ่านให้';
+  end if;
+
+  delete from auth.sessions where user_id = p_user;
+  delete from auth.setup_tokens where user_id = p_user and used_at is null;
+end;
+$$;
+
+comment on function auth.set_password(uuid, text) is
+  'เจ้าของกิจการตั้งรหัสผ่านให้พนักงาน — ไล่ session เดิมและลบลิงก์ตั้งรหัสที่ค้างอยู่';
+
+/**
  * สร้างบัญชีเจ้าของกิจการให้อู่ที่เพิ่งนำเข้าข้อมูล
  * ใช้ครั้งเดียวต่ออู่ — ถ้ามีเจ้าของอยู่แล้วจะคืนค่าว่าง
  */

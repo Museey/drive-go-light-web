@@ -73,6 +73,10 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
   const paid = Math.round(doc.payments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
   const outstanding = Math.max(0, Math.round((doc.payable - paid) * 100) / 100);
   const owner = (kind === 'QT' ? doc.proposer : doc.receivedBy) || brand.ownerName || '..........................';
+  /* ตำแหน่งงานใต้ชื่อผู้ลงนาม (ผู้ใช้กำหนด 19 ก.ย. 2569)
+     ขึ้นเฉพาะเมื่อชื่อที่พิมพ์เป็นคนเดียวกับคนที่สร้างเอกสาร — ไม่งั้นจะเอาตำแหน่งของคนหนึ่ง
+     ไปแปะใต้ชื่ออีกคน (ช่องผู้รับเงินบนใบพิมพ์ชื่อใครก็ได้) */
+  const ownerTitle = doc.creatorJobTitle && owner.trim() === doc.creatorName.trim() ? doc.creatorJobTitle : '';
 
   return (
     <>
@@ -253,6 +257,7 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
                     <div className="line" />
                     {kind === 'RC' ? 'ผู้รับเงิน' : kind === 'QT' ? 'ผู้เสนอราคา' : 'ผู้ส่งมอบงาน'}
                     <br /><span style={{ fontSize: 11 }}>( {owner} )</span>
+                    {ownerTitle ? <><br /><span className="sign-title">{ownerTitle}</span></> : null}
                   </div>
                   <div><div className="line" />{kind === 'QT' ? 'ผู้อนุมัติซ่อม' : 'ผู้มีอำนาจลงนาม'}</div>
                 </div>

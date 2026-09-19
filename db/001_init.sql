@@ -98,6 +98,7 @@ create table users (
   --   cost / homeReport            สวิตช์ระดับคน
   -- ที่ไม่ได้ตั้งไว้ = อนุญาต ยกเว้น tabs ที่ทำตามกติกาของรุ่น 6.4
   perms           jsonb       not null default '{}'::jsonb,
+  job_title       text        not null default '',           -- ตำแหน่งงาน (033) ขึ้นใต้ชื่อผู้ลงนามบนเอกสาร
   active          boolean     not null default true,
   last_login_at   timestamptz,
   created_at      timestamptz not null default now(),

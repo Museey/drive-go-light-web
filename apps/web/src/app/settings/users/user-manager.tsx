@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { issueSetupLinkAction, promoteAction, saveStaffAction } from '../actions';
+import { deleteStaffAction, issueSetupLinkAction, setStaffPasswordAction, transferOwnershipAction, saveStaffAction } from '../actions';
 import type { FormResult } from '@/lib/mutate';
 import { PERM_KEYS, PERM_LABEL, canTab, type PermKey, type StaffUser } from '@/lib/perms';
 import { SUB_ITEMS } from '@/components/menu-map';
@@ -37,6 +37,12 @@ function StaffForm({ user, nextCode, onDone }: {
         <div className={bad('name')}>
           <label>ชื่อ *</label>
           <input className="in" name="name" required defaultValue={user?.name ?? ''} />
+        </div>
+        <div className="field">
+          <label>ตำแหน่งงาน</label>
+          <input className="in" name="jobTitle" defaultValue={user?.jobTitle ?? ''}
+                 placeholder="เช่น ช่างหัวหน้า · ธุรการ" />
+          <span className="hint">ขึ้นใต้ชื่อผู้ลงนามบนเอกสารที่พิมพ์</span>
         </div>
         <div className={bad('email')}>
           <label>อีเมลสำหรับเข้าสู่ระบบ</label>
@@ -243,16 +249,63 @@ function PermSummary({ user }: { user: StaffUser }) {
   );
 }
 
-export function UserManager({ users, nextCode, currentUserId, startNew }: {
+function SetPasswordForm({ user, onDone }: { user: StaffUser; onDone: () => void }) {
+  const [state, action] = useActionState<FormResult, FormData>(setStaffPasswordAction, {});
+  if (state.ok) { onDone(); }
+
+  return (
+    <form autoComplete="off" className="form" action={action}>
+      <input type="hidden" name="userId" value={user.id} />
+      {state.error ? <div className="err">{state.error}</div> : null}
+      <p className="subtle" style={{ margin: 0 }}>
+        พนักงานใช้รหัสนี้เข้าระบบได้ทันที · เครื่องที่เคยเข้าไว้จะถูกไล่ออก
+        และลิงก์ตั้งรหัสผ่านที่ออกไว้ก่อนหน้าจะใช้ไม่ได้อีก
+      </p>
+      <div className={state.field === 'password' ? 'field bad' : 'field'}>
+        <label htmlFor="sp-password">รหัสผ่านใหม่ (อย่างน้อย 10 ตัวอักษร)</label>
+        <input className="in" id="sp-password" name="password" type="password"
+               autoComplete="new-password" required minLength={10} autoFocus />
+      </div>
+      <div className={state.field === 'confirm' ? 'field bad' : 'field'}>
+        <label htmlFor="sp-confirm">พิมพ์รหัสผ่านอีกครั้ง</label>
+        <input className="in" id="sp-confirm" name="confirm" type="password"
+               autoComplete="new-password" required minLength={10} />
+      </div>
+      <div className="acts">
+        <Submit label="ตั้งรหัสผ่าน" />
+        <button className="btn" type="button" onClick={onDone}>ยกเลิก</button>
+      </div>
+    </form>
+  );
+}
+
+export function UserManager({ users, nextCode, currentUserId, isOwner, startNew }: {
   /** เปิดฟอร์มเพิ่มพนักงานทันที (มาจากการ์ด 07.4 + เพิ่มพนักงาน) */
   startNew?: boolean;
   users: StaffUser[];
   nextCode: string;
   currentUserId: string;
+  /** คนที่เปิดหน้านี้เป็นเจ้าของกิจการหรือไม่ — โอนสิทธิ์และตั้งรหัสผ่านให้คนอื่นได้เฉพาะเจ้าของ */
+  isOwner: boolean;
 }) {
   const [editing, setEditing] = useState<string | 'new' | null>(startNew ? 'new' : null);
   const [link, setLink] = useState<{ userId: string; url: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* งานที่ย้อนกลับไม่ได้ต้องยืนยันสองจังหวะ — ปุ่มกดทีเดียวแล้วเปลี่ยนทันทีคือต้นเหตุ
+     ที่ผู้ใช้เผลอกด "ตั้งเป็นเจ้าของ" จนกลายเป็นเจ้าของกันทั้งอู่ (19 ก.ย. 2569) */
+  const [confirming, setConfirming] = useState<{ kind: 'transfer' | 'delete'; user: StaffUser } | null>(null);
+  const [pwFor, setPwFor] = useState<StaffUser | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async (fn: () => Promise<{ error?: string }>) => {
+    setBusy(true);
+    setError(null);
+    const r = await fn();
+    setBusy(false);
+    if (r?.error) { setError(r.error); return false; }
+    setConfirming(null);
+    return true;
+  };
 
   const makeLink = async (u: StaffUser) => {
     setError(null);
@@ -266,11 +319,60 @@ export function UserManager({ users, nextCode, currentUserId, startNew }: {
     <>
       {error ? <div className="err" style={{ marginBottom: 12 }}>{error}</div> : null}
 
+      {/* ---------- ยืนยันงานที่ย้อนกลับไม่ได้ ---------- */}
+      {confirming ? (
+        <>
+          <button className="scrim" type="button" aria-label="ปิด" onClick={() => setConfirming(null)} />
+          <div className="confirm" role="dialog" aria-modal="true"
+               aria-label={confirming.kind === 'transfer' ? 'ยืนยันโอนสิทธิ์เจ้าของกิจการ' : 'ยืนยันลบพนักงาน'}>
+            <header>
+              <b>{confirming.kind === 'transfer' ? 'โอนสิทธิ์เจ้าของกิจการ' : 'ลบพนักงาน'}</b>
+              <span className="subtle">{confirming.user.name}</span>
+            </header>
+            {confirming.kind === 'transfer' ? (
+              <p>
+                <b>{confirming.user.name}</b> จะกลายเป็นเจ้าของกิจการ
+                และ<b>คุณจะกลายเป็นพนักงาน</b> — อู่หนึ่งแห่งมีเจ้าของได้คนเดียว
+                <br />สิทธิ์เมนูที่คุณมีอยู่ยังอยู่เหมือนเดิม เปลี่ยนแค่ตำแหน่ง
+              </p>
+            ) : (
+              <p>
+                ลบ <b>{confirming.user.name}</b> ออกจากระบบ — คนนี้จะเข้าระบบไม่ได้อีก
+                <br />เอกสารและประวัติการแก้ไขที่เคยทำไว้ยังอยู่ครบ (ยังขึ้นชื่อเดิม)
+              </p>
+            )}
+            <div className="acts">
+              <button className="btn danger" type="button" disabled={busy}
+                      onClick={() => run(() => confirming.kind === 'transfer'
+                        ? transferOwnershipAction(confirming.user.id)
+                        : deleteStaffAction(confirming.user.id))}>
+                {busy ? 'กำลังทำ…' : confirming.kind === 'transfer' ? 'ยืนยันโอนสิทธิ์' : 'ยืนยันลบ'}
+              </button>
+              <button className="btn" type="button" onClick={() => setConfirming(null)}>ไม่ทำแล้ว</button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {/* ---------- เจ้าของตั้งรหัสผ่านให้พนักงาน ---------- */}
+      {pwFor ? (
+        <>
+          <button className="scrim" type="button" aria-label="ปิด" onClick={() => setPwFor(null)} />
+          <div className="confirm" role="dialog" aria-modal="true" aria-label="ตั้งรหัสผ่านให้พนักงาน">
+            <header>
+              <b>ตั้งรหัสผ่านให้พนักงาน</b>
+              <span className="subtle">{pwFor.name}</span>
+            </header>
+            <SetPasswordForm user={pwFor} onDone={() => setPwFor(null)} />
+          </div>
+        </>
+      ) : null}
+
       <div className="tablewrap">
         <table className="tbl">
           <thead>
             <tr>
-              <th>รหัส</th><th>ชื่อ</th><th>อีเมล</th><th>สิทธิ์</th>
+              <th>รหัส</th><th>ชื่อ</th><th>ตำแหน่ง</th><th>อีเมล</th><th>สิทธิ์</th>
               <th>สถานะ</th><th>เข้าระบบล่าสุด</th><th style={{ width: 260 }} />
             </tr>
           </thead>
@@ -282,6 +384,7 @@ export function UserManager({ users, nextCode, currentUserId, startNew }: {
                   {u.name}
                   {u.id === currentUserId ? <span className="chip" style={{ marginLeft: 6 }}>คุณ</span> : null}
                 </td>
+                <td className="wrap subtle">{u.jobTitle || '-'}</td>
                 <td className="mono">{u.email || <span className="subtle">ยังไม่มี</span>}</td>
                 <td className="wrap subtle" style={{ fontSize: 12.5 }}>
                   {u.role === 'owner' ? 'เจ้าของกิจการ · ทุกเมนู' : <PermSummary user={u} />}
@@ -302,10 +405,23 @@ export function UserManager({ users, nextCode, currentUserId, startNew }: {
                         {u.hasPassword ? 'ออกลิงก์ตั้งรหัสใหม่' : 'ออกลิงก์ตั้งรหัสผ่าน'}
                       </button>
                     ) : null}
-                    {u.role !== 'owner' && u.active ? (
-                      <form autoComplete="off" action={async () => { await promoteAction(u.id); }}>
-                        <button className="btn" type="submit">ตั้งเป็นเจ้าของ</button>
-                      </form>
+                    {/* ตั้งรหัสให้คนอื่น = เข้าระบบแทนคนนั้นได้ จึงเป็นของเจ้าของกิจการเท่านั้น */}
+                    {isOwner && u.id !== currentUserId ? (
+                      <button className="btn" type="button" onClick={() => { setPwFor(u); setError(null); }}>
+                        ตั้งรหัสผ่านให้
+                      </button>
+                    ) : null}
+                    {isOwner && u.role !== 'owner' && u.active ? (
+                      <button className="btn" type="button"
+                              onClick={() => setConfirming({ kind: 'transfer', user: u })}>
+                        โอนสิทธิ์เจ้าของ
+                      </button>
+                    ) : null}
+                    {u.role !== 'owner' && u.id !== currentUserId ? (
+                      <button className="btn danger" type="button"
+                              onClick={() => setConfirming({ kind: 'delete', user: u })}>
+                        ลบ
+                      </button>
                     ) : null}
                   </div>
                 </td>
@@ -314,7 +430,7 @@ export function UserManager({ users, nextCode, currentUserId, startNew }: {
 
             {link ? (
               <tr>
-                <td colSpan={7} className="ok-msg" style={{ margin: 0 }}>
+                <td colSpan={8} className="ok-msg" style={{ margin: 0 }}>
                   <div style={{ marginBottom: 6 }}>
                     ลิงก์ตั้งรหัสผ่านของ <b>{users.find((u) => u.id === link.userId)?.name}</b> —
                     ใช้ได้ครั้งเดียว หมดอายุใน 7 วัน ส่งให้เจ้าตัวทางช่องทางที่ปลอดภัย
@@ -326,7 +442,7 @@ export function UserManager({ users, nextCode, currentUserId, startNew }: {
 
             {editing && editing !== 'new' ? (
               <tr>
-                <td colSpan={7} style={{ background: 'var(--bg)' }}>
+                <td colSpan={8} style={{ background: 'var(--bg)' }}>
                   <StaffForm user={users.find((u) => u.id === editing) ?? null}
                              nextCode={nextCode} onDone={() => setEditing(null)} />
                 </td>
