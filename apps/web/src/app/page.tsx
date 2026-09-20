@@ -1,6 +1,8 @@
 import Link from 'next/link';
-import { can, requireSession } from '@/lib/auth';
+import { can, hasSessionCookie, requireSession } from '@/lib/auth';
 import { canHomeReport } from '@/lib/perms';
+import { Landing } from '@/components/landing';
+import { landingMetadata } from '@/components/landing-meta';
 import { Shell } from '@/components/shell';
 import { DateRange } from '@/components/date-range';
 import { Icon } from '@/components/icon';
@@ -39,11 +41,31 @@ const PERM_LABEL: Record<string, string> = {
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * แท็กของหน้านี้เขียนไว้สำหรับผู้เข้าชม เพราะนี่คือหน้าที่เครื่องมือค้นหาและตัวอ่านลิงก์เห็น
+ * (คนที่ล็อกอินแล้วเห็นหน้าแรกของระบบ ซึ่งไม่มีใครเอาไปแชร์และไม่ถูกจัดทำดัชนีอยู่แล้ว)
+ */
+export const metadata = landingMetadata;
+
+/**
+ * `/` ทำหน้าที่สองอย่าง
+ *
+ *   ยังไม่เคยเข้าใช้ (ไม่มีคุกกี้เซสชันเลย) → หน้าแนะนำระบบสำหรับผู้เข้าชม
+ *   เคยเข้าใช้แล้ว                        → หน้าแรกของระบบเหมือนเดิมทุกประการ
+ *
+ * ทำแบบนี้เพราะที่อยู่หลักของระบบคือโดเมนเปล่า ๆ ซึ่งคนที่ยังไม่เป็นลูกค้าพิมพ์เข้ามา
+ * แล้วเจอแต่ช่องกรอกรหัสผ่าน โดยไม่มีอะไรบอกเลยว่านี่คือโปรแกรมอะไร
+ *
+ * **พฤติกรรมของคนที่ล็อกอินอยู่ไม่เปลี่ยน** และคุกกี้ที่หมดอายุแล้วยังเด้งไปหน้าล็อกอินเหมือนเดิม
+ * (requireSession เป็นคนเด้ง) · ออกจากระบบแล้วก็ยังไปจบที่ `/login` เพราะ /logout พาไปเอง
+ */
 export default async function HomePage({
   searchParams,
 }: {
   searchParams: Promise<{ denied?: string; from?: string; to?: string }>;
 }) {
+  if (!(await hasSessionCookie())) return <Landing />;
+
   const session = await requireSession();
   const sp = await searchParams;
   const seesIncome = can(session, 'income');

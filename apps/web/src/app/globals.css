@@ -1958,3 +1958,263 @@ a.mstat:active { background: #F7FAF9; }
   .toolbar form.inc-search > .in.search { flex: 1; }
   .toolbar form.inc-search > label.chip, .toolbar form.inc-search > .btn { flex: 0 1 auto; }
 }
+
+/* =====================================================================
+   หน้าแนะนำระบบสำหรับผู้เข้าชม (public landing) — `/` ตอนยังไม่ได้ล็อกอิน และ `/welcome`
+   ---------------------------------------------------------------------
+   ใช้สีและระยะชุดเดียวกับตัวระบบ (ตัวแปรข้างบนทั้งหมด) ไม่มีชุดสีของตัวเอง
+   เพื่อให้คนที่กดเข้าสู่ระบบแล้วรู้สึกว่าเป็นโปรแกรมเดียวกัน ไม่ใช่คนละเว็บ
+
+   เขียนแบบจอแคบเป็นฐานเหมือนทั้งไฟล์ — จอกว้างค่อยเติมด้วย min-width
+   ทุกคลาสขึ้นต้น `lp-` เพื่อไม่ให้ชนกับของในระบบ (ยกเว้น .btn ที่ยืมมาใช้ตรง ๆ)
+   ===================================================================== */
+
+.lp {
+  /* ฟอนต์ไทยของหน้านี้ — โหลดไม่ได้ก็ตกไปใช้ชุดเดียวกับทั้งระบบ */
+  font-family: 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Sarabun', 'Segoe UI', sans-serif;
+  background: var(--card);
+  color: var(--ink);
+  overflow-x: hidden;
+}
+.lp h1, .lp h2, .lp h3 { line-height: 1.35; letter-spacing: -0.2px; }
+.lp p { margin: 0; }
+
+/* ลิงก์ข้ามไปเนื้อหา — ซ่อนไว้จนกว่าจะแท็บมาถึง (คนใช้คีย์บอร์ด/โปรแกรมอ่านหน้าจอ) */
+.lp-skip {
+  position: absolute; left: -9999px; top: 0;
+  background: var(--brand); color: #fff; padding: 10px 16px; border-radius: 0 0 8px 0;
+}
+.lp-skip:focus { left: 0; }
+
+.lp-in { width: min(1120px, 100%); margin: 0 auto; padding: 0 16px; }
+.lp-narrow { width: min(760px, 100%); }
+
+.lp-wordmark { font-weight: 800; letter-spacing: -0.4px; }
+.lp-wordmark em { font-style: normal; color: var(--accent); }
+
+/* ---------- แถบบน ---------- */
+.lp-top {
+  position: sticky; top: 0; z-index: var(--z-header);
+  background: rgba(255, 255, 255, .92);
+  backdrop-filter: saturate(180%) blur(8px);
+  border-bottom: 1px solid var(--line-2);
+}
+.lp-top-in {
+  width: min(1120px, 100%); margin: 0 auto; padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+.lp-brand { display: block; flex: 1; min-width: 0; }
+.lp-brand small { display: block; color: var(--ink-3); font-size: 11.5px; line-height: 1.3; }
+/* เมนูในหน้าเป็นของแถม — จอแคบมีปุ่มเข้าสู่ระบบก็พอ ไม่งั้นแถบบนแน่นจนกดพลาด */
+.lp-topnav { display: none; }
+.lp-topnav a { color: var(--ink-2); font-size: 14px; padding: 8px 10px; border-radius: 6px; }
+.lp-topnav a:hover { background: var(--steel-soft); color: var(--steel-dk); }
+/* ปุ่มบนแถบบนต้องสูงถึงเป้ากดขั้นต่ำ 44px เท่ากับที่ระบบบังคับทั้งเว็บ (ดู .navbtn) */
+.lp-login { display: inline-flex; align-items: center; min-height: 44px; flex: none; font-weight: 700; }
+
+/* ---------- เปิดหน้า ---------- */
+.lp-hero {
+  background:
+    radial-gradient(1100px 380px at 12% -12%, #E3F5EC 0%, rgba(227, 245, 236, 0) 62%),
+    linear-gradient(180deg, var(--bg) 0%, var(--card) 100%);
+  padding: 40px 0 44px;
+  border-bottom: 1px solid var(--line-2);
+}
+.lp-eyebrow {
+  display: inline-block; margin-bottom: 14px;
+  background: var(--steel-soft); color: var(--steel-dk);
+  border: 1px solid #C9E9D9; border-radius: 999px;
+  padding: 4px 12px; font-size: 12.5px; font-weight: 600;
+}
+.lp-hero h1 { margin: 0 0 14px; font-size: 32px; font-weight: 800; }
+.lp-lead { color: var(--ink-2); font-size: 16px; line-height: 1.85; max-width: 62ch; }
+
+.lp-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.lp-btn-lg {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 48px; padding: 0 22px; font-size: 15.5px; font-weight: 700; border-radius: 8px;
+}
+.lp-micro { margin-top: 14px; color: var(--ink-3); font-size: 13px; line-height: 1.8; }
+.lp-micro a { text-decoration: underline; }
+
+.lp-badges { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 10px; }
+.lp-badges li {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px; padding: 12px 14px; font-size: 13.5px; color: var(--ink-2);
+}
+.lp-badges b { display: block; color: var(--steel-dk); font-size: 15px; }
+
+/* ---------- ส่วนเนื้อหาทั่วไป ---------- */
+.lp-sec { padding: 46px 0; }
+.lp-sec h2 { margin: 0 0 10px; font-size: 24px; font-weight: 800; }
+.lp-sub { color: var(--ink-2); font-size: 15px; line-height: 1.85; max-width: 68ch; margin-bottom: 24px; }
+.lp-soft { background: var(--bg); border-block: 1px solid var(--line-2); }
+
+/* ---------- สายเอกสาร ---------- */
+.lp-flowsec { background: var(--bg); border-block: 1px solid var(--line-2); }
+.lp-flow { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: none; }
+.lp-flow li {
+  position: relative;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 14px 16px 14px 52px;
+}
+.lp-flow .n {
+  position: absolute; left: 14px; top: 14px;
+  width: 26px; height: 26px; border-radius: 999px;
+  background: var(--steel-dk); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+.lp-flow b { display: block; font-size: 15px; }
+.lp-flow .d { display: block; color: var(--ink-3); font-size: 13px; margin-top: 2px; }
+.lp-note-line {
+  margin-top: 16px; color: var(--ink-2); font-size: 13.5px; line-height: 1.85;
+  border-left: 3px solid var(--accent); padding-left: 12px;
+}
+
+/* ---------- การ์ดความสามารถ ---------- */
+.lp-cards { display: grid; gap: 14px; }
+.lp-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 20px;
+}
+.lp-card .ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 10px; margin-bottom: 12px;
+}
+.lp-card h3 { margin: 0 0 6px; font-size: 16.5px; }
+.lp-card > p { color: var(--ink-2); font-size: 14px; line-height: 1.8; }
+.lp-card ul { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.lp-card li {
+  position: relative; padding-left: 20px; color: var(--ink-2); font-size: 13.5px; line-height: 1.75;
+}
+.lp-card li::before {
+  content: ''; position: absolute; left: 4px; top: 9px;
+  width: 6px; height: 6px; border-radius: 999px; background: var(--steel);
+}
+
+/* ---------- แถบเขียวเข้ม ---------- */
+.lp-dark {
+  background: linear-gradient(180deg, var(--steel-dk) 0%, #0B4A32 100%);
+  color: #EAF6F0;
+}
+.lp-dark h2 { color: #fff; }
+.lp-dark .lp-sub { color: #AFD4C3; }
+.lp-thai { display: grid; gap: 14px; }
+.lp-thai > div {
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 10px; padding: 18px;
+}
+.lp-thai h3 { margin: 0 0 6px; font-size: 15.5px; color: var(--accent); }
+.lp-thai p { color: #CFE6DA; font-size: 13.5px; line-height: 1.85; }
+
+/* ---------- สองแผงคู่ ---------- */
+.lp-two { display: grid; gap: 18px; }
+.lp-panel {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px;
+}
+.lp-panel h2 { font-size: 19px; margin-bottom: 14px; }
+.lp-ticks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.lp-ticks li {
+  position: relative; padding-left: 26px; color: var(--ink-2); font-size: 14px; line-height: 1.8;
+}
+.lp-ticks li::before {
+  content: ''; position: absolute; left: 3px; top: 7px;
+  width: 11px; height: 6px; border-left: 2px solid var(--steel); border-bottom: 2px solid var(--steel);
+  transform: rotate(-45deg);
+}
+
+/* ---------- เริ่มต้นใช้งาน ---------- */
+.lp-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.lp-steps li {
+  display: flex; gap: 14px; align-items: flex-start;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px;
+}
+.lp-steps .n {
+  flex: none; color: var(--steel); font-size: 20px; font-weight: 800;
+  font-variant-numeric: tabular-nums; line-height: 1.4;
+}
+.lp-steps b { display: block; font-size: 15.5px; margin-bottom: 4px; }
+.lp-steps p { color: var(--ink-2); font-size: 13.5px; line-height: 1.8; }
+
+/* ---------- คำถามที่ถามกันบ่อย ---------- */
+.lp-faq { display: grid; gap: 10px; }
+.lp-faq details {
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 0 16px;
+}
+.lp-faq summary {
+  cursor: pointer; list-style: none; font-weight: 600; font-size: 15px;
+  padding: 14px 0; min-height: 44px; display: flex; align-items: center; gap: 10px;
+}
+.lp-faq summary::-webkit-details-marker { display: none; }
+.lp-faq summary::after {
+  content: '+'; margin-left: auto; color: var(--steel); font-size: 20px; font-weight: 700; line-height: 1;
+}
+.lp-faq details[open] summary::after { content: '–'; }
+.lp-faq details p {
+  padding: 0 0 16px; color: var(--ink-2); font-size: 14px; line-height: 1.85;
+  border-top: 1px solid var(--line-2); padding-top: 12px;
+}
+
+/* ---------- ชวนติดต่อท้ายหน้า ---------- */
+.lp-endcta { background: var(--bg); border-top: 1px solid var(--line-2); text-align: center; }
+.lp-endcta .lp-sub { margin-inline: auto; }
+.lp-endcta .lp-cta { justify-content: center; }
+
+/* ---------- ท้ายหน้า ---------- */
+.lp-foot { background: var(--ink); color: #A9B7C1; padding: 34px 0 26px; font-size: 13px; }
+.lp-foot-grid { display: grid; gap: 22px; }
+.lp-foot b { color: #fff; display: block; margin-bottom: 6px; font-size: 13.5px; }
+.lp-foot p { line-height: 1.9; margin-top: 6px; }
+/* ลิงก์ท้ายหน้าเรียงเป็นบรรทัด ๆ — เว้นบนล่างให้กดง่ายบนจอสัมผัส
+   (ไม่ดัน 44px เต็มเพราะเป็นลิงก์ตัวหนังสือ ไม่ใช่ปุ่ม ดู e2e/landing.spec.ts) */
+.lp-foot a { color: #CFDAE2; text-decoration: underline; display: inline-block; padding: 3px 0; }
+.lp-foot a:hover { color: #fff; }
+.lp-copy {
+  margin-top: 26px; padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, .12); color: #7C8B96; font-size: 12px;
+}
+
+/* ---------------------------------------------------------------------
+   แท็บเล็ตขึ้นไป — เริ่มมีที่พอให้วางของเรียงกันได้
+   --------------------------------------------------------------------- */
+@media (min-width: 768px) {
+  .lp-in { padding: 0 24px; }
+  .lp-top-in { padding: 10px 24px; }
+  .lp-hero { padding: 62px 0 60px; }
+  .lp-hero h1 { font-size: 42px; }
+  .lp-lead { font-size: 17px; }
+  .lp-sec { padding: 62px 0; }
+  .lp-sec h2 { font-size: 28px; }
+  .lp-badges { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 34px; }
+  .lp-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-thai { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lp-foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------------------------------------------------------------------
+   เดสก์ท็อป — เปิดหน้าเป็นสองคอลัมน์ และเมนูในหน้าโผล่บนแถบบน
+   --------------------------------------------------------------------- */
+@media (min-width: 1280px) {
+  .lp-topnav { display: flex; gap: 2px; flex: none; }
+  .lp-brand { flex: none; }
+  .lp-top-in .lp-topnav { margin-left: auto; margin-right: 8px; }
+  .lp-hero {
+    display: grid; grid-template-columns: 1.25fr 1fr; gap: 40px; align-items: center;
+    padding: 76px 0 72px;
+  }
+  /* ในโหมดสองคอลัมน์ .lp-in สองอันเป็นคอลัมน์ซ้าย/ขวา จึงเลิกจำกัดความกว้างรายอัน */
+  .lp-hero > .lp-in { width: auto; margin: 0; }
+  .lp-hero > .lp-in:first-child { padding-left: max(24px, calc((100vw - 1120px) / 2 + 24px)); padding-right: 0; }
+  .lp-hero > .lp-in:last-child { padding-right: max(24px, calc((100vw - 1120px) / 2 + 24px)); padding-left: 0; }
+  .lp-hero h1 { font-size: 50px; }
+  .lp-badges { grid-template-columns: minmax(0, 1fr); margin-top: 0; }
+  .lp-flow { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lp-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lp-thai { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lp-foot-grid { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+}
