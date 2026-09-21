@@ -1,5 +1,5 @@
 import 'server-only';
-import { query, requireEdit } from './auth';
+import { assertCanEdit, query } from './auth';
 import { mutate } from './mutate';
 import { bulkPay, recordPaymentWith, type BulkPaymentLine, type BulkPaymentResult } from './bulk-pay';
 import {
@@ -72,9 +72,10 @@ export async function recordPayment(input: {
   method: string;
   ref: string;
 }): Promise<void> {
-  /* ตัวจริงอยู่ใน bulk-pay.ts — ล็อกใบก่อนอ่านยอด กันสองเครื่องรับชำระพร้อมกันจนเกินยอด */
-  return mutate('finance', (c, userId) =>
-    recordPaymentWith(c, userId, input, (sub) => requireEdit('finance', sub)));
+  /* ตัวจริงอยู่ใน bulk-pay.ts — ล็อกใบก่อนอ่านยอด กันสองเครื่องรับชำระพร้อมกันจนเกินยอด
+     ตรวจสิทธิ์ด้วยเซสชันที่ mutate โหลดไว้แล้ว ไม่ใช่ requireEdit — ตัวนั้นขอ connection ซ้อน (db.ts) */
+  return mutate('finance', (c, userId, s) =>
+    recordPaymentWith(c, userId, input, async (sub) => assertCanEdit(s, 'finance', sub)));
 }
 
 /** ตัดชำระหลายใบพร้อมกัน — ตรวจสิทธิ์แล้วส่งต่อให้ bulkPay ในทรานแซกชันเดียว */
@@ -84,8 +85,8 @@ export async function recordBulkPayments(input: {
   method: string;
   ref: string;
 }): Promise<BulkPaymentResult> {
-  return mutate('finance', (c, userId) =>
-    bulkPay(c, userId, input, (sub) => requireEdit('finance', sub)));
+  return mutate('finance', (c, userId, s) =>
+    bulkPay(c, userId, input, async (sub) => assertCanEdit(s, 'finance', sub)));
 }
 
 /**
@@ -95,14 +96,14 @@ export async function recordBulkPayments(input: {
  * ต้องแก้ที่เอกสารแทน ไม่งั้นสิ่งที่พิมพ์บนใบเสร็จกับที่บันทึกไว้จะไม่ตรงกัน
  */
 export async function deletePayment(paymentId: string): Promise<void> {
-  return mutate('finance', async (c) => {
+  return mutate('finance', async (c, _userId, s) => {
     const { rows } = await c.query(
       `select p.at_issue, d.direction::text as direction
        from payments p join documents d on d.id = p.doc_id
        where p.id = $1`, [paymentId],
     );
     if (!rows[0]) throw new Error('ไม่พบรายการรับชำระ');
-    await requireEdit('finance', rows[0].direction === 'buy' ? 'ap' : 'ar');
+    assertCanEdit(s, 'finance', rows[0].direction === 'buy' ? 'ap' : 'ar');
     if (rows[0].at_issue) {
       throw new Error(
         'รายการนี้เป็นยอดที่รับ ณ วันออกเอกสาร ซึ่งพิมพ์อยู่บนใบเสร็จ — แก้ที่ตัวเอกสารแทน',

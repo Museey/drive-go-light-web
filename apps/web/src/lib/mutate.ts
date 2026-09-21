@@ -1,7 +1,7 @@
 import 'server-only';
 import type pg from 'pg';
 import { productLimitMessage } from '@drivegolight/core';
-import { requireEdit, requirePerm, type Perm } from './auth';
+import { requireEdit, requirePerm, type Perm, type Session } from './auth';
 import { withTenant } from './db';
 import { licenseStatusWith } from './license-window';
 import { isProductLimitError } from './product-limit';
@@ -37,7 +37,11 @@ export interface MutateOptions {
  */
 export async function mutate<T>(
   perm: Perm,
-  fn: (client: pg.PoolClient, userId: string) => Promise<T>,
+  /**
+   * `session` คือเซสชันที่โหลดไว้แล้วก่อนเปิดทรานแซกชัน — ตรวจสิทธิ์เพิ่มข้างในให้ใช้ตัวนี้
+   * (assertCanEdit) ห้ามเรียก requireEdit / query() ข้างใน เพราะขอ connection ซ้อน (db.ts)
+   */
+  fn: (client: pg.PoolClient, userId: string, session: Session) => Promise<T>,
   options: MutateOptions = {},
 ): Promise<T> {
   const session = options.sub
@@ -57,7 +61,7 @@ export async function mutate<T>(
         );
       }
     }
-    return fn(c, session.userId);
+    return fn(c, session.userId, session);
   }, session.userId);
 }
 
