@@ -6,7 +6,7 @@ import { query } from './auth';
 import { mutate } from './mutate';
 import { savePic } from './pics';
 import { listExpiringLotsWith, REMAINING_LOTS_SQL, type ExpiringLotRow } from './expiry';
-import { BOOK_VALUE_SQL, consumeStock, receiveStock } from './stock-cost';
+import { BOOK_VALUE_SQL, consumeStock, lockProductsWith, receiveStock } from './stock-cost';
 import { activeProductCountWith, ensureActivationRoomWith, ensureProductRoomWith } from './product-limit';
 
 const n = (v: unknown): number => Number(v ?? 0);
@@ -414,6 +414,9 @@ export async function saveProduct(input: ProductInput): Promise<string> {
  */
 export async function adjustStock(productId: string, countedQty: number, note: string): Promise<void> {
   return mutate('stock', async (c, userId) => {
+    /* ล็อกก่อนอ่านยอด — สองเครื่องปรับยอดตัวเดียวกันพร้อมกัน (หรือมีคนขายคั่นกลาง)
+       ต่างคนต่างคิดส่วนต่างจากยอดเดิม แล้วบวกลบซ้อนกันจนยอดสุดท้ายไม่ใช่ที่ใครนับได้ */
+    await lockProductsWith(c, [productId]);
     const { rows } = await c.query(
       `select qty_on_hand from product_stock where product_id = $1`, [productId],
     );

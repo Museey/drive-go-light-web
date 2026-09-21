@@ -13,7 +13,7 @@ import type pg from 'pg';
 import { today } from '@drivegolight/core';
 import { unvoidBuyDocWith } from './buy-void';
 import { childTakenMessage, claimParentWith, DocChainTakenError, markParentBilledWith } from './doc-lock';
-import { consumeStock } from './stock-cost';
+import { consumeStock, lockProductsWith } from './stock-cost';
 import { verifyPassword } from './password';
 
 type Client = pg.PoolClient | pg.Client;
@@ -134,6 +134,8 @@ export async function restoreFromTrashWith(
       where m.doc_id = $1 and m.reason = 'return'
       group by m.product_id
      having sum(m.qty_delta) > 0`, [id]);
+  /* ล็อกสินค้าทุกตัวเรียงตามรหัสก่อนตัดตัวแรก — กันสองเครื่องตัดต้นทุนล็อตเดียวกันและกันรอกันค้าง (stock-cost.ts) */
+  await lockProductsWith(c, back.rows.map((r) => r.product_id as string));
   for (const r of back.rows) {
     await consumeStock(c, {
       productId: r.product_id, qty: Number(r.qty), movedOn: today(), reason: 'sale',

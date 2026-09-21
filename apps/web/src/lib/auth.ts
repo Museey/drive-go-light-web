@@ -206,12 +206,23 @@ export async function requireTab(menu: Perm, sub: string): Promise<Session> {
 /** ปิดประตูการเขียน — เรียกใน action ที่บันทึก ลบ หรือยกเลิกข้อมูล */
 export async function requireEdit(menu: Perm, sub: string): Promise<Session> {
   const s = await requireSession();
+  assertCanEdit(s, menu, sub);
+  return s;
+}
+
+/**
+ * ตรวจสิทธิ์แก้ไขจากเซสชันที่โหลดไว้แล้ว — ไม่แตะฐานข้อมูล
+ *
+ * ใช้แทน requireEdit **ข้างในทรานแซกชัน** (ในฟังก์ชันที่ส่งให้ mutate)
+ * requireEdit โหลดเซสชันใหม่ซึ่งต้องขอ connection อีกเส้น ถ้ามีคำขอแบบนั้นพร้อมกันเท่าขนาด pool
+ * เซิร์ฟเวอร์ค้างทั้งตัว — เจอจริงตอนยิงรับชำระพร้อมกัน 10 เครื่อง (ดู acquire() ใน db.ts)
+ */
+export function assertCanEdit(s: Session, menu: Perm, sub: string): void {
   if (!canEditOf(s, menu, sub)) {
     throw new Error(
       'บัญชีของคุณเปิดดูส่วนนี้ได้อย่างเดียว แก้ไขข้อมูลไม่ได้ — ติดต่อเจ้าของกิจการ',
     );
   }
-  return s;
 }
 
 /** ปิดประตูการพิมพ์ทั้งชุดและการดาวน์โหลดไฟล์ */

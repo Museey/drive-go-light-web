@@ -2,6 +2,7 @@ import 'server-only';
 import { docNoPeriod, formatDocNo } from './doc-no';
 import { lineAmount, exTotals, poTotals, today, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
+import { docVersionWith, lockDocForEditWith } from './doc-version';
 import { mutate } from './mutate';
 import { voidBuyDocWith, unvoidBuyDocWith } from './buy-void';
 
@@ -33,6 +34,8 @@ export interface BuyItemInput {
 
 export interface BuyDocInput {
   id?: string;
+  /** ฉบับของใบตอนเปิดหน้าแก้ไข — บันทึกแล้วไม่ตรง = มีคนบันทึกใบนี้ไประหว่างที่เปิดอยู่ (doc-version.ts) */
+  baseVersion?: string;
   kind: BuyKind;
   docDate: string;
 
@@ -135,12 +138,9 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
     let docNo: string;
 
     if (id) {
-      const existing = await c.query(
-        `select doc_no, status::text as status from documents where id = $1`, [id],
-      );
-      if (!existing.rows[0]) throw new Error('ไม่พบเอกสารที่จะแก้');
-      if (existing.rows[0].status === 'void') throw new Error('เอกสารนี้ถูกยกเลิกแล้ว แก้ไขไม่ได้');
-      docNo = existing.rows[0].doc_no;
+      /* ล็อกแถวก่อนตรวจ — อีกเครื่องที่ยกเลิก รับชำระ หรือแก้ใบเดียวกันอยู่ต้องรอกันคนละรอบ
+         แล้วตรวจกับสถานะหลังรอ ไม่ใช่สถานะตอนเปิดหน้า (doc-version.ts) */
+      ({ docNo } = await lockDocForEditWith(c, id, input.baseVersion));
 
       await c.query(
         `update documents set doc_date=$2, ref_doc_no=$3, party_id=$4, party_name=$5,
@@ -369,6 +369,9 @@ export async function listBuyDocs(opts: {
 /** โหลดเอกสารมาแก้ */
 export async function loadBuyDoc(id: string): Promise<BuyDocInput | null> {
   return query(async (c) => {
+    /* อ่านฉบับก่อนเนื้อหา — มีคนบันทึกคั่นกลางแล้วได้แค่เตือนเกิน ไม่ใช่ทับเงียบ (ดู loadDocForEdit ใน sales.ts) */
+    const baseVersion = await docVersionWith(c, id);
+    if (!baseVersion) return null;
     const { rows } = await c.query(
       `select d.*, d.kind::text as kind_text, d.vat_mode::text as vat_mode_text,
               d.expense_cat::text as cat_text
@@ -384,6 +387,7 @@ export async function loadBuyDoc(id: string): Promise<BuyDocInput | null> {
 
     return {
       id: d.id,
+      baseVersion,
       kind: d.kind_text as BuyKind,
       docDate: d.doc_date,
       partyId: d.party_id,

@@ -1,4 +1,5 @@
 import 'server-only';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 import { SHOP_TZ, today } from '@drivegolight/core';
 
@@ -40,7 +41,58 @@ function makePool(): pg.Pool {
    * ค่าตั้งต้น 5 พอสำหรับอู่หลักสิบราย — คิวรีที่หนักที่สุดในระบบใช้เวลาไม่ถึง 2 ms
    */
   const max = Number(process.env.DB_POOL_MAX) || 5;
-  return new pg.Pool({ connectionString, max });
+  /**
+   * รอ connection ว่างได้ไม่เกิน 10 วินาที แล้วให้คำขอนั้นล้ม — **ไม่ใช่รอไปตลอดกาล**
+   *
+   * ค่าตั้งต้นของ pg คือรอไม่มีกำหนด ถ้า pool ตัน (ดู acquire() ข้างล่าง) ทุกคำขอที่ต้องใช้ฐาน
+   * จะค้างทั้งเซิร์ฟเวอร์ ทุกอู่ที่อยู่บนเครื่องเดียวกัน จนกว่าจะมีคนรีสตาร์ต — เจอจริงตอนยิง
+   * รับชำระพร้อมกัน 10 เครื่อง (21 ก.ย. 2569) · คิวรีของระบบใช้เวลาหลักมิลลิวินาที
+   * รอ 10 วินาทีแล้วยังไม่ได้แปลว่ามีอะไรผิดปกติแน่ ล้มแล้วบอกผู้ใช้ดีกว่าแขวนทุกคนไว้
+   */
+  return new pg.Pool({ connectionString, max, connectionTimeoutMillis: 10_000 });
+}
+
+/**
+ * การขอ connection ซ้อนในคำขอเดียวกัน — ต้นเหตุของ pool ตัน
+ *
+ * คำขอที่ถือ connection ในทรานแซกชันอยู่แล้ว ขออีกเส้น (เช่นเรียก requireEdit หรือ query()
+ * ซึ่งไปโหลดเซสชันใหม่) ถ้ามีคำขอแบบนี้พร้อมกันเท่ากับขนาด pool ต่างคนต่างถือหนึ่งเส้นแล้วรอเส้นที่สอง
+ * ซึ่งไม่มีวันว่าง — ใช้ connection ที่ถืออยู่ หรือโหลดของที่ต้องใช้ก่อนเปิดทรานแซกชันแทน
+ */
+export class NestedConnectionError extends Error {
+  constructor() {
+    super(
+      'ขอ connection ฐานข้อมูลซ้อนขณะที่คำขอนี้ถืออยู่แล้วหนึ่งเส้น — ถ้ามีคำขอแบบนี้พร้อมกันเท่าขนาด pool '
+      + 'เซิร์ฟเวอร์จะค้างทั้งตัว ให้ใช้ client ที่ส่งเข้ามา หรือโหลดของที่ต้องใช้ก่อนเปิดทรานแซกชัน (db.ts)',
+    );
+    this.name = 'NestedConnectionError';
+  }
+}
+
+/** คำขอนี้ (async context เดียวกัน) ถือ connection อยู่หรือไม่ */
+const holding = new AsyncLocalStorage<true>();
+
+/**
+ * ขอ connection จาก pool — ทางเดียวที่ withTenant และ withoutTenant ใช้
+ *
+ * ขอซ้อน: ตอนพัฒนาและตอนรันเทสต์โยนทันที ให้ชุดทดสอบทั้งหมด (รวม e2e) กวาดหาจุดที่หลุดให้
+ * บนเครื่องจริงแค่บันทึกไว้แล้วทำต่อ — การขอซ้อนเส้นเดียวไม่ได้ทำให้พังถ้าไม่ได้มาพร้อมกันหลายคำขอ
+ * การโยนทิ้งบนเครื่องจริงจะเปลี่ยนความเสี่ยงเป็นความเสียหายแน่นอน · กันค้างด้วย connectionTimeoutMillis แทน
+ */
+async function acquire(): Promise<pg.PoolClient> {
+  if (holding.getStore()) {
+    const err = new NestedConnectionError();
+    if (process.env.NODE_ENV !== 'production') throw err;
+    console.error(err);
+  }
+  try {
+    return await getPool().connect();
+  } catch (err) {
+    if (err instanceof Error && /timeout exceeded when trying to connect/i.test(err.message)) {
+      throw new Error('ระบบกำลังมีคนใช้งานพร้อมกันมาก รอบนี้จึงยังไม่ได้บันทึก — รอสักครู่แล้วลองอีกครั้ง');
+    }
+    throw err;
+  }
 }
 
 /**
@@ -155,7 +207,7 @@ export async function withTenant<T>(
   fn: (client: pg.PoolClient) => Promise<T>,
   userId: string | null = null,
 ): Promise<T> {
-  const client = await getPool().connect();
+  const client = await acquire();
   try {
     await assertRlsEnforced(client);
     await assertClockAgrees(client);
@@ -169,7 +221,7 @@ export async function withTenant<T>(
      * แล้วประวัติจะบันทึกชื่อผิดคนโดยไม่มีอาการอะไรให้เห็น
      */
     await client.query(`select set_config('app.user_id', $1, true)`, [userId ?? '']);
-    const result = await fn(client);
+    const result = await holding.run(true, () => fn(client));
     await client.query('commit');
     return result;
   } catch (err) {
@@ -218,11 +270,11 @@ async function noteFailure(
  * ตาราง tenants มี RLS อยู่ด้วย จึงอ่านได้เฉพาะคอลัมน์ที่นโยบายอนุญาต
  */
 export async function withoutTenant<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
-  const client = await getPool().connect();
+  const client = await acquire();
   try {
     await assertRlsEnforced(client);
     await assertClockAgrees(client);
-    return await fn(client);
+    return await holding.run(true, () => fn(client));
   } finally {
     client.release();
   }

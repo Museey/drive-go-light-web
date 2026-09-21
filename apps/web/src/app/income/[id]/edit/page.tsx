@@ -5,7 +5,7 @@ import { safeBack } from '@/lib/saved-target';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
-import { canEdit, loadDocForCopy, lotExpiryOf, docNoOf } from '@/lib/sales';
+import { canEdit, loadDocForEdit, lotExpiryOf, docNoOf } from '@/lib/sales';
 import { today } from '@drivegolight/core';
 import { KIND_LABEL } from '@/lib/format';
 import { DocEditor } from '../../doc-editor';
@@ -23,10 +23,10 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
     redirect(`/income/${id}?error=${encodeURIComponent(allowed.reason ?? 'แก้ไขไม่ได้')}`);
   }
 
-  const [source, shop, docNo] = await Promise.all([loadDocForCopy(id), getShop(), docNoOf(id)]);
-  if (!source) notFound();
-
-  const initial = { ...source, id };
+  /* loadDocForEdit ติดรหัสและฉบับของใบมาด้วย — กดบันทึกแล้วฉบับไม่ตรงคือมีคนแก้ทับระหว่างเปิดอยู่ (doc-version.ts) */
+  const [initial, shop, docNo] = await Promise.all([loadDocForEdit(id), getShop(), docNoOf(id)]);
+  if (!initial) notFound();
+  const source = initial;
   const lotExpiry = await lotExpiryOf(source.items.map((i) => i.productId));
   /* บันทึกแล้วกลับหน้าที่กดแก้ไขมา (ผู้ใช้กำหนด) — กรองใน safeBack เหลือเฉพาะหน้าในเมนูรายรับ */
   const back = safeBack((await headers()).get('referer'), ['/income']);

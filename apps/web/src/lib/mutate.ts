@@ -1,7 +1,7 @@
 import 'server-only';
 import type pg from 'pg';
 import { productLimitMessage } from '@drivegolight/core';
-import { requireEdit, requirePerm, type Perm } from './auth';
+import { requireEdit, requirePerm, type Perm, type Session } from './auth';
 import { withTenant } from './db';
 import { licenseStatusWith } from './license-window';
 import { isProductLimitError } from './product-limit';
@@ -37,7 +37,11 @@ export interface MutateOptions {
  */
 export async function mutate<T>(
   perm: Perm,
-  fn: (client: pg.PoolClient, userId: string) => Promise<T>,
+  /**
+   * `session` คือเซสชันที่โหลดไว้แล้วก่อนเปิดทรานแซกชัน — ตรวจสิทธิ์เพิ่มข้างในให้ใช้ตัวนี้
+   * (assertCanEdit) ห้ามเรียก requireEdit / query() ข้างใน เพราะขอ connection ซ้อน (db.ts)
+   */
+  fn: (client: pg.PoolClient, userId: string, session: Session) => Promise<T>,
   options: MutateOptions = {},
 ): Promise<T> {
   const session = options.sub
@@ -57,7 +61,7 @@ export async function mutate<T>(
         );
       }
     }
-    return fn(c, session.userId);
+    return fn(c, session.userId, session);
   }, session.userId);
 }
 
@@ -94,6 +98,13 @@ export function friendlyDbError(err: unknown, labels: Record<string, string> = {
 
   /* ทริกเกอร์จำกัดสินค้า 3,000 — มาถึงตรงนี้เมื่อแข่งกันกดพร้อมกันจนหลุดการตรวจล่วงหน้า */
   if (isProductLimitError(e)) return productLimitMessage({ kind: 'form' });
+
+  /* สองเครื่องบันทึกพร้อมกันแล้วต่างฝั่งต่างรอกัน ฐานข้อมูลตัดสินให้ฝั่งนี้ถอย (40P01)
+     หรือบันทึกชนกันจนต้องยกเลิกรอบนี้ (40001) — ทั้งทรานแซกชันย้อนกลับหมดแล้ว ไม่มีอะไรค้างครึ่ง ๆ
+     กดบันทึกซ้ำได้เลย ล็อกที่เรียงลำดับไว้ (stock-cost.ts · bulk-pay.ts) ทำให้เจอได้ยากมาก */
+  if (e.code === '40P01' || e.code === '40001') {
+    return 'มีอีกเครื่องกำลังบันทึกรายการที่เกี่ยวข้องกันอยู่พอดี รอบนี้จึงยังไม่ได้บันทึก — กดบันทึกอีกครั้งได้เลย';
+  }
 
   if (e.code === '23505') {
     const c = e.constraint ?? '';
