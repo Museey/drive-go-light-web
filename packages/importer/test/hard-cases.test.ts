@@ -277,6 +277,17 @@ describe.skipIf(!DB_URL)('เคสยากของตัวนำเข้า
       expect(has(result.warnings, 'รหัสสินค้า "DUP-001" ซ้ำ')).toBe(true);
     });
 
+    it('รหัสที่ต่างกันแค่ตัวพิมพ์ถือว่าซ้ำ — เปลี่ยนให้และบอกว่าชนกับตัวไหน (034)', async () => {
+      const { rows } = await app.query(`select code from products where upper(code) like 'CI-001%' order by code`);
+      expect(rows.map((r) => r.code)).toEqual(['CI-001', 'ci-001-2']);
+      expect(has(result.warnings, 'รหัสสินค้า "ci-001" ซ้ำ กับ "CI-001" (ตัวพิมพ์ใหญ่เล็กถือเป็นรหัสเดียวกัน)')).toBe(true);
+    });
+
+    it('รหัสที่ระบบเปลี่ยนให้ ไม่ไปชนรหัสจริงตัวอื่นในไฟล์', async () => {
+      const { rows } = await app.query(`select code from products where code like 'COL-1%' order by code`);
+      expect(rows.map((r) => r.code)).toEqual(['COL-1', 'COL-1-2', 'COL-1-2-2']);
+    });
+
     it('ผู้ติดต่อที่ไม่มีชื่อได้ชื่อแทนและมีคำเตือน', async () => {
       const { rows } = await app.query(
         `select code, type, org_name, first_name from contacts order by code`,

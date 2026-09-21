@@ -352,7 +352,13 @@ export async function importBackup(
 
     const productId = new Map<string, string>();
     const productRows: unknown[][] = [];
-    const seenCode = new Map<string, number>();
+    /**
+     * รหัสที่ใช้ไปแล้วในอู่นี้ — คีย์เป็นตัวพิมพ์ใหญ่ ค่าคือรหัสตัวแรกที่ใช้ไป
+     *
+     * ไม่สนตัวพิมพ์ตรงกับกติกาในฐาน (034) — ไฟล์สำรองรุ่นเดิมมี BRK-101 กับ brk-101 ได้
+     * ถ้าเทียบตรงตัว ตัวที่สองจะหลุดไปชน index แล้วการกู้คืนล้มทั้งไฟล์
+     */
+    const takenCode = new Map<string, string>();
 
     /* บาร์โค้ดห้ามซ้ำในตารางใหม่ แต่รุ่นเดิมไม่ได้บังคับ — ตัวหลังกลายเป็นค่าว่างแล้วเตือน */
     const seenBarcode = new Set<string>();
@@ -364,16 +370,18 @@ export async function importBackup(
 
       // ทะเบียนสินค้าเดิมไม่ได้บังคับรหัสไม่ซ้ำ แต่ตารางใหม่บังคับ
       let code = text(p.code);
-      const dup = seenCode.get(code);
-      if (dup !== undefined) {
-        const next = dup + 1;
-        seenCode.set(code, next);
+      const first = takenCode.get(code.toUpperCase());
+      if (first !== undefined) {
+        /* ไล่หาเลขต่อท้ายที่ยังว่าง — รหัสที่เปลี่ยนให้แล้วต้องไม่ไปชนรหัสจริงตัวอื่นในไฟล์
+           (เดิมเติม -2 -3 โดยไม่ตรวจ ไฟล์ที่มี DUP-001-2 อยู่แล้วจึงกู้ไม่ได้) */
+        let next = 2;
+        while (takenCode.has(`${code}-${next}`.toUpperCase())) next++;
         const fixed = `${code}-${next}`;
-        warnings.push(`รหัสสินค้า "${code}" ซ้ำ — เปลี่ยนเป็น "${fixed}"`);
+        const why = first === code ? '' : ` กับ "${first}" (ตัวพิมพ์ใหญ่เล็กถือเป็นรหัสเดียวกัน)`;
+        warnings.push(`รหัสสินค้า "${code}" ซ้ำ${why} — เปลี่ยนเป็น "${fixed}"`);
         code = fixed;
-      } else {
-        seenCode.set(code, 1);
       }
+      takenCode.set(code.toUpperCase(), code);
 
       let barcode: string | null = text(p.barcode).trim().toUpperCase() || null;
       if (barcode && seenBarcode.has(barcode)) { barcode = null; dupBarcode++; }
