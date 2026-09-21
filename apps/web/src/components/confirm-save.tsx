@@ -20,7 +20,7 @@ export interface ConfirmItem {
   amount: number;
 }
 
-export function ConfirmSave({ open, title, lines, items, submitLabel = 'บันทึก', onEdit }: {
+export function ConfirmSave({ open, title, lines, items, warn, submitLabel = 'บันทึก', onEdit }: {
   open: boolean;
   /** เช่น "ใบเสนอราคา" */
   title: string;
@@ -28,6 +28,13 @@ export function ConfirmSave({ open, title, lines, items, submitLabel = 'บั�
   lines: { label: string; value: string }[];
   /** รายการในเอกสาร — เติมพื้นที่ว่างกลางแผงด้วยของจริงที่กำลังจะบันทึก (ผู้ใช้แจ้ง 19 ก.ย. 2569) */
   items?: ConfirmItem[];
+  /**
+   * สิ่งที่เอกสารนี้จะ **ไม่** ทำ แต่ผู้ใช้น่าจะคิดว่าทำ — ว่าง = ไม่มีอะไรต้องเตือน
+   *
+   * ที่ต้องอยู่ในแผงยืนยันไม่ใช่แค่ในฟอร์ม เพราะของที่อยู่บนฟอร์มถูกเลื่อนพ้นตาไปแล้ว
+   * ตอนกดบันทึก — จุดนี้คือจุดสุดท้ายที่ยังกลับไปแก้ได้
+   */
+  warn?: string;
   submitLabel?: string;
   onEdit: () => void;
 }) {
@@ -67,6 +74,8 @@ export function ConfirmSave({ open, title, lines, items, submitLabel = 'บั�
             </ol>
           </div>
         ) : null}
+
+        {warn ? <div className="confirm-warn" role="alert">⚠ {warn}</div> : null}
 
         <div className="acts">
           <SubmitBtn label={submitLabel} />

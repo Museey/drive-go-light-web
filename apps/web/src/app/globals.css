@@ -1038,6 +1038,14 @@ table.lines tr.hitrow table.tbl td { padding: 6px 10px; }
 .confirm-items .qt { color: var(--ink-3); font-size: 12.5px; }
 .confirm-items .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
 
+/* สิ่งที่เอกสารจะไม่ทำ แต่คนกดน่าจะคิดว่าทำ (เช่น บรรทัดที่ไม่ตัดสต๊อก)
+   อยู่ติดปุ่มบันทึกเพราะเป็นจุดสุดท้ายที่ยังกลับไปแก้ได้ · สีเดียวกับ .note ในฟอร์ม */
+.confirm-warn {
+  background: #FCF7EC; border: 1px solid #EEDBB4; color: #6B4E12;
+  border-radius: 6px; padding: 9px 12px; font-size: 12.5px; line-height: 1.5;
+  word-break: break-word;
+}
+
 .confirm .acts { display: flex; gap: 10px; margin-top: auto; }
 .confirm .acts .btn { flex: 1; justify-content: center; min-height: 48px; font-size: 15px; }
 /* popup "เอกสารได้บันทึกเรียบร้อยแล้ว" (app/income/edit-gate.tsx) — สามปุ่มเรียงลง ข้อความไม่ถูกบีบในแผง 380px */

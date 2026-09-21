@@ -14,6 +14,7 @@ import { baht, KIND_LABEL, thDate } from '@/lib/format';
 import { ThaiDateField } from '@/components/thai-date-input';
 import { formatDocNo } from '@/lib/doc-no';
 import { BLANK_QTY, patchLine } from '@/lib/line-qty';
+import { typeCode, unstockedLines, type CodeLink } from '@/lib/line-link';
 import { VehicleFields } from './vehicle-fields';
 import { ExpiryChip } from '@/components/expiry-chip';
 import { ScanBox } from '@/components/scan-box';
@@ -89,10 +90,13 @@ function LineRow({
   onFound: (found: PickedProduct[]) => void;
 }) {
   const [query, setQuery] = useState('');
+  /* รหัสของสินค้าที่บรรทัดนี้เคยผูกไว้ — ให้พิมพ์กลับมาเหมือนเดิมแล้วผูกคืนได้ (lib/line-link.ts) */
+  const [memo, setMemo] = useState<CodeLink | null>(null);
   const { results, busy, clear } = useLiveSearch(query, searchProductsAction, { onFound });
   const amount = lineAmount({ qty: item.qty, price: item.unitPrice, discPct: item.discPct ?? 0 });
 
-  const pick = (p: PickedProduct) => { onPick(p); setQuery(''); clear(); };
+  /* เลือกตัวใหม่แล้วความจำเก่าใช้ไม่ได้ — ไม่งั้นพิมพ์รหัสของตัวก่อนหน้าจะดึงตัวเก่ากลับมา */
+  const pick = (p: PickedProduct) => { setMemo(null); onPick(p); setQuery(''); clear(); };
   /* Enter ในบรรทัด: มีผลค้นหา = เลือกตัวแรก · บรรทัดสุดท้าย = เพิ่มบรรทัด · นอกนั้นปล่อยให้ตัวกลางย้ายไปช่องถัดไป */
   const enterKey = (e: React.KeyboardEvent) => {
     if (e.key !== 'Enter') return;
@@ -107,7 +111,12 @@ function LineRow({
         {/* ความกว้างคอลัมน์อยู่ที่ CSS (table.lines .c-*) — ช่องกรอกเต็มคอลัมน์ ชื่อสินค้าได้ที่เหลือทั้งหมด */}
         <td className="c-code">
           <input className="in mono" placeholder="พิมพ์รหัส / ชื่อ" value={query || item.code}
-                 onChange={(e) => { setQuery(e.target.value); onChange({ code: e.target.value, productId: null }); }}
+                 onChange={(e) => {
+                   setQuery(e.target.value);
+                   const r = typeCode(item, e.target.value, memo);
+                   setMemo(r.memo);
+                   onChange(r.patch);
+                 }}
                  onKeyDown={enterKey} />
         </td>
         <td className="c-name">
@@ -397,6 +406,14 @@ export function DocEditor({
   const isReceipt = doc.kind === 'RC';
   const vatLocked = doc.kind === 'IV' || doc.kind === 'IVT';
   const dueDate = !isQuote && doc.creditDays > 0 ? addDaysIso(doc.docDate, doc.creditDays) : doc.docDate;
+
+  /* บรรทัดที่จะไม่ตัดสต๊อก — เตือนเฉพาะใบเสร็จ เพราะใบชนิดอื่นยังไม่ตัดอยู่แล้วทั้งใบ
+     กติกาเดียวกับที่เซิร์ฟเวอร์ใช้ข้ามบรรทัด (lib/line-link.ts มีเทสต์คุม) */
+  const unstocked = isReceipt ? unstockedLines(realItems) : [];
+  const unstockedWarn = unstocked.length > 0
+    ? `${unstocked.length} บรรทัดไม่ได้ผูกทะเบียนสินค้า — ของจะไม่ถูกตัดออกจากสต๊อก: ` +
+      unstocked.map((it) => it.code || it.name).join(' · ')
+    : '';
 
   /* ส่งเฉพาะบรรทัดที่มีของ และส่วนลดตามที่ผู้ใช้เลือก (เซิร์ฟเวอร์คำนวณบาทที่มีผลจริงเอง) */
   const payload = useMemo(() => JSON.stringify({ ...doc, items: realItems }), [doc, realItems]);
@@ -690,6 +707,22 @@ export function DocEditor({
           </div>
         ) : null}
 
+        {/* ตัดสต๊อกดูที่ productId ของบรรทัด ไม่ได้ดูที่ชื่อหรือรหัสที่พิมพ์ —
+            บรรทัดที่พิมพ์เองจึงผ่านไปเงียบ ๆ ทั้งที่ของออกจากชั้นวางไปแล้ว */}
+        {unstocked.length > 0 ? (
+          <div className="body" style={{ paddingBottom: 0 }}>
+            {/* .note เป็นสีอำพันอยู่แล้ว — ของหมดอายุข้างบนถึงต้องทับเป็นสีแดงเอง */}
+            <div className="note">
+              <b>ใบนี้จะไม่ตัดสต๊อก {unstocked.length} บรรทัด</b> —{' '}
+              {unstocked.map((it) => it.code || it.name).join(' · ')}
+              <br />
+              บรรทัดพวกนี้ไม่ได้ผูกกับทะเบียนสินค้า ระบบจึงไม่รู้ว่าจะตัดตัวไหน
+              บันทึกได้ตามปกติ (ชื่อจะไปขึ้นที่รายการค้างทำ) — ถ้าเป็นอะไหล่ที่มีในทะเบียนอยู่แล้ว
+              ให้พิมพ์ในช่องรหัสแล้ว<b>เลือกจากผลค้นหา</b>ก่อนบันทึก
+            </div>
+          </div>
+        ) : null}
+
         {notFound ? (
           <div className="body" style={{ paddingBottom: 0 }}>
             <div className="note" style={{ background: '#FCF1F1', borderColor: '#EEC4C4' }}>
@@ -915,6 +948,7 @@ export function DocEditor({
       </div>
 
       <ConfirmSave open={confirm} title={KIND_LABEL[doc.kind]} lines={confirmLines} items={confirmItems}
+                   warn={unstockedWarn}
                    submitLabel={mode === 'new' ? 'บันทึก' : 'บันทึกการแก้ไข'}
                    onEdit={() => setConfirm(false)} />
     </form>
