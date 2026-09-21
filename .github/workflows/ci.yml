@@ -1,0 +1,88 @@
+# ตรวจโค้ดทุกครั้งที่เปิด PR และทุกครั้งที่ลงบน main
+#
+# ทำสามอย่างตามลำดับที่รู้ผลเร็วที่สุดก่อน — ชนิดข้อมูล · เทสต์ · สร้างของจริง
+#
+# **ทำไมต้องมี Postgres** — เทสต์ 510 ข้อของ apps/web กับ 84 ข้อของ importer
+# เขียนเป็น `describe.skipIf(!DATABASE_URL)` ไว้ ถ้าไม่มีฐานข้อมูลมันจะ "ผ่าน"
+# ด้วยการข้ามทั้งชุดอย่างเงียบ ๆ ซึ่งอ่านแล้วเหมือนเขียวทั้งที่ไม่ได้ตรวจอะไรเลย
+# และของที่ข้ามไปคือส่วนที่พังแล้วเจ็บที่สุด — สิทธิ์ผู้ใช้ · การตัดสต๊อก · เงิน
+#
+# ลำดับขั้นตอนตรงกับ README หัวข้อ "เริ่มต้น" ถ้าแก้ตรงนี้ให้แก้ที่นั่นด้วย
+
+name: ตรวจโค้ด
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# ลงซ้ำบนกิ่งเดิมให้ยกเลิกรอบเก่าทิ้ง — รอบที่ค้างอยู่ตอบเรื่องโค้ดที่ไม่มีใครดูแล้ว
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ชนิดข้อมูล · เทสต์ · สร้าง
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        # ตรงกับที่ README ให้รันบนเครื่องตัวเอง — เวอร์ชันเดียวกับที่ใช้จริง
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: x
+          POSTGRES_DB: dgl
+        ports:
+          - 5433:5432
+        # ขั้นตอนถัดไปต้องไม่เริ่มก่อนฐานข้อมูลพร้อมรับ connection
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # tools/setup-test-db.mjs ยอมรันเฉพาะโฮสต์ที่เป็นเครื่องตัวเอง เพราะมันลบฐานทิ้ง
+      # บน runner ตัว service map ออกมาที่ localhost จึงผ่านเงื่อนไขนั้นพอดี
+      SUPER_URL: postgresql://postgres:x@localhost:5433/postgres
+      # เป็น superuser ตามที่ tools/test-schema.mjs ต้องการ — ตัวมันสั่ง `set role`
+      # เป็น dgl_test_owner ให้เองก่อนสร้างสคีมา ฟังก์ชันจึงไม่ได้เป็นของ superuser
+      DATABASE_URL: postgresql://postgres:x@localhost:5433/dgl
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: ลงแพ็กเกจ
+        run: npm ci
+
+      # apps/web อ่าน @drivegolight/core จาก dist ไม่ใช่จาก src — ไม่สร้างก่อน
+      # ทั้ง tsc และ next จะหาโมดูลไม่เจอทั้งโปรเจกต์
+      - name: สร้างแพ็กเกจที่เว็บเรียกใช้
+        run: |
+          npm run build -w @drivegolight/core
+          npm run build -w @drivegolight/importer
+
+      - name: ตรวจชนิดข้อมูล
+        run: npm run typecheck -w @drivegolight/web
+
+      # สร้าง role ธรรมดาขึ้นมาเป็นเจ้าของสคีมา ให้เหมือน Postgres แบบ managed
+      # ที่ใช้จริง — เหตุผลเต็ม ๆ อยู่ใน README หัวข้อ "ทำไมต้อง test:setup"
+      - name: เตรียมฐานทดสอบ
+        run: npm run test:setup
+
+      - name: เทสต์ทั้งโปรเจกต์
+        run: npm test
+
+      # ฟ้องสิ่งที่ tsc ไม่ฟ้อง เช่น การใช้ของฝั่งเซิร์ฟเวอร์ในคอมโพเนนต์ฝั่งเบราว์เซอร์
+      - name: สร้างเว็บ
+        run: npm run build -w @drivegolight/web
