@@ -55,7 +55,9 @@ for (const [name, src] of Object.entries(editors)) {
       /* แบบเดิม: addProduct ล้างช่องค้นด้านบน · แบบใหม่ (ค้นในบรรทัด): pick ล้าง query ของบรรทัด */
       const add = src.slice(src.indexOf('const addProduct'), src.indexOf('const addProduct') + 1200);
       const topClears = add.includes("setPartQuery('')") && add.includes('clearParts()');
-      const rowClears = /const pick = \(p: PickedProduct\) => \{ onPick\(p\); setQuery\(''\); clear\(\); \}/.test(src);
+      /* จับ "สิ่งที่ pick ต้องทำ" ไม่ใช่ลำดับคำต่อคำ — ตัวที่พินถ้อยคำเป๊ะจะแดงทุกครั้ง
+         ที่มีงานอื่นเพิ่มเข้ามาในบรรทัดเดียวกัน (เช่น ล้างความจำรหัสของ line-link.ts) */
+      const rowClears = /const pick = \(p: PickedProduct\) => \{[^}]*onPick\(p\);[^}]*setQuery\(''\);[^}]*clear\(\);[^}]*\}/.test(src);
       expect(topClears || rowClears).toBe(true);
     });
 

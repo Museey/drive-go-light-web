@@ -19,6 +19,7 @@ import type { PickedProduct } from '@/lib/sales';
 import { baht, thDate } from '@/lib/format';
 import { formatDocNo } from '@/lib/doc-no';
 import { BLANK_QTY, patchLine } from '@/lib/line-qty';
+import { typeCode, unstockedLines, type CodeLink } from '@/lib/line-link';
 
 /**
  * ฟอร์มใบซื้อ / บันทึกค่าใช้จ่าย — โครงเดียวกับฟอร์มขาย (13 ก.ย. 69)
@@ -61,10 +62,13 @@ function BuyLineRow({
   onEnterLast: () => void;
 }) {
   const [query, setQuery] = useState('');
+  /* รหัสของสินค้าที่บรรทัดนี้เคยผูกไว้ — ให้พิมพ์กลับมาเหมือนเดิมแล้วผูกคืนได้ (lib/line-link.ts) */
+  const [memo, setMemo] = useState<CodeLink | null>(null);
   const { results, busy, clear } = useLiveSearch(isPurchase ? query : '', searchProductsAction);
   const amount = lineAmount({ qty: item.qty, price: item.unitPrice, discPct: item.discPct ?? 0 });
 
-  const pick = (p: PickedProduct) => { onPick(p); setQuery(''); clear(); };
+  /* เลือกตัวใหม่แล้วความจำเก่าใช้ไม่ได้ — ไม่งั้นพิมพ์รหัสของตัวก่อนหน้าจะดึงตัวเก่ากลับมา */
+  const pick = (p: PickedProduct) => { setMemo(null); onPick(p); setQuery(''); clear(); };
   const enterKey = (e: React.KeyboardEvent) => {
     if (e.key !== 'Enter') return;
     if (results && results.length > 0) { e.preventDefault(); e.stopPropagation(); pick(results[0]!); return; }
@@ -79,7 +83,12 @@ function BuyLineRow({
         {isPurchase ? (
           <td className="c-code">
             <input className="in mono" placeholder="พิมพ์รหัส / ชื่อ" value={query || item.code}
-                   onChange={(e) => { setQuery(e.target.value); onChange({ code: e.target.value, productId: null }); }}
+                   onChange={(e) => {
+                     setQuery(e.target.value);
+                     const r = typeCode(item, e.target.value, memo);
+                     setMemo(r.memo);
+                     onChange(r.patch);
+                   }}
                    onKeyDown={enterKey} />
           </td>
         ) : null}
@@ -209,6 +218,14 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
   const remain = round2(t.payable - paidNow);
   const catInfo = EXPENSE_CATS.find((c) => c.key === doc.expenseCat);
   const dueDate = doc.creditDays > 0 ? addDaysIso(doc.docDate, doc.creditDays) : doc.docDate;
+
+  /* บรรทัดที่จะไม่เข้าสต๊อก — เตือนเฉพาะใบซื้อที่ติ๊กรับของแล้ว ตรงกับเงื่อนไขฝั่งเซิร์ฟเวอร์
+     (purchases.ts: `kind === 'PO' && goodsReceived`) ยังไม่รับของก็ยังไม่ถึงเวลาเตือน */
+  const unstocked = isPurchase && doc.goodsReceived ? unstockedLines(realItems) : [];
+  const unstockedWarn = unstocked.length > 0
+    ? `${unstocked.length} บรรทัดไม่ได้ผูกทะเบียนสินค้า — ของจะไม่ถูกเพิ่มเข้าสต๊อก: ` +
+      unstocked.map((it) => it.code || it.name).join(' · ')
+    : '';
 
   const changeCat = (cat: ExpenseCat) => {
     const suggested = EXPENSE_CATS.find((x) => x.key === cat)?.wht ?? 0;
@@ -403,6 +420,21 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
 
         {isPurchase ? <ScanBox onScan={onScan} /> : null}
 
+        {/* รับของเข้าดูที่ productId ของบรรทัด ไม่ได้ดูที่ชื่อหรือรหัสที่พิมพ์ —
+            บรรทัดที่พิมพ์เองจึงผ่านไปเงียบ ๆ ทั้งที่ของเข้ามากองอยู่ในอู่แล้ว */}
+        {unstocked.length > 0 ? (
+          <div className="body" style={{ paddingBottom: 0 }}>
+            <div className="note">
+              <b>ใบนี้จะไม่เข้าสต๊อก {unstocked.length} บรรทัด</b> —{' '}
+              {unstocked.map((it) => it.code || it.name).join(' · ')}
+              <br />
+              บรรทัดพวกนี้ไม่ได้ผูกกับทะเบียนสินค้า ระบบจึงไม่รู้ว่าจะเพิ่มของให้ตัวไหน
+              (ยอดเงินยังเข้าค่าใช้จ่ายและเจ้าหนี้ตามปกติ) — ถ้าเป็นอะไหล่ที่มีในทะเบียนอยู่แล้ว
+              ให้พิมพ์ในช่องรหัสแล้ว<b>เลือกจากผลค้นหา</b>ก่อนบันทึก
+            </div>
+          </div>
+        ) : null}
+
         {notFound ? (
           <div className="body" style={{ paddingBottom: 0 }}>
             <div className="note" style={{ background: '#FCF1F1', borderColor: '#EEC4C4' }}>
@@ -530,6 +562,7 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
       </div>
 
       <ConfirmSave open={confirm} title={title} lines={confirmLines} items={confirmItems}
+                   warn={unstockedWarn}
                    submitLabel={mode === 'new' ? 'บันทึก' : 'บันทึกการแก้ไข'} onEdit={() => setConfirm(false)} />
     </form>
   );
