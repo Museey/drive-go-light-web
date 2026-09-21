@@ -28,12 +28,19 @@ export function activeProductsOf(products: unknown): number {
   return products.filter((p) => !(p && typeof p === 'object' && (p as { active?: unknown }).active === false)).length;
 }
 
-/** รหัสสินค้าใหม่จากแถว CSV — แถวที่ขาดรหัสหรือชื่อข้ามไป (ตัวนำเข้าข้ามเหมือนกัน) · รหัสซ้ำในไฟล์นับครั้งเดียว */
+/**
+ * รหัสสินค้าใหม่จากแถว CSV — แถวที่ขาดรหัสหรือชื่อข้ามไป (ตัวนำเข้าข้ามเหมือนกัน) · รหัสซ้ำในไฟล์นับครั้งเดียว
+ *
+ * เทียบแบบไม่สนตัวพิมพ์ ตรงกับกติการหัสสินค้าในฐาน (034) — brk-101 ในไฟล์คือ BRK-101 ที่มีอยู่แล้ว
+ * ไม่งั้นนับเกินแล้วบอกผู้ใช้ว่าเต็มเพดาน ทั้งที่จริงเป็นการแก้ของเดิม
+ */
 export function csvNewProducts(rows: { code: string; name: string }[], existing: ReadonlySet<string>): number {
+  const have = new Set([...existing].map((c) => c.toUpperCase()));
   const seen = new Set<string>();
   for (const r of rows) {
-    if (!r.code || !r.name || existing.has(r.code)) continue;
-    seen.add(r.code);
+    const key = r.code.toUpperCase();
+    if (!r.code || !r.name || have.has(key)) continue;
+    seen.add(key);
   }
   return seen.size;
 }

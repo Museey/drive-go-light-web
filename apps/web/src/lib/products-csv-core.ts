@@ -58,7 +58,9 @@ export async function importProductsCsvWith(
       }
     }
 
-    const existing = await c.query(`select id from products where code = $1`, [code]);
+    /* ไม่สนตัวพิมพ์ — ตรงกับ index รหัสสินค้า (034) · brk-101 ในไฟล์คือการแก้ BRK-101 ที่มีอยู่แล้ว ไม่ใช่ของใหม่
+       ถ้าเทียบตรงตัว แถวนี้จะไปสร้างสินค้าใหม่แล้วชนรหัสเดิม จนนำเข้าล้มทั้งไฟล์ */
+    const existing = await c.query(`select id from products where upper(code) = upper($1)`, [code]);
 
     if (existing.rows[0]) {
       await c.query(

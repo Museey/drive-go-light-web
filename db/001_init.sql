@@ -239,6 +239,10 @@ create table products (
 create unique index products_barcode_uidx on products (tenant_id, barcode)
   where barcode is not null;
 
+-- รหัสสินค้าห้ามซ้ำแบบไม่สนตัวพิมพ์ใหญ่เล็ก (034) — การยิงบาร์โค้ดและการค้นด้วยรหัสเทียบแบบไม่สนตัวพิมพ์
+-- ถ้าให้ BRK-101 กับ brk-101 อยู่คู่กัน ยิงแล้วระบบหยิบตัวไหนก็ได้ตัวเดียวแล้วไปต่อเงียบ ๆ
+create unique index products_code_ci_uidx on products (tenant_id, upper(code));
+
 create index on products (tenant_id) where active;
 create index on products (tenant_id, category_id);
 

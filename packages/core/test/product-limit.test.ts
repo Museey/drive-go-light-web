@@ -44,6 +44,14 @@ describe('csvNewProducts — รหัสใหม่ในไฟล์ CSV', ()
     ];
     expect(csvNewProducts(rows, new Set(['OLD']))).toBe(2);
   });
+
+  it('ไม่สนตัวพิมพ์ — ตรงกับกติการหัสสินค้าในฐาน (034)', () => {
+    const rows = [
+      { code: 'old', name: 'ของเดิมพิมพ์เล็ก' },     // คือ OLD ที่มีอยู่แล้ว ไม่ใช่ของใหม่
+      { code: 'Brk-1', name: 'ก' }, { code: 'BRK-1', name: 'ก ซ้ำคนละตัวพิมพ์' },
+    ];
+    expect(csvNewProducts(rows, new Set(['OLD']))).toBe(1);
+  });
 });
 
 describe('productLimitMessage', () => {

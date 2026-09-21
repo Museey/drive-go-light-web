@@ -103,7 +103,7 @@ export async function saveProductAction(_prev: FormResult, fd: FormData): Promis
     }
     return {
       error: friendlyDbError(err, {
-        code: `รหัสสินค้า "${code}" มีอยู่แล้ว ใช้รหัสอื่น`,
+        code: `รหัสสินค้า "${code}" ซ้ำกับสินค้าที่มีอยู่แล้ว (ตัวพิมพ์ใหญ่กับเล็กถือเป็นรหัสเดียวกัน) ใช้รหัสอื่น`,
         barcode: `บาร์โค้ด "${str(fd, 'barcode')}" ถูกใช้กับสินค้าตัวอื่นแล้ว`,
       }),
       /* ครบ 3,000 ไม่ใช่ความผิดของช่องรหัส — ไม่ไฮไลต์ช่องไหน */
@@ -231,7 +231,7 @@ export async function createFromPendingAction(_prev: FormResult, fd: FormData): 
     );
   } catch (err) {
     return {
-      error: friendlyDbError(err, { code: `รหัสสินค้า "${code}" มีอยู่แล้ว` }),
+      error: friendlyDbError(err, { code: `รหัสสินค้า "${code}" ซ้ำกับสินค้าที่มีอยู่แล้ว (ตัวพิมพ์ใหญ่กับเล็กถือเป็นรหัสเดียวกัน)` }),
       field: isProductLimitError(err) || err instanceof ProductLimitError ? undefined : 'code',
     };
   }
