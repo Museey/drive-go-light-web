@@ -208,8 +208,8 @@ export function Landing() {
           </Link>
           <nav className="lp-topnav" aria-label="หัวข้อในหน้านี้">
             <a href="#features">ความสามารถ</a>
-            <a href="#thai">ทำมาเพื่ออู่ไทย</a>
-            <a href="#start">เริ่มต้นใช้งาน</a>
+            <a href="#thai">ภาษีและเอกสารแบบไทย</a>
+            <a href="#start">ทำมาสำหรับอู่ที่เริ่มใช้ระบบ</a>
           </nav>
           <Link className="btn primary lp-login" href="/login">เข้าสู่ระบบ</Link>
         </div>
@@ -296,7 +296,7 @@ export function Landing() {
           </div>
         </section>
 
-        {/* ---------- ทำมาเพื่ออู่ไทย ---------- */}
+        {/* ---------- ภาษีและเอกสารแบบไทย ---------- */}
         <section className="lp-sec lp-dark" id="thai">
           <div className="lp-in">
             <h2>ทำมาให้ตรงกับงานเอกสารแบบไทย</h2>
