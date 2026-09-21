@@ -1,6 +1,6 @@
 import type pg from 'pg';
 import { docNoPeriod, formatDocNo } from './doc-no';
-import { consumeStock, returnClaimStock } from './stock-cost';
+import { consumeStock, lockProductsWith, returnClaimStock } from './stock-cost';
 import { syncVehicleFromDocWith } from './doc-chain';
 
 /**
@@ -357,6 +357,9 @@ export async function saveClaim(
   let cutQty = 0;
   let cost = 0;
   let unlinked = 0;
+
+  /* ล็อกสินค้าทุกตัวเรียงตามรหัสก่อนตัดตัวแรก — กันสองเครื่องตัดต้นทุนล็อตเดียวกันและกันรอกันค้าง (stock-cost.ts) */
+  await lockProductsWith(c, items.map((it) => it.productId));
 
   for (const [i, it] of items.entries()) {
     const line = await c.query(

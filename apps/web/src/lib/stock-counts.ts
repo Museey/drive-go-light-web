@@ -1,6 +1,6 @@
 import type pg from 'pg';
 import { docNoPeriod, formatDocNo } from './doc-no';
-import { BOOK_UNIT_COST_SQL, BOOK_VALUE_SQL, consumeStock, receiveStock } from './stock-cost';
+import { BOOK_UNIT_COST_SQL, BOOK_VALUE_SQL, consumeStock, lockProductsWith, receiveStock } from './stock-cost';
 import { findByScanWith } from './scan';
 
 /**
@@ -453,6 +453,12 @@ export async function applyCount(
   const movedOn = head.rows[0].count_date as string;
   const label = `ใบตรวจนับ ${no}`
     + (String(head.rows[0].note ?? '').trim() ? ` — ${String(head.rows[0].note).trim()}` : '');
+
+  /* ล็อกสินค้าในใบก่อนอ่าน "ระบบว่ามี" — ไม่งั้นมีคนขายของตัวเดียวกันคั่นระหว่างอ่านกับปรับ
+     ส่วนต่างจะคิดจากยอดที่ไม่มีอยู่แล้ว แล้วปรับยอดเพี้ยนไปเท่ากับที่ขายคั่นกลาง (stock-cost.ts) */
+  const counted = await c.query(
+    `select product_id from stock_count_items where count_id = $1 and counted_qty is not null`, [id]);
+  await lockProductsWith(c, counted.rows.map((r) => r.product_id as string));
 
   /* ยอดสด ณ ตอนนี้ ไม่ใช่ตอนเปิดใบ · เฉพาะบรรทัดที่กรอกแล้วเท่านั้น */
   const { rows } = await c.query(

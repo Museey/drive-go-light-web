@@ -172,6 +172,24 @@ export interface ConsumeInput {
 }
 
 /**
+ * ล็อกแถวสินค้าไว้จนจบทรานแซกชัน — กันสองเครื่องตัดต้นทุนจากล็อตเดียวกันซ้ำ
+ *
+ * ต้นทุนคิดจากการเล่นบัญชีซ้ำ (อ่านทุกแถวแล้วไล่ตัดล็อต) ถ้าสองเครื่องขายของตัวเดียวกัน
+ * พร้อมกัน ต่างคนต่างอ่านบัญชีก่อนที่อีกฝั่งจะบันทึก ทั้งคู่จึงเห็นล็อตหน้าสุดยังเต็ม
+ * แล้วตัดต้นทุนจากล็อตเดียวกัน — จำนวนสต๊อกยังถูก แต่ต้นทุนและกำไรของสองบรรทัดนั้นเพี้ยน
+ * ล็อกแล้วเครื่องที่สองต้องรอ แล้วอ่านบัญชีใหม่หลังเครื่องแรกบันทึกเสร็จ
+ *
+ * **ล็อกเรียงตามรหัสเสมอ** — ใบหนึ่งมีสินค้า ก ข อีกใบมี ข ก ถ้าต่างคนต่างล็อกตามลำดับบรรทัด
+ * จะต่างคนต่างถือตัวหนึ่งแล้วรออีกตัว ฐานข้อมูลต้องตัดสินให้ฝั่งหนึ่งล้ม ผู้เรียกที่ตัดหลายตัว
+ * จึงควรเรียกตัวนี้ครั้งเดียวด้วยรหัสทั้งหมดก่อนเริ่มตัดตัวแรก · เรียกซ้ำกับตัวที่ถือไว้แล้วไม่เป็นไร
+ */
+export async function lockProductsWith(c: Client, ids: readonly (string | null | undefined)[]): Promise<void> {
+  const uniq = [...new Set(ids.filter((x): x is string => Boolean(x)))].sort();
+  if (uniq.length === 0) return;
+  await c.query(`select id from products where id = any($1::uuid[]) order by id for update`, [uniq]);
+}
+
+/**
  * ตัดของออกจากคลังพร้อมคิดต้นทุน แล้วบันทึกลงบัญชีเป็นแถวเดียว
  * คืนต้นทุนที่คิดได้ให้ผู้เรียกเอาไปใช้ต่อ (เช่น เก็บไว้เทียบตอนยกเลิก)
  */
@@ -179,6 +197,8 @@ export async function consumeStock(c: Client, input: ConsumeInput): Promise<numb
   const qty = Math.abs(input.qty);
   if (qty === 0) return 0;
 
+  /* ต้องล็อกก่อนอ่านล็อต ไม่ใช่หลัง — อ่านก่อนล็อกก็ยังได้ล็อตชุดเก่าอยู่ดี */
+  await lockProductsWith(c, [input.productId]);
   const lots = await lotsOfProduct(c, input.productId);
   const fallback = await lastCostOf(c, input.productId);
   const { cost } = fifoConsume(lots, qty, fallback);

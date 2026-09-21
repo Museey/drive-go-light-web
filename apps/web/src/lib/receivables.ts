@@ -1,8 +1,7 @@
 import 'server-only';
 import { query, requireEdit } from './auth';
 import { mutate } from './mutate';
-import { checkPaymentAmount } from './payment-rules';
-import { bulkPay, type BulkPaymentLine, type BulkPaymentResult } from './bulk-pay';
+import { bulkPay, recordPaymentWith, type BulkPaymentLine, type BulkPaymentResult } from './bulk-pay';
 import {
   payablesWith, receivablesWith,
   type PayableRow, type PayableSummary, type ReceivableRow, type ReceivableSummary,
@@ -73,31 +72,9 @@ export async function recordPayment(input: {
   method: string;
   ref: string;
 }): Promise<void> {
-  return mutate('finance', async (c, userId) => {
-    const { rows } = await c.query(
-      `select d.payable, d.status::text as status, d.direction::text as direction,
-              coalesce(sum(p.amount), 0) as paid
-       from documents d left join payments p on p.doc_id = d.id
-       where d.id = $1 group by d.id`,
-      [input.docId],
-    );
-    const d = rows[0];
-    if (!d) throw new Error('ไม่พบเอกสาร');
-    if (d.status === 'void') throw new Error('เอกสารนี้ถูกยกเลิกแล้ว รับชำระไม่ได้');
-
-    /* ลูกหนี้กับเจ้าหนี้เป็นคนละแท็บ สิทธิ์แก้ไขจึงแยกกัน
-       ดูจากชนิดเอกสารจริง ไม่ใช่เชื่อว่าหน้าที่เรียกมาส่งมาถูก */
-    await requireEdit('finance', d.direction === 'buy' ? 'ap' : 'ar');
-
-    const problem = checkPaymentAmount(n(d.payable), n(d.paid), input.amount);
-    if (problem) throw new Error(problem);
-
-    await c.query(
-      `insert into payments (tenant_id, doc_id, paid_on, amount, method, ref, at_issue, created_by)
-       values (current_tenant_id(),$1,$2,$3,$4,$5,false,$6)`,
-      [input.docId, input.paidOn, input.amount.toFixed(2), input.method, input.ref, userId],
-    );
-  });
+  /* ตัวจริงอยู่ใน bulk-pay.ts — ล็อกใบก่อนอ่านยอด กันสองเครื่องรับชำระพร้อมกันจนเกินยอด */
+  return mutate('finance', (c, userId) =>
+    recordPaymentWith(c, userId, input, (sub) => requireEdit('finance', sub)));
 }
 
 /** ตัดชำระหลายใบพร้อมกัน — ตรวจสิทธิ์แล้วส่งต่อให้ bulkPay ในทรานแซกชันเดียว */

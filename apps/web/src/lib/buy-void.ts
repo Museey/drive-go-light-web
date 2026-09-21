@@ -1,6 +1,6 @@
 import type pg from 'pg';
 import { today } from '@drivegolight/core';
-import { consumeStock, receiveStock } from './stock-cost';
+import { consumeStock, lockProductsWith, receiveStock } from './stock-cost';
 
 /**
  * ยกเลิกและกู้คืนใบซื้อ / ค่าใช้จ่าย
@@ -36,6 +36,8 @@ export async function voidBuyDocWith(
         group by product_id having sum(qty_delta) > 0`,
       [id],
     );
+    /* ล็อกสินค้าทุกตัวเรียงตามรหัสก่อนตัดตัวแรก — กันสองเครื่องตัดต้นทุนล็อตเดียวกันและกันรอกันค้าง (stock-cost.ts) */
+    await lockProductsWith(c, moves.rows.map((m) => m.product_id as string));
     for (const m of moves.rows) {
       /* ของที่รับเข้ามาจากใบนี้ต้องออกไป และต้องคิดต้นทุนตามล็อตเหมือนการตัดอื่น ๆ
          ไม่ใช่คืนที่ราคาซื้อ เพราะของอาจถูกขายไปแล้วบางส่วน ล็อตที่ตัดออกจึงเป็นคนละก้อน */

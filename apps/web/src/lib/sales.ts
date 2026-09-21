@@ -10,7 +10,8 @@ import {
 import { mutate } from './mutate';
 import { kitComponents } from './kits';
 import { addrLineOf } from './contacts';
-import { consumeStock, returnDocStock } from './stock-cost';
+import { consumeStock, lockProductsWith, returnDocStock } from './stock-cost';
+import { docVersionWith, lockDocForEditWith } from './doc-version';
 import { billnoteOfDoc } from './billnotes';
 import { docChainWith, voidSalesChainWith, voidSalesDocWith, type DocChainInfo } from './sales-void';
 import { activeChildWith, claimParentWith, editRuleWith, markParentBilledWith, type ChildRef } from './doc-lock';
@@ -45,6 +46,11 @@ export interface PaymentInput {
 
 export interface SalesDocInput {
   id?: string;
+  /**
+   * ฉบับของใบตอนเปิดหน้าแก้ไข (doc-version.ts) — ใช้เฉพาะตอนแก้
+   * บันทึกแล้วฉบับไม่ตรง = มีคนบันทึกใบนี้ไประหว่างที่เปิดอยู่ → ไม่บันทึกทับ
+   */
+  baseVersion?: string;
   kind: SalesKind;
   docDate: string;
   parentDocId: string | null;
@@ -144,12 +150,15 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
     let docNo: string;
 
     if (id) {
-      const existing = await c.query(
-        `select doc_no, status::text as status from documents where id = $1`, [id],
-      );
-      if (!existing.rows[0]) throw new Error('ไม่พบเอกสารที่จะแก้');
-      if (existing.rows[0].status === 'void') throw new Error('เอกสารนี้ถูกยกเลิกแล้ว แก้ไขไม่ได้');
-      docNo = existing.rows[0].doc_no;
+      /* ล็อกแถวก่อนตรวจทุกอย่าง — อีกเครื่องที่ยกเลิก รับเงิน หรือแก้ใบเดียวกันอยู่ ต้องรอกันคนละรอบ
+         แล้วตรวจกับสถานะหลังรอ ไม่ใช่สถานะตอนเปิดหน้า (doc-version.ts) */
+      ({ docNo } = await lockDocForEditWith(c, id, input.baseVersion));
+
+      /* กติกาเดียวกับที่หน้าแก้ไขตรวจตอนเปิด (ใบเสร็จ · รับเงินแล้ว แก้ไม่ได้) ตรวจซ้ำใต้ล็อก
+         เปิดฟอร์มค้างไว้ระหว่างที่อีกเครื่องรับเงินใบนี้ — การรับเงินไม่เปลี่ยนฉบับของใบ
+         ถ้าไม่ตรวจตรงนี้ ใบที่รับเงินแล้วจะถูกแก้ยอดทับได้ */
+      const rule = await editRuleWith(c, id);
+      if (!rule.ok) throw new Error(rule.reason ?? 'แก้ไขไม่ได้');
 
       await c.query(
         `update documents set doc_date=$2, party_id=$3, party_type=$4, party_name=$5,
@@ -248,24 +257,35 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
        เป็นพฤติกรรมที่ยกมาจากต้นแบบโดยตั้งใจ ถ้าจะเปลี่ยนต้องตัดสินใจร่วมกับเจ้าของอู่
        เพราะตัวเลขสต๊อกจะไม่ตรงกับที่เขาคุ้นเคย */
     if (input.kind === 'RC') {
+      const cuts: { productId: string; qty: number; note?: string }[] = [];
       for (const it of input.items) {
         /* บรรทัดชุดอะไหล่: ตัดสต๊อกชิ้นส่วนที่ผูกทะเบียน (จำนวนในชุด × จำนวนชุด) */
         if (it.kitId && it.qty > 0) {
           for (const comp of await kitComponents(c, it.kitId)) {
-            await consumeStock(c, { productId: comp.productId, qty: comp.qty * it.qty, movedOn: input.docDate, reason: 'sale', docId: id, userId, note: 'ชุดอะไหล่ซ่อมบำรุง' });
+            cuts.push({ productId: comp.productId, qty: comp.qty * it.qty, note: 'ชุดอะไหล่ซ่อมบำรุง' });
           }
           continue;
         }
         if (!it.productId || it.qty === 0) continue;
+        cuts.push({ productId: it.productId, qty: it.qty });
+      }
+
+      /* ล็อกสินค้าทุกตัวของใบนี้พร้อมกันทีเดียวเรียงตามรหัส ก่อนตัดตัวแรก
+         consumeStock ล็อกทีละตัวเองอยู่แล้ว แต่ถ้าปล่อยให้ล็อกตามลำดับบรรทัด
+         ใบหนึ่งมี ก ข อีกใบมี ข ก กดพร้อมกันแล้วต่างคนต่างรอกัน (stock-cost.ts) */
+      await lockProductsWith(c, cuts.map((x) => x.productId));
+
+      for (const x of cuts) {
         /* ต้นทุนคิดแบบเข้าก่อนออกก่อนแล้วตรึงลงแถวนั้นเลย
            งบกำไรขาดทุนอ่านค่านี้ ไม่ได้คำนวณใหม่ตอนเปิดรายงาน */
         await consumeStock(c, {
-          productId: it.productId,
-          qty: it.qty,
+          productId: x.productId,
+          qty: x.qty,
           movedOn: input.docDate,
           reason: 'sale',
           docId: id,
           userId,
+          ...(x.note ? { note: x.note } : {}),
         });
       }
     }
@@ -673,6 +693,20 @@ export async function loadDocForCopy(
       payments: [],
     };
   });
+}
+
+/**
+ * โหลดใบมาแก้ — ได้รหัสและฉบับของใบติดมาด้วย (doc-version.ts)
+ *
+ * **อ่านฉบับก่อนอ่านเนื้อหา** ถ้ามีคนบันทึกคั่นกลาง ฟอร์มจะได้เนื้อหาใหม่แต่ถือฉบับเก่า
+ * กดบันทึกแล้วโดนเตือนทั้งที่ไม่มีใครทับใคร — เตือนเกินดีกว่าทับเงียบ
+ * ถ้าสลับลำดับ ฟอร์มจะได้เนื้อหาเก่าแต่ถือฉบับใหม่ แล้วทับงานของอีกคนได้โดยไม่มีอะไรเตือน
+ */
+export async function loadDocForEdit(id: string): Promise<SalesDocInput | null> {
+  const baseVersion = await query((c) => docVersionWith(c, id));
+  if (!baseVersion) return null;
+  const doc = await loadDocForCopy(id);
+  return doc ? { ...doc, id, baseVersion } : null;
 }
 
 /** เอกสารนี้แก้ไขได้ไหม */

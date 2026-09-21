@@ -5,10 +5,65 @@
  * ส่วนที่ต้องพิสูจน์คือกฎการปรับยอดกับความเป็นทรานแซกชันเดียว ซึ่งอยู่ในนี้ทั้งหมด
  */
 import type pg from 'pg';
-import { EPS } from './payment-rules';
+import { checkPaymentAmount, EPS } from './payment-rules';
 
 const n = (v: unknown): number => Number(v ?? 0);
 const round2 = (v: number) => Math.round(v * 100) / 100;
+
+type Client = pg.PoolClient | pg.Client;
+
+/**
+ * ล็อกแถวเอกสารที่จะรับชำระ ก่อนอ่านยอดที่ชำระไปแล้ว — ต้องอยู่ในทรานแซกชันเดียวกับการบันทึก
+ *
+ * เดิมอ่านยอดแล้วบันทึกโดยไม่ล็อก สองเครื่องรับชำระบิลใบเดียวกันพร้อมกัน ต่างคนต่างเห็นยอดค้างเดิม
+ * เช่นค้าง 5,000 ทั้งคู่รับ 5,000 แล้วผ่านทั้งคู่ ลูกหนี้ติดลบ 5,000 (ผู้ใช้สั่งแก้ 21 ก.ย. 2569)
+ * ล็อกแล้วเครื่องที่สองต้องรอ แล้วอ่านยอดหลังเครื่องแรกบันทึกเสร็จ
+ *
+ * **เรียงตามรหัสเสมอ** — สองเครื่องตัดชำระหลายใบที่ซ้อนกันคนละลำดับ ถ้าล็อกตามลำดับที่ส่งมา
+ * จะต่างคนต่างถือใบหนึ่งแล้วรออีกใบ ล็อกแถวเดียวกับที่หน้าแก้ไขเอกสารล็อก (doc-version.ts)
+ * รับเงินกับแก้ยอดในใบเดียวกันจึงต้องรอกันด้วย
+ */
+export async function lockDocsForPaymentWith(c: Client, ids: readonly string[]): Promise<void> {
+  const uniq = [...new Set(ids)].sort();
+  if (uniq.length === 0) return;
+  await c.query(`select id from documents where id = any($1::uuid[]) order by id for update`, [uniq]);
+}
+
+/**
+ * รับชำระใบเดียว — ยอดเกินคงค้างปฏิเสธ ไม่ปรับลงให้ (ต่างจาก bulkPay)
+ *
+ * แยกออกมาจาก receivables.ts เพื่อให้ชุดทดสอบเรียกด้วย client สองตัวพร้อมกันได้
+ */
+export async function recordPaymentWith(
+  c: Client,
+  userId: string | null,
+  input: { docId: string; paidOn: string; amount: number; method: string; ref: string },
+  /** ตรวจสิทธิ์แก้ไขตามชนิดเอกสารจริง — ลูกหนี้กับเจ้าหนี้เป็นคนละแท็บ */
+  checkEdit?: (sub: 'ar' | 'ap') => Promise<unknown>,
+): Promise<void> {
+  await lockDocsForPaymentWith(c, [input.docId]);
+
+  const { rows } = await c.query(
+    `select d.payable, d.status::text as status, d.direction::text as direction,
+            coalesce(sum(p.amount), 0) as paid
+     from documents d left join payments p on p.doc_id = d.id
+     where d.id = $1 group by d.id`,
+    [input.docId],
+  );
+  const d = rows[0];
+  if (!d) throw new Error('ไม่พบเอกสาร');
+  if (d.status === 'void') throw new Error('เอกสารนี้ถูกยกเลิกแล้ว รับชำระไม่ได้');
+  if (checkEdit) await checkEdit(d.direction === 'buy' ? 'ap' : 'ar');
+
+  const problem = checkPaymentAmount(n(d.payable), n(d.paid), input.amount);
+  if (problem) throw new Error(problem);
+
+  await c.query(
+    `insert into payments (tenant_id, doc_id, paid_on, amount, method, ref, at_issue, created_by)
+     values (current_tenant_id(),$1,$2,$3,$4,$5,false,$6)`,
+    [input.docId, input.paidOn, input.amount.toFixed(2), input.method, input.ref, userId],
+  );
+}
 
 export interface BulkPaymentLine {
   docId: string;
@@ -39,7 +94,7 @@ export interface BulkPaymentResult {
  * ไม่งั้นผู้ใช้จะไม่รู้ว่าตัดไปถึงใบไหนแล้ว แล้วกดซ้ำจนกลายเป็นรับเงินสองรอบ
  */
 export async function bulkPay(
-  c: pg.PoolClient | pg.Client,
+  c: Client,
   userId: string | null,
   input: {
     lines: BulkPaymentLine[];
@@ -62,6 +117,10 @@ export async function bulkPay(
     if (seen.has(l.docId)) throw new Error('มีเอกสารซ้ำกันในรายการที่ส่งมา');
     seen.add(l.docId);
   }
+
+  /* ล็อกทุกใบก่อนอ่านยอด — อีกเครื่องที่ตัดชำระใบเดียวกันอยู่ต้องบันทึกเสร็จก่อน
+     ยอดที่ปรับลงให้พอดีจึงคิดจากยอดค้างจริง ไม่ใช่ยอดก่อนอีกเครื่องบันทึก */
+  await lockDocsForPaymentWith(c, lines.map((l) => l.docId));
 
   const { rows } = await c.query(
     `select d.id, d.doc_no, d.payable, d.status::text as status,
