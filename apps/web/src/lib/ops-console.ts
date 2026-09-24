@@ -151,7 +151,14 @@ export async function setOperatorActive(
 }
 
 export interface ErrorRow {
-  id: string; at: string; kind: string; message: string;
+  id: string;
+  /** ครั้งแรกที่เจอ */
+  at: string;
+  /** ครั้งล่าสุดที่เจอ — รายการเรียงตามตัวนี้ ของที่ยังเกิดอยู่จึงลอยขึ้นบนเสมอ */
+  lastAt: string;
+  /** เจอไปกี่ครั้งแล้ว — ข้อผิดพลาดซ้ำถูกรวมเป็นแถวเดียว (db/035) */
+  occurrences: number;
+  kind: string; message: string;
   tenantId: string | null; digest: string | null;
 }
 
@@ -159,8 +166,9 @@ export async function listErrors(s: OperatorSession, limit = 100): Promise<Error
   return withoutTenant(async (c) => {
     const { rows } = await c.query(`select * from ops.list_errors($1,$2)`, [s.token, limit]);
     return rows.map((r) => ({
-      id: String(r.id), at: new Date(r.at).toISOString(), kind: r.kind,
-      message: r.message, tenantId: r.tenant_id, digest: r.digest,
+      id: String(r.id), at: new Date(r.at).toISOString(),
+      lastAt: new Date(r.last_at).toISOString(), occurrences: Number(r.occurrences),
+      kind: r.kind, message: r.message, tenantId: r.tenant_id, digest: r.digest,
     }));
   });
 }

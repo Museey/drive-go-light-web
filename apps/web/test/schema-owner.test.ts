@@ -37,6 +37,9 @@ describe.skipIf(!DB_URL)('เจ้าของฟังก์ชันในฐ
     await admin.connect();
     await freshSchema(admin, [
       'db/001_init.sql', 'db/002_auth.sql', 'db/008_ops.sql', 'db/011_ops_console.sql',
+      /* ต้องอยู่ท้ายสุดเหมือนลำดับไมเกรชันจริง — ไฟล์นี้สร้าง list_errors ใหม่
+         ถ้ารันก่อน 011 ตัวเก่าจะทับกลับแล้วคอลัมน์จำนวนครั้งหายไป */
+      'db/035_error_dedup.sql',
     ]);
   }, 120_000);
 

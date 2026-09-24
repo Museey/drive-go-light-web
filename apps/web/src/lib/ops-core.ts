@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type pg from 'pg';
 
 /**
@@ -15,7 +16,12 @@ export type ErrorKind = 'server' | 'client' | 'action' | 'job';
 
 export interface ErrorRow {
   id: string;
+  /** ครั้งแรกที่เจอ */
   at: string;
+  /** ครั้งล่าสุดที่เจอ — เท่ากับ at ถ้าเจอครั้งเดียว */
+  lastAt: string;
+  /** เจอไปกี่ครั้งแล้ว */
+  occurrences: number;
   kind: ErrorKind;
   digest: string | null;
   message: string;
@@ -78,6 +84,26 @@ export interface RecordErrorInput {
 }
 
 /**
+ * ลายนิ้วมือของข้อผิดพลาด — ตัวที่บอกว่า "อันนี้คืออันเดิมที่เคยเจอ"
+ *
+ * คิดจากข้อความ **หลังกรองความลับและตัดความยาวแล้ว** ไม่ใช่ข้อความดิบ —
+ * ไม่งั้น stack ที่ต่างกันตรงเลขบรรทัดท้าย ๆ จะทำให้ของเดิมนับเป็นของใหม่ทุกครั้ง
+ *
+ * ใช้ digest ก่อนถ้ามี (Next จัดกลุ่มให้แล้ว) ไม่มีค่อยใช้ข้อความ
+ * รวม path เข้าไปด้วยเพราะข้อผิดพลาดเดียวกันคนละหน้ามักคนละสาเหตุ
+ *
+ * ไม่ได้ใช้เพื่อความปลอดภัย ใช้เพื่อจัดกลุ่ม — sha256 ตัด 32 ตัวพอแล้ว
+ */
+export function fingerprintOf(
+  kind: ErrorKind, digest: string | null, message: string, path: string | null,
+): string {
+  return createHash('sha256')
+    .update([kind, digest || message, path ?? ''].join('\u0000'))
+    .digest('hex')
+    .slice(0, 32);
+}
+
+/**
  * บันทึกข้อผิดพลาดหนึ่งรายการ
  *
  * **ห้ามโยนต่อไม่ว่าเกิดอะไรขึ้น** — ตัวบันทึกข้อผิดพลาดที่พังแล้วทำให้ทั้งคำขอพัง
@@ -87,17 +113,33 @@ export async function recordErrorWith(
   c: Client, input: RecordErrorInput,
 ): Promise<string | null> {
   try {
+    const digest = clip(input.digest, 100);
+    const message = clip(input.message, 2000) ?? 'ไม่มีข้อความ';
+    const path = clip(input.path, 500);
+
     const { rows } = await c.query(
-      `insert into ops.errors (kind, digest, message, stack, path, tenant_id, user_id)
-       values ($1,$2,$3,$4,$5,$6,$7) returning id`,
+      `insert into ops.errors
+              (kind, digest, message, stack, path, tenant_id, user_id, fingerprint)
+       values ($1,$2,$3,$4,$5,$6,$7,$8)
+       on conflict (fingerprint) where fingerprint is not null do update
+          set occurrences = ops.errors.occurrences + 1,
+              last_at     = now(),
+              /* กลับมาเกิดอีกแล้ว ต้องเด้งขึ้นมาให้เห็นใหม่ ไม่ใช่เงียบเพราะเคยกดอ่านไปแล้ว */
+              seen        = false,
+              /* เก็บร่องรอยของครั้งล่าสุดไว้ ครั้งก่อน ๆ อ่านจากจำนวนครั้งเอา */
+              stack       = excluded.stack,
+              tenant_id   = excluded.tenant_id,
+              user_id     = excluded.user_id
+       returning id`,
       [
         input.kind,
-        clip(input.digest, 100),
-        clip(input.message, 2000) ?? 'ไม่มีข้อความ',
+        digest,
+        message,
         clip(input.stack, 20000),
-        clip(input.path, 500),
+        path,
         input.tenantId ?? null,
         input.userId ?? null,
+        fingerprintOf(input.kind, digest, message, path),
       ],
     );
     return String(rows[0].id);
@@ -110,16 +152,20 @@ export async function listErrorsWith(
   c: Client, opts: { limit?: number; onlyUnseen?: boolean } = {},
 ): Promise<ErrorRow[]> {
   const { rows } = await c.query(
-    `select id, at, kind, digest, message, stack, path, tenant_id, user_id, seen
+    `select id, at, last_at, occurrences, kind, digest, message, stack, path,
+            tenant_id, user_id, seen
      from ops.errors
      ${opts.onlyUnseen ? 'where not seen' : ''}
-     order by at desc
+     order by last_at desc
      limit $1`,
     [Math.min(opts.limit ?? 100, 500)],
   );
+  const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : String(v));
   return rows.map((r) => ({
     id: String(r.id),
-    at: r.at instanceof Date ? r.at.toISOString() : String(r.at),
+    at: iso(r.at),
+    lastAt: iso(r.last_at),
+    occurrences: Number(r.occurrences),
     kind: r.kind,
     digest: r.digest,
     message: r.message,
