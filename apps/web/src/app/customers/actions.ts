@@ -29,7 +29,7 @@ export async function saveContactAction(_prev: FormResult, fd: FormData): Promis
   const kept = keepValues(fd);
 
   const code = str(fd, 'code');
-  if (!code) return { error: 'ต้องกรอกรหัสผู้ติดต่อ', field: 'code', values: kept };
+  if (!code) return { error: 'ต้องกรอกรหัสลูกค้า หรือ ทะเบียนรถ', field: 'code', values: kept };
 
   const orgName = str(fd, 'orgName');
   const firstName = str(fd, 'firstName');

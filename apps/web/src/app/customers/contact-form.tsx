@@ -136,7 +136,7 @@ export function ContactForm({
 
       <div className="row-fields f3">
         <div className={bad('code')}>
-          <label htmlFor="code">รหัสผู้ติดต่อ *</label>
+          <label htmlFor="code">รหัสลูกค้า หรือ ทะเบียนรถ *</label>
           <input className="in mono" id="code" name="code" required
                  defaultValue={val('code', contact?.code ?? defaultCode)} />
         </div>
