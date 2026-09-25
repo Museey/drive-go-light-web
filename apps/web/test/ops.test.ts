@@ -55,6 +55,9 @@ describe.skipIf(!DB_URL)('ตาราง ops.errors', () => {
     await freshSchema(admin, [
       'db/001_init.sql', 'db/002_auth.sql', 'db/008_ops.sql',
       'db/011_ops_console.sql', 'db/013_ops_grants.sql',
+      /* ต้องอยู่ท้ายสุดเหมือนลำดับไมเกรชันจริง — ไฟล์นี้สร้าง list_errors ใหม่
+         ถ้ารันก่อน 011 ตัวเก่าจะทับกลับแล้วคอลัมน์จำนวนครั้งหายไป */
+      'db/035_error_dedup.sql',
     ]);
     await admin.query(`
       do $$ begin
@@ -131,11 +134,74 @@ describe.skipIf(!DB_URL)('ตาราง ops.errors', () => {
   it('ลบของเกิน 90 วันทิ้ง', async () => {
     await recordErrorWith(admin, { kind: 'server', message: 'ใหม่' });
     await admin.query(
-      `insert into ops.errors (at, kind, message) values (now() - interval '100 days','server','เก่า')`,
+      `insert into ops.errors (at, last_at, kind, message)
+       values (now() - interval '100 days', now() - interval '100 days','server','เก่า')`,
     );
     const { rows } = await admin.query('select ops.prune_errors(90) as n');
     expect(Number(rows[0].n)).toBe(1);
     expect(await listErrorsWith(admin)).toHaveLength(1);
+  });
+
+  /**
+   * ของที่เริ่มนานแล้วแต่ยังเกิดอยู่ทุกวัน คือปัญหาที่กำลังเกิดจริง ไม่ใช่ประวัติเก่า
+   * ถ้าล้างตามครั้งแรกเหมือนเดิม ของพวกนี้จะหายไปเงียบ ๆ ทั้งที่ยังพังอยู่ (db/035)
+   */
+  it('ของที่เริ่มนานแล้วแต่เพิ่งเกิดซ้ำ ไม่ถูกลบ', async () => {
+    await admin.query(
+      `insert into ops.errors (at, last_at, kind, message, occurrences)
+       values (now() - interval '100 days', now(), 'server', 'ลากยาว', 500)`,
+    );
+    const { rows } = await admin.query('select ops.prune_errors(90) as n');
+    expect(Number(rows[0].n)).toBe(0);
+    expect(await listErrorsWith(admin)).toHaveLength(1);
+  });
+
+  /* ---------- รวมแถวที่ซ้ำกัน (db/035) ----------
+     ทางเข้า reportClientError ไม่ต้องล็อกอิน เดิมทุกครั้งที่ถูกเรียกคือหนึ่งแถวใหม่
+     ใครก็ถมตารางจนดิสก์เต็มได้ และดิสก์นั้นเป็นของทุกอู่ร่วมกัน (ตรวจ 24 ก.ย. 2569) */
+
+  it('ข้อผิดพลาดเดิมซ้ำ ๆ รวมเป็นแถวเดียวแล้วนับจำนวนครั้ง', async () => {
+    for (let i = 0; i < 50; i++) {
+      await recordErrorWith(admin, { kind: 'client', message: 'พังเหมือนเดิม', path: '/income' });
+    }
+    const rows = await listErrorsWith(admin);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.occurrences).toBe(50);
+  });
+
+  it('เกิดซ้ำแล้วกลับมาเป็นยังไม่อ่าน — ของที่เคยกดอ่านต้องเด้งขึ้นมาใหม่', async () => {
+    const id = await recordErrorWith(admin, { kind: 'server', message: 'กลับมาอีก' });
+    await markSeenWith(admin, [id!]);
+    expect(await listErrorsWith(admin, { onlyUnseen: true })).toHaveLength(0);
+
+    await recordErrorWith(admin, { kind: 'server', message: 'กลับมาอีก' });
+    const unseen = await listErrorsWith(admin, { onlyUnseen: true });
+    expect(unseen).toHaveLength(1);
+    expect(unseen[0]!.occurrences).toBe(2);
+  });
+
+  it('คนละข้อความ คนละหน้า หรือคนละชนิด ไม่ถูกรวมเข้าด้วยกัน', async () => {
+    await recordErrorWith(admin, { kind: 'client', message: 'ก', path: '/a' });
+    await recordErrorWith(admin, { kind: 'client', message: 'ข', path: '/a' });
+    await recordErrorWith(admin, { kind: 'client', message: 'ก', path: '/b' });
+    await recordErrorWith(admin, { kind: 'server', message: 'ก', path: '/a' });
+    expect(await listErrorsWith(admin)).toHaveLength(4);
+  });
+
+  /** Next จัดกลุ่มด้วย digest อยู่แล้ว — ข้อความต่างแต่ digest เดียวกันคือตัวเดียวกัน */
+  it('digest เดียวกันถือเป็นตัวเดียวกันแม้ข้อความต่าง', async () => {
+    await recordErrorWith(admin, { kind: 'server', message: 'รอบแรก', digest: 'abc123' });
+    await recordErrorWith(admin, { kind: 'server', message: 'รอบสอง', digest: 'abc123' });
+    const rows = await listErrorsWith(admin);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.occurrences).toBe(2);
+  });
+
+  it('แถวที่รวมแล้วลอยขึ้นบนสุดเมื่อกลับมาเกิดอีก', async () => {
+    await recordErrorWith(admin, { kind: 'server', message: 'เก่ากว่า' });
+    await recordErrorWith(admin, { kind: 'server', message: 'ใหม่กว่า' });
+    await recordErrorWith(admin, { kind: 'server', message: 'เก่ากว่า' });
+    expect((await listErrorsWith(admin))[0]!.message).toBe('เก่ากว่า');
   });
 
   /** ข้อผิดพลาดเกิดก่อนรู้ว่าเป็นอู่ไหนได้ และต้องอ่านข้ามอู่ได้ตอนไล่ปัญหา */

@@ -37,4 +37,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '032_product_limit.sql',
   '033_staff_admin.sql',
   '034_product_code_ci.sql',
+  '035_error_dedup.sql',
 ];

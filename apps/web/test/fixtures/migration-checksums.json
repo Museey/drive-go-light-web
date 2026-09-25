@@ -32,5 +32,6 @@
   "031_ops_owner_scope.sql": "2adaee021596876abf1093e2dd816e543f1d69a1e6b30c923f32311459020c01",
   "032_product_limit.sql": "c0686b339439e24b1a169e151f1636c4bcceaf3c126f205cf8c85f46cca4ba0e",
   "033_staff_admin.sql": "e825343052bcec31bb572dd41b5f0e6664f70f4018ade9909e09b500c33163ad",
-  "034_product_code_ci.sql": "18fbbefad3175e4b30159ef5f0f8edfcd24c60aca2fcc5205561066c9bae5bbb"
+  "034_product_code_ci.sql": "18fbbefad3175e4b30159ef5f0f8edfcd24c60aca2fcc5205561066c9bae5bbb",
+  "035_error_dedup.sql": "f526f93aadc5d1ebe12d662c04241249617fd920c85011b9232ee3c9efa321a4"
 }
