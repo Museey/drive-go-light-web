@@ -177,7 +177,7 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
                   <th style={{ width: 34 }}>ลำดับ</th>
                   <th style={{ width: 96 }}>รหัสสินค้า</th>
                   <th>รายการ</th>
-                  <th style={{ width: 50 }}>จำนวน</th>
+                  <th style={{ width: 72 }}>จำนวน</th>
                   <th style={{ width: 80 }}>ราคา/หน่วย</th>
                   {hasDisc ? <th style={{ width: 54 }}>ส่วนลด</th> : null}
                   <th style={{ width: 90 }}>จำนวนเงิน</th>
@@ -189,7 +189,7 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
                     <td style={{ textAlign: 'center' }}>{it.lineNo}</td>
                     <td>{it.code}</td>
                     <td>{it.name}</td>
-                    <td style={{ textAlign: 'right' }}>{it.qty.toLocaleString('en-US')}</td>
+                    <td style={{ textAlign: 'right' }}>{it.qty.toLocaleString('en-US')}{it.unit ? ` ${it.unit}` : ''}</td>
                     <td style={{ textAlign: 'right' }}>{baht(it.unitPrice)}</td>
                     {hasDisc ? <td style={{ textAlign: 'right' }}>{it.discPct > 0 ? `${it.discPct}%` : ''}</td> : null}
                     <td style={{ textAlign: 'right' }}>{baht(it.lineTotal)}</td>
