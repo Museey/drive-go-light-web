@@ -43,6 +43,12 @@ export default async function FormsPage({
             ))}
           </nav>
         </SubnavPortal>
+        {/* จอแคบ (<1280px) ปุ่มเครื่องมือของหัวหน้าถูกย้ายเข้าลิ้นชัก — ฟอร์มเปล่ามีไว้พิมพ์อย่างเดียว
+            จึงวางปุ่มไว้เหนือกระดาษให้กดได้เลย (เดสก์ท็อปใช้ปุ่มที่หัวหน้า) */}
+        <div className="printbar forms-printbar">
+          <PrintButton label="🖨 พิมพ์ฟอร์มนี้" />
+          <span className="subtle">{FORM_LABEL[kind]} · กระดาษ A4</span>
+        </div>
         <div className="printview blank-forms">
           {/* ตอนพิมพ์ย่อให้พอดี A4 แผ่นเดียว (วัดความสูงจริงของกระดาษ) */}
           <FitToPage />

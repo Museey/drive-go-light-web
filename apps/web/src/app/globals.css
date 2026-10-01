@@ -656,6 +656,7 @@ table.doc td.blank { height: 22px; }
   padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: var(--z-sticky);
 }
+@media (min-width: 1280px) { .forms-printbar { display: none; } }
 .printview { background: #DFE6EA; padding: 20px; min-height: 100vh; }
 /* บนจอแคบ ตารางในกระดาษกว้างกว่าจอ (รายงานการเงิน 873px ที่มือถือ) — เลื่อนในกรอบกระดาษ ไม่ใช่ทั้งหน้า
    เฉพาะบนจอ: ตอนพิมพ์ overflow ของกล่องแม่ตัดกระดาษหน้าสองทิ้งได้ */
