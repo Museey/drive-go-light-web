@@ -35,6 +35,9 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
   const vatRate = money(fd, 'vatRate');
   if (vatRate < 0 || vatRate > 30) return { error: 'อัตราภาษีมูลค่าเพิ่มไม่สมเหตุสมผล', field: 'vatRate' };
 
+  /* ค่าที่ไม่ใช่ 'no' ถือว่าจด — ฟอร์มที่ไม่ได้ส่งช่องนี้มาต้องไม่ทำให้ร้านที่คิด VAT อยู่กลายเป็นไม่จดเงียบ ๆ */
+  const vatRegistered = str(fd, 'vatRegistered') !== 'no';
+
   /* ฐานบังคับ 1–3650 อยู่แล้ว ดักที่นี่ด้วยเพื่อให้ข้อความอ่านรู้เรื่อง
      ไม่ใช่ชื่อ constraint ดิบ ๆ โผล่ขึ้นหน้าจอ */
   const warnDays = Math.round(money(fd, 'expiryWarnDays')) || 60;
@@ -71,7 +74,7 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
       name, taxId,
       addrText: str(fd, 'addrText'),
       tel: str(fd, 'tel'), tel2: str(fd, 'tel2'),
-      vatRate, whtRate: money(fd, 'whtRate'),
+      vatRate, vatRegistered, whtRate: money(fd, 'whtRate'),
       priceTier: (['A', 'B', 'C'].includes(str(fd, 'priceTier')) ? str(fd, 'priceTier') : 'A') as 'A',
       proposerName: str(fd, 'proposerName'),
       warrantyText: str(fd, 'warrantyText'),
@@ -92,7 +95,8 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
   }
 
   revalidatePath('/settings');
-  revalidatePath('/');
+  /* การจด VAT เปลี่ยนเมนูและฟอร์มของทุกหน้า (เมนู 03.2 · ช่อง VAT) — ล้างทั้งแอป ไม่ใช่แค่หน้าแรก */
+  revalidatePath('/', 'layout');
   return { ok: true };
 }
 

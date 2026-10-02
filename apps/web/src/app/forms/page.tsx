@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { requireSession } from '@/lib/auth';
 import { getShop } from '@/lib/queries';
 import { PrintButton } from '../income/[id]/print/print-button';
-import { BlankForm, FORM_LABEL, type FormKind } from './blank-forms';
+import { BlankForm, formLabel, type FormKind } from './blank-forms';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,16 +29,18 @@ export default async function FormsPage({
     tel: shop.tel ?? '',
     tel2: shop.tel2 ?? '',
     taxId: shop.taxId ?? '',
+    vatRegistered: shop.vatRegistered,
   };
+  const label = (k: FormKind) => formLabel(k, shop.vatRegistered);
 
   return (
-    <Shell current="/forms" title="พิมพ์ฟอร์มเปล่า" sub={FORM_LABEL[kind]} tools={<PrintButton label="🖨 พิมพ์" />}>
+    <Shell current="/forms" title="พิมพ์ฟอร์มเปล่า" sub={label(kind)} tools={<PrintButton label="🖨 พิมพ์" />}>
       <div className="subwrap">
         <SubnavPortal>
           <nav className="subnav" aria-label="ฟอร์มเปล่า">
             {ORDER.map((k, i) => (
               <Link key={k} href={{ pathname: '/forms', query: { kind: k } }} aria-current={k === kind ? 'true' : undefined}>
-                <span className="si"><Icon name="listp" size={28} color="#1D8A5F" /></span><span className="sw"><span>{FORM_LABEL[k].replace(/ \(.*\)$/, '')}</span></span><u>09.{i + 1}</u>
+                <span className="si"><Icon name="listp" size={28} color="#1D8A5F" /></span><span className="sw"><span>{label(k).replace(/ \(.*\)$/, '')}</span></span><u>09.{i + 1}</u>
               </Link>
             ))}
           </nav>
@@ -47,7 +49,7 @@ export default async function FormsPage({
             จึงวางปุ่มไว้เหนือกระดาษให้กดได้เลย (เดสก์ท็อปใช้ปุ่มที่หัวหน้า) */}
         <div className="printbar forms-printbar">
           <PrintButton label="🖨 พิมพ์ฟอร์มนี้" />
-          <span className="subtle">{FORM_LABEL[kind]} · กระดาษ A4</span>
+          <span className="subtle">{label(kind)} · กระดาษ A4</span>
         </div>
         <div className="printview blank-forms">
           {/* ตอนพิมพ์ย่อให้พอดี A4 แผ่นเดียว (วัดความสูงจริงของกระดาษ) */}

@@ -5,6 +5,8 @@ import { MENU, permSubKey, type SubItem } from './menu-map';
 import { can, currentSession } from '@/lib/auth';
 import { SubnavPortal } from './subnav-portal';
 import { canTab, type PermKey } from '@/lib/perms';
+import { getVatRegistered } from '@/lib/queries';
+import { shopHasSub } from './nav-data';
 
 /**
  * เมนูย่อยแนวตั้งชิดซ้าย ตามรุ่น 6.4
@@ -40,9 +42,12 @@ export async function SubNav({
   const item = MENU.find((m) => m.key === menu);
   const session = await currentSession();
   const all = item?.subs ?? [];
-  const subs = session && item?.perm
+  /* แท็บที่ขึ้นกับการตั้งค่าร้านมีแค่ในเมนูรายรับ (03.2 ใบกำกับภาษี) — เมนูอื่นไม่ต้องอ่านฐานเพิ่ม */
+  const shop = session && menu === 'income' ? { vatRegistered: await getVatRegistered() } : undefined;
+  const subs = (session && item?.perm
     ? all.filter((s2) => canTab(session, item.perm as PermKey, permSubKey(s2)))
-    : all;
+    : all
+  ).filter((s2) => shopHasSub(menu, s2, shop));
 
   /* การ์ดสร้าง (สีอำพัน) — กรองตามสิทธิ์เมนูหลัก */
   /* การ์ดสร้าง (อำพัน) ย้ายไปต่อท้ายแถบไทล์ด้านบนของหน้ารายการแล้ว (ActionTiles)

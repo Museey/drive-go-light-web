@@ -5,7 +5,7 @@ import { safeBack } from '@/lib/saved-target';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
-import { canEdit, loadDocForEdit, lotExpiryOf, docNoOf } from '@/lib/sales';
+import { canEdit, loadDocForEdit, lotExpiryOf, docNoOf, parentKindOf } from '@/lib/sales';
 import { today } from '@drivegolight/core';
 import { KIND_LABEL } from '@/lib/format';
 import { DocEditor } from '../../doc-editor';
@@ -24,7 +24,9 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
   }
 
   /* loadDocForEdit ติดรหัสและฉบับของใบมาด้วย — กดบันทึกแล้วฉบับไม่ตรงคือมีคนแก้ทับระหว่างเปิดอยู่ (doc-version.ts) */
-  const [initial, shop, docNo] = await Promise.all([loadDocForEdit(id), getShop(), docNoOf(id)]);
+  const [initial, shop, docNo, parentKind] = await Promise.all([
+    loadDocForEdit(id), getShop(), docNoOf(id), parentKindOf(id),
+  ]);
   if (!initial) notFound();
   const source = initial;
   const lotExpiry = await lotExpiryOf(source.items.map((i) => i.productId));
@@ -38,6 +40,7 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
     >
       {/* key = รหัสเอกสาร — จากหน้าแก้ไขใบหนึ่งไปอีกใบ ฟอร์มต้องไม่ค้างข้อมูลใบเดิม */}
       <DocEditor key={id} initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="edit"
+                 vatRegistered={shop.vatRegistered} parentKind={parentKind}
                  lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
                  docNo={docNo ?? undefined} returnTo={back ?? undefined} />
     </Shell>

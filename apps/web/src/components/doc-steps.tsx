@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { invoiceKind } from '@/lib/sales-rules';
 
 /**
  * ลำดับขั้นตอนงานขาย A → B → C (ตามเอกสารเจ๊ก ข้อ 4, 5, 7)
@@ -23,7 +24,7 @@ const STEPS = [
   { key: 'C', label: 'ใบเสร็จรับเงิน', sub: 'C' },
 ];
 
-export function DocSteps({ kind, id, parent, child, voided, canContinue = true }: {
+export function DocSteps({ kind, id, parent, child, voided, canContinue = true, vatRegistered = true }: {
   /** ชนิดของเอกสารที่กำลังดู/ทำ */
   kind: string;
   /** id ของเอกสารนี้ — มีเมื่ออยู่หน้าเอกสาร (ใช้สร้างลิงก์ออกใบต่อ) */
@@ -35,6 +36,8 @@ export function DocSteps({ kind, id, parent, child, voided, canContinue = true }
   voided?: boolean;
   /** ผู้ใช้ออกใบขั้นถัดไปได้ไหม (สิทธิ์) */
   canContinue?: boolean;
+  /** ร้านจดภาษีมูลค่าเพิ่มหรือไม่ — ไม่จด = ขั้น B คือใบส่งมอบไม่มี VAT (ออกใบกำกับภาษีไม่ได้) */
+  vatRegistered?: boolean;
 }) {
   const cur = STEP_OF[kind] ?? 0;
   const parentStep = parent ? STEP_OF[parent.kind] ?? -1 : -1;
@@ -55,7 +58,7 @@ export function DocSteps({ kind, id, parent, child, voided, canContinue = true }
           state = 'done'; href = `/income/${child!.id}`; note = child!.docNo;
         } else if (i === cur + 1 && !voided && id && canContinue && !child) {
           state = 'next';
-          href = `/income/new?kind=${i === 1 ? 'IVT' : 'RC'}&from=${id}`;
+          href = `/income/new?kind=${i === 1 ? invoiceKind(vatRegistered) : 'RC'}&from=${id}`;
           note = 'ทำขั้นตอนนี้ต่อ →';
         }
 
@@ -63,7 +66,7 @@ export function DocSteps({ kind, id, parent, child, voided, canContinue = true }
           <>
             <b>{s.key}</b>
             <span className="lbl">{s.label}</span>
-            <span className="sub">{note || (state === 'skip' ? 'ข้าม' : s.sub)}</span>
+            <span className="sub">{note || (state === 'skip' ? 'ข้าม' : i === 1 && !vatRegistered ? 'ใบแจ้งหนี้ (ไม่มี VAT)' : s.sub)}</span>
           </>
         );
         return (

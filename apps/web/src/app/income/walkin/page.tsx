@@ -57,7 +57,7 @@ export default async function WalkinPage({
 
   const form = hist ? null : await (async () => {
     const [shop, warranty, noteDefault] = await Promise.all([getShop(), getDefaultWarranty(), getDefaultNote()]);
-    let initial = blankSalesDoc('RC', warranty, shop.whtRate);
+    let initial = blankSalesDoc('RC', warranty, shop.whtRate, shop.vatRegistered);
     initial = { ...initial, note: initial.note || noteDefault, partyName: WALK_IN_CUSTOMER };
     const [lotExpiry, seq] = await Promise.all([
       lotExpiryOf(initial.items.map((it) => it.productId)),
@@ -98,6 +98,7 @@ export default async function WalkinPage({
         {form ? (
           <div id="new-doc" style={{ marginBottom: 14 }}>
             <DocEditor initial={form.initial} vatRate={form.shop.vatRate} shopWhtRate={form.shop.whtRate} mode="new"
+                       vatRegistered={form.shop.vatRegistered}
                        docNoPreview={{ seq: form.seq, month: form.initial.docDate.slice(0, 7) }}
                        lotExpiry={form.lotExpiry} expiryWarnDays={form.shop.expiryWarnDays} today={todayIso}
                        cashOnOpen banks={form.shop.bankAccounts} returnTo="/income/walkin" />

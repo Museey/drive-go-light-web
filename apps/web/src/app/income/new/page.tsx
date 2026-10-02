@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 /* วันที่ตั้งต้นของใบใหม่ต้องเป็นวันที่ตามเวลาไทย ไม่ใช่ของเครื่องที่รัน —
    เซิร์ฟเวอร์ตั้งเป็น UTC ใบที่เปิดตอนตีหนึ่งจะได้วันที่ของเมื่อวานบนเอกสารภาษี */
 import { today } from '@drivegolight/core';
@@ -11,6 +12,7 @@ import { blankSalesDoc, childOf, docNoOf,
   WALK_IN_CUSTOMER, type SalesDocInput, type SalesKind, peekDocSeq } from '@/lib/sales';
 import { PickSource } from './pick-source';
 import { pickSourceTarget } from '@/lib/doc-flow';
+import { canIssueKind, forcedVatMode, invoiceKind } from '@/lib/sales-rules';
 import { KIND_LABEL } from '@/lib/format';
 import { DocEditor } from '../doc-editor';
 
@@ -31,6 +33,17 @@ export default async function NewDocPage({
   await requireTab('income', 'receipt');
   const sp = await searchParams;
   const kind = (KINDS.includes(sp.kind as SalesKind) ? sp.kind : 'QT') as SalesKind;
+  const shop = await getShop();
+
+  /* ร้านที่ไม่จด VAT ออกใบกำกับภาษีไม่ได้ — ลิงก์เก่าหรือที่คั่นหน้าที่ชี้มาที่ IVT
+     พาไปใบส่งมอบแบบไม่มี VAT แทน ค่าอื่นในลิงก์ (ใบต้นทาง · คัดลอก) ติดไปด้วยครบ */
+  if (!canIssueKind(kind, shop.vatRegistered)) {
+    const q = new URLSearchParams(
+      Object.entries(sp).filter((e): e is [string, string] => typeof e[1] === 'string'),
+    );
+    q.set('kind', invoiceKind(false));
+    redirect(`/income/new?${q}`);
+  }
 
   /*
    * `copy=1` คือ "คัดลอกใบใหม่" — ตั้งต้นจากใบเดิมแต่**ไม่ผูกเป็นลูก**
@@ -91,8 +104,7 @@ export default async function NewDocPage({
     );
   }
 
-  const [shop, warranty, noteDefault, source, party] = await Promise.all([
-    getShop(),
+  const [warranty, noteDefault, source, party] = await Promise.all([
     getDefaultWarranty(),
     getDefaultNote(),
     sp.from ? loadDocForCopy(resolved.sourceId || sp.from, copying) : Promise.resolve(null),
@@ -100,7 +112,7 @@ export default async function NewDocPage({
     sp.party && !sp.from ? pickContactById(sp.party) : Promise.resolve(null),
   ]);
 
-  let initial = blankSalesDoc(kind, warranty, shop.whtRate);
+  let initial = blankSalesDoc(kind, warranty, shop.whtRate, shop.vatRegistered);
   /* หมายเหตุมาตรฐานของร้าน — เฉพาะใบใหม่ที่ยังว่าง ใบที่ออกต่อจากใบอื่นเอาหมายเหตุของต้นทางมา */
   initial = { ...initial, note: initial.note || noteDefault };
 
@@ -113,7 +125,10 @@ export default async function NewDocPage({
       kind,
       docDate: today(),
       parentDocId: copying ? null : (resolved.sourceId || sp.from!),
-      vatMode: kind === 'IVT' ? 'ex' : kind === 'IV' ? 'none' : source.vatMode,
+      /* กติกาเดียวกับฟอร์มและเซิร์ฟเวอร์ (vatChoices) — ร้านที่ไม่จด VAT ได้ "ไม่คิด" เว้นแต่ต่อจากใบกำกับภาษี */
+      vatMode: forcedVatMode(kind, source.vatMode, {
+        registered: shop.vatRegistered, parentKind: copying ? null : source.kind,
+      }),
       whtRate: kind === 'QT' ? 0 : (source.whtRate || shop.whtRate),
       warrantyText: kind === 'RC' ? (source.warrantyText || warranty) : source.warrantyText,
       payments: [],
@@ -155,7 +170,7 @@ export default async function NewDocPage({
         : undefined}
       actions={
         <div className="tag-row">
-          {KINDS.map((k) => (
+          {KINDS.filter((k) => canIssueKind(k, shop.vatRegistered)).map((k) => (
             <Link key={k} className="chip"
                   href={{ pathname: '/income/new', query: { kind: k, ...(sp.from ? { from: sp.from } : {}) } }}
                   style={k === kind ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined}>
@@ -177,6 +192,7 @@ export default async function NewDocPage({
           React ใช้ฟอร์มตัวเดิมต่อ ค่าตั้งต้นใหม่ไม่ถูกใช้ ฟอร์มค้างเป็นชนิดเดิมจนกว่าจะรีเฟรช */}
       <DocEditor key={`${kind}:${resolved.sourceId}:${copying ? 'copy' : ''}:${sp.party ?? ''}:${walkin ? 'walkin' : ''}`}
                  initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="new"
+                 vatRegistered={shop.vatRegistered} parentKind={source && !copying ? source.kind : null}
                  docNoPreview={{ seq: await peekDocSeq(kind, initial.docDate), month: initial.docDate.slice(0, 7) }}
                  lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
                  cashOnOpen={walkin} banks={shop.bankAccounts} />

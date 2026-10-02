@@ -17,14 +17,35 @@ export interface NavItem {
   subs: SubItem[];
 }
 
-export function navItems(session: Session): NavItem[] {
+/** การตั้งค่าร้านที่ทำให้บางแท็บไม่มีให้ใช้ — คนละเรื่องกับสิทธิ์ของผู้ใช้ */
+export interface ShopNav {
+  /** ร้านจดภาษีมูลค่าเพิ่มหรือไม่ — ไม่จด = ไม่มีแท็บใบกำกับภาษี (03.2) */
+  vatRegistered: boolean;
+}
+
+/**
+ * แท็บนี้มีให้ใช้ในร้านนี้ไหม ตามการตั้งค่าร้าน (ไม่ใช่ตามสิทธิ์)
+ *
+ * ร้านที่ไม่จด VAT ออกใบกำกับภาษีไม่ได้ (ผู้ใช้เลือก 2 ต.ค. 2569 "ซ่อนและห้ามออก")
+ * 03.2 จึงหายไป เหลือ 03.3 ใบส่งมอบไม่มี VAT — สิทธิ์ของ 03.3 ผูกกับ 03.2 อยู่แล้ว (permSubKey)
+ * พนักงานที่ติ๊กสิทธิ์ใบส่งมอบไว้จึงยังเห็น 03.3 เหมือนเดิม
+ *
+ * ผังเมนูใน menu-map.ts ไม่เปลี่ยน (เทสต์เทียบกับ 6.4 ไม่กระทบ) — กรองตอนแสดงผลเท่านั้น
+ * และการซ่อนไม่ใช่การป้องกัน — saveSalesDoc ปฏิเสธใบกำกับภาษีของร้านที่ไม่จดเอง
+ */
+export function shopHasSub(menu: string, sub: SubItem, shop?: ShopNav): boolean {
+  return !(shop && !shop.vatRegistered && menu === 'income' && sub.key === 'invoice');
+}
+
+export function navItems(session: Session, shop?: ShopNav): NavItem[] {
   return MENU
     .filter((m) => !m.perm || canMenu(session, m.perm))
     .map((menu) => ({
       menu,
-      subs: menu.perm
+      subs: (menu.perm
         ? (menu.subs ?? []).filter((s) => canTab(session, menu.perm as PermKey, permSubKey(s)))
-        : (menu.subs ?? []),
+        : (menu.subs ?? [])
+      ).filter((s) => shopHasSub(menu.key, s, shop)),
     }));
 }
 
@@ -46,8 +67,8 @@ export const TAB_KEYS = ['home', 'customer', 'income', 'stock', 'expense'] as co
 export const TAB_LABEL: Partial<Record<(typeof TAB_KEYS)[number], string>> = { customer: 'ลูกค้า' };
 
 /** เมนูที่ควรอยู่ในแถบล่าง เรียงตามที่กำหนดไว้ และเฉพาะที่ผู้ใช้คนนี้เข้าได้ */
-export function tabItems(session: Session): NavItem[] {
-  const all = navItems(session);
+export function tabItems(session: Session, shop?: ShopNav): NavItem[] {
+  const all = navItems(session, shop);
   return TAB_KEYS
     .map((k) => all.find((n) => n.menu.key === k))
     .filter((n): n is NavItem => Boolean(n));

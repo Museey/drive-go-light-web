@@ -38,4 +38,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '033_staff_admin.sql',
   '034_product_code_ci.sql',
   '035_error_dedup.sql',
+  '036_vat_registered.sql',
 ];

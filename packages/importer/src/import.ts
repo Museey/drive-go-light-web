@@ -263,6 +263,8 @@ export async function importBackup(
     if ('_ownerName' in shop) extraShop.push(['owner_name', text(shop._ownerName)]);
     if ('_signature' in shop) extraShop.push(['signature_url', text(shop._signature) || null]);
     if ('_noteDefault' in shop) extraShop.push(['note_default', text(shop._noteDefault)]);
+    /* จด VAT หรือไม่ (036) — รับเฉพาะ true/false จริง ไฟล์ที่ไม่มีคีย์นี้ (รวมไฟล์รุ่น 6.4) ไม่แตะค่าเดิม */
+    if (typeof shop._vatRegistered === 'boolean') extraShop.push(['vat_registered', shop._vatRegistered]);
     if (Array.isArray(shop._bankAccounts)) {
       const banks = shop._bankAccounts
         .filter((b: any) => b && typeof b === 'object')

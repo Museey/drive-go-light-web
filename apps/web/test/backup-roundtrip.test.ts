@@ -231,6 +231,7 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
       `update tenants set owner_name = 'สมศักดิ์ ใจดี',
               signature_url = 'data:image/png;base64,iVBORw0KGgo=',
               note_default = 'รับประกันงานซ่อม 3 เดือน',
+              vat_registered = false,
               bank_accounts = $2::jsonb,
               bank_name = 'กสิกรไทย', bank_account_no = '123-4-56789-0', bank_account_name = 'อู่ทดสอบ'
         where id = $1`,
@@ -744,14 +745,16 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     expect(await read(secondTenant)).toEqual(a);
   });
 
-  it('ชื่อเจ้าของ ลายเซ็น หมายเหตุมาตรฐาน และบัญชีรับโอนทุกธนาคารตามมาครบ', async () => {
+  it('ชื่อเจ้าของ ลายเซ็น หมายเหตุมาตรฐาน บัญชีรับโอนทุกธนาคาร และการจด VAT ตามมาครบ', async () => {
     const read = async (tenantId: string) => (await admin.query(
       `select owner_name, signature_url, note_default, bank_accounts,
-              bank_name, bank_account_no, bank_account_name
+              bank_name, bank_account_no, bank_account_name, vat_registered
          from tenants where id = $1`, [tenantId])).rows[0];
     const a = await read(firstTenant);
     expect(a.bank_accounts).toHaveLength(2);
     expect(a.owner_name).toBe('สมศักดิ์ ใจดี');
+    /* ค่าตั้งต้นคือจด — ตั้งเป็นไม่จดไว้ จะได้รู้ว่าค่าตามมาจริง ไม่ใช่ได้ค่าตั้งต้นของอู่ใหม่ */
+    expect(a.vat_registered).toBe(false);
     expect(await read(secondTenant)).toEqual(a);
   });
 

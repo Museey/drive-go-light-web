@@ -16,6 +16,7 @@ import { canEdit, canTab } from '@/lib/perms';
 import { TodoCell } from './todo-cell';
 import { IncomeHistoryTable } from './history-table';
 import { NEW_BTNS, newBtnHref } from '@/lib/doc-flow';
+import { canIssueKind, type SalesKind } from '@/lib/sales-rules';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,9 +76,12 @@ export default async function IncomePage({
   /* งานค้างส่งมอบ — ใบเสนอราคาที่ยังไม่ออกใบต่อ (ลิงก์มาจากการ์ดหน้าแรก) */
   const openOnly = sp.open === '1';
   const todayIso = today();
+  const shop = await getShop();
   /* ทุกเมนูย่อยของรายรับเปิดมาเป็น "หน้าสร้างเอกสารใหม่" ทันที ประวัติต่อด้านล่าง
-     กดไทล์ประวัติ (hist=1) จึงสลับให้ประวัติขึ้นบน */
-  const formKind = (['QT', 'IVT', 'IV', 'RC'] as const).find((k) => k === kind) ?? null;
+     กดไทล์ประวัติ (hist=1) จึงสลับให้ประวัติขึ้นบน
+     ร้านที่ไม่จด VAT ไม่มีฟอร์มใบกำกับภาษี — ?kind=IVT เหลือแค่ประวัติใบเก่า */
+  const formKind = (['QT', 'IVT', 'IV', 'RC'] as const)
+    .find((k) => k === kind && canIssueKind(k, shop.vatRegistered)) ?? null;
   const histFirst = sp.hist === '1' || !formKind;
   /* หลังบันทึกกลับมาหน้านี้ตามเดิม (คงชนิด/ตัวกรอง) */
   const returnTo = `/income?kind=${kind}${sp.hist === '1' ? '&hist=1' : ''}${sp.vat ? `&vat=${sp.vat}` : ''}`;
@@ -85,12 +89,12 @@ export default async function IncomePage({
   const { rows, total } = await listIncomeDocs({
     search, kind, page, from, to, pageSize, includeVoid, openOnly, vat,
   });
-  const shopBanks = (await getShop()).bankAccounts ?? [];
+  const shopBanks = shop.bankAccounts ?? [];
 
   /* ข้อมูลสำหรับฟอร์มสร้างใหม่ (ชุดเดียวกับ /income/new) */
   const form = formKind ? await (async () => {
-    const [shop, warranty, noteDefault] = await Promise.all([getShop(), getDefaultWarranty(), getDefaultNote()]);
-    let initial = blankSalesDoc(formKind, warranty, shop.whtRate);
+    const [warranty, noteDefault] = await Promise.all([getDefaultWarranty(), getDefaultNote()]);
+    let initial = blankSalesDoc(formKind, warranty, shop.whtRate, shop.vatRegistered);
     initial = { ...initial, note: initial.note || noteDefault };
     const lotExpiry = await lotExpiryOf(initial.items.map((it) => it.productId));
     const seq = await peekDocSeq(formKind, initial.docDate);
@@ -145,7 +149,10 @@ export default async function IncomePage({
       <div className="card">
         <div className="toolbar">
           <div className="tiles">
-          {(STRIP[kind] ?? STRIP['']).map((t) => t.act ? (
+          {(STRIP[kind] ?? STRIP[''])
+            /* ไทล์ "+ สร้าง" ของชนิดที่ร้านออกไม่ได้ (ใบกำกับภาษีของร้านที่ไม่จด VAT) ไม่ต้องมีให้กด */
+            .filter((t) => !t.act || canIssueKind(t.query.kind as SalesKind, shop.vatRegistered))
+            .map((t) => t.act ? (
             <Link key={t.label} className="tile act" href={{ pathname: '/income', query: { kind: t.query.kind } }}>{t.label}</Link>
           ) : (
             <Link key={t.label} className="tile" aria-current={t.on?.({ kind, vat }) ? 'true' : undefined}
@@ -199,8 +206,8 @@ export default async function IncomePage({
                               cardTitle={kind ? `ประวัติ${KIND_SHORT[kind] ?? ''}` : 'ประวัติเอกสารทั้งหมด'}
                               more={lastPage > 1}
                               /* ปุ่มสร้างใหม่ต้องรู้ว่าจะสร้างใบอะไร — ยังไม่ได้เลือกชนิดก็ไม่มีปุ่ม */
-                              newHref={kind ? `/income?kind=${kind}` : undefined}
-                              newLabel={kind ? `＋ ${KIND_SHORT[kind] ?? 'สร้างใหม่'}` : undefined} />
+                              newHref={formKind ? `/income?kind=${kind}` : undefined}
+                              newLabel={formKind ? `＋ ${KIND_SHORT[kind] ?? 'สร้างใหม่'}` : undefined} />
         )}
 
         <div className="pager">
@@ -221,7 +228,7 @@ export default async function IncomePage({
 /** ฟอร์มสร้างเอกสารใหม่ที่ฝังในหน้ารายการ — ตัวเดียวกับ /income/new */
 function FormBlock({ form, kind, returnTo }: {
   returnTo: string;
-  form: { shop: { vatRate: number; whtRate: number; expiryWarnDays: number; bankAccounts: { bank: string; no: string; name: string }[] }; initial: Parameters<typeof DocEditor>[0]['initial']; lotExpiry: Record<string, string>; seq: number };
+  form: { shop: { vatRate: number; vatRegistered: boolean; whtRate: number; expiryWarnDays: number; bankAccounts: { bank: string; no: string; name: string }[] }; initial: Parameters<typeof DocEditor>[0]['initial']; lotExpiry: Record<string, string>; seq: number };
   kind: 'QT' | 'IVT' | 'IV' | 'RC';
 }) {
   return (
@@ -229,6 +236,7 @@ function FormBlock({ form, kind, returnTo }: {
       {/* key = ชนิดเอกสาร — กดแท็บ 03.1 → 03.2 → 03.4 เป็นหน้าเดียวกันแค่ ?kind= เปลี่ยน
           ไม่มี key React ใช้ฟอร์มตัวเดิม (ค่าตั้งต้นอยู่ใน useState ครั้งแรก) ฟอร์มค้างเป็นใบเสนอราคาจนกว่าจะรีเฟรช */}
       <DocEditor key={kind} initial={form.initial} vatRate={form.shop.vatRate} shopWhtRate={form.shop.whtRate} mode="new"
+                 vatRegistered={form.shop.vatRegistered}
                  docNoPreview={{ seq: form.seq, month: form.initial.docDate.slice(0, 7) }}
                  lotExpiry={form.lotExpiry} expiryWarnDays={form.shop.expiryWarnDays} today={today()}
                  cashOnOpen={kind === 'RC'} banks={form.shop.bankAccounts} returnTo={returnTo} />

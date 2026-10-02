@@ -22,6 +22,7 @@ export interface ChainDocView {
 
 export function DocActions({
   id, kind, docNo, partyName, canEdit, editReason, hasChild, chain = [], blocked = [], startVoiding = false,
+  vatRegistered = true,
 }: {
   id: string;
   kind: string;
@@ -42,11 +43,13 @@ export function DocActions({
    * ได้ความเร็วของการกดครั้งเดียวจากแถว โดยยังต้องกรอกเหตุผลและยืนยันเหมือนเดิม
    */
   startVoiding?: boolean;
+  /** ร้านจดภาษีมูลค่าเพิ่มหรือไม่ — ไม่จด = ไม่มีปุ่มออกใบกำกับภาษีต่อ */
+  vatRegistered?: boolean;
 }) {
   const [voiding, setVoiding] = useState(startVoiding);
   const [reason, setReason] = useState('');
 
-  const next = hasChild ? [] : nextKinds(kind as SalesKind);
+  const next = hasChild ? [] : nextKinds(kind as SalesKind, vatRegistered);
 
   if (voiding) {
     return (

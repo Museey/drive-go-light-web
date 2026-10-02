@@ -8,7 +8,11 @@ import { IntakeForm } from './intake-form';
  * และตัวเลือกจำนวนชุดจึงไม่มีแล้ว
  */
 
-type Shop = { name: string; addrText: string; tel: string; tel2: string; taxId: string };
+type Shop = {
+  name: string; addrText: string; tel: string; tel2: string; taxId: string;
+  /** ร้านไม่จด VAT — ไม่มีแถวภาษีและไม่มีคำว่าใบกำกับภาษีบนฟอร์ม (ผู้ใช้เลือก 2 ต.ค. 2569) */
+  vatRegistered?: boolean;
+};
 
 /** เส้นประให้เขียนมือ — ไม่ระบุความกว้าง = ยืดเต็มแถว (ในแถวที่เป็น flex) */
 const Wl = ({ w }: { w?: number }) => <span className="wl" style={w ? { width: w, minWidth: 0 } : undefined} />;
@@ -29,6 +33,14 @@ export const FORM_LABEL: Record<FormKind, string> = {
   billnote: 'ใบวางบิล (เขียนมือ)',
   purchase: 'ใบซื้อ / ค่าใช้จ่าย (เขียนมือ)',
 };
+
+/**
+ * ชื่อฟอร์มตามการจด VAT ของร้าน — ร้านที่ไม่จดออกใบกำกับภาษีไม่ได้
+ * ใบส่งมอบจึงเป็น "ใบส่งมอบ / ใบแจ้งหนี้" ตรงกับเอกสารที่ร้านออกได้จริง
+ */
+export function formLabel(kind: FormKind, vatRegistered = true): string {
+  return vatRegistered || kind !== 'invoice' ? FORM_LABEL[kind] : 'ใบส่งมอบ / ใบแจ้งหนี้ (เขียนมือ)';
+}
 
 const TITLE: Record<Exclude<FormKind, 'intake'>, string> = {
   quote: 'ใบเสนอราคา',
@@ -51,6 +63,9 @@ const SIGNS: Record<Exclude<FormKind, 'intake'>, string[]> = {
 
 export function BlankForm({ kind, shop }: { kind: FormKind; shop: Shop }) {
   if (kind === 'intake') return <IntakeForm shop={shop} />;
+  const vat = shop.vatRegistered !== false;
+  /* ร้านที่ไม่จด VAT ไม่มีใบกำกับภาษี — เลขที่ที่เขียนลงฟอร์มคือใบส่งมอบ / ใบแจ้งหนี้ */
+  const invoiceDoc = vat ? 'ใบส่งมอบ / ใบกำกับภาษี' : 'ใบส่งมอบ / ใบแจ้งหนี้';
 
   const blanks = (cols: number) => Array.from({ length: ROWS[kind] }).map((_, i) => (
     <tr key={i}><td className="blank" />{Array.from({ length: cols - 1 }).map((__, j) => <td key={j} />)}</tr>
@@ -65,7 +80,7 @@ export function BlankForm({ kind, shop }: { kind: FormKind; shop: Shop }) {
           <div>โทร {shop.tel} · เลขประจำตัวผู้เสียภาษี {shop.taxId}</div>
         </div>
         <div className="doc-meta">
-          <h1>{TITLE[kind]}</h1>
+          <h1>{kind === 'invoice' ? invoiceDoc : TITLE[kind]}</h1>
           <div className="docno-big" style={{ borderBottom: '1px dotted #000', minWidth: 150 }}>&nbsp;</div>
         </div>
       </div>
@@ -112,7 +127,7 @@ export function BlankForm({ kind, shop }: { kind: FormKind; shop: Shop }) {
         <table className="doc">
           <thead>
             <tr>
-              <th style={{ width: 34 }}>ลำดับ</th><th>เลขที่ใบส่งมอบ / ใบกำกับภาษี</th>
+              <th style={{ width: 34 }}>ลำดับ</th><th>เลขที่{invoiceDoc}</th>
               <th style={{ width: 100 }}>วันที่</th><th style={{ width: 100 }}>ครบกำหนด</th><th style={{ width: 100 }}>จำนวนเงิน</th>
             </tr>
           </thead>
@@ -181,8 +196,12 @@ export function BlankForm({ kind, shop }: { kind: FormKind; shop: Shop }) {
             <tbody>
               <tr><td>รวมเป็นเงิน</td><td><Wl w={100} /></td></tr>
               <tr><td>ส่วนลด</td><td><Wl w={100} /></td></tr>
-              <tr><td>มูลค่าก่อนภาษี</td><td><Wl w={100} /></td></tr>
-              <tr><td>ภาษีมูลค่าเพิ่ม 7%</td><td><Wl w={100} /></td></tr>
+              {vat ? (
+                <>
+                  <tr><td>มูลค่าก่อนภาษี</td><td><Wl w={100} /></td></tr>
+                  <tr><td>ภาษีมูลค่าเพิ่ม 7%</td><td><Wl w={100} /></td></tr>
+                </>
+              ) : null}
               {kind === 'receipt' ? <tr><td>หัก ณ ที่จ่าย</td><td><Wl w={100} /></td></tr> : null}
               <tr><td><b>รวมทั้งสิ้น</b></td><td><Wl w={100} /></td></tr>
             </tbody>

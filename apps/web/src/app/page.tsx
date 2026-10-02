@@ -85,7 +85,8 @@ export default async function HomePage({
   const ranged = Boolean(sp.from || sp.to);
 
   return (
-    <Shell current="/" title="หน้าแรก" sub={`ภาษีมูลค่าเพิ่ม ${shop.vatRate}% · หัก ณ ที่จ่าย ${shop.whtRate}%`}>
+    <Shell current="/" title="หน้าแรก"
+           sub={`${shop.vatRegistered ? `ภาษีมูลค่าเพิ่ม ${shop.vatRate}%` : 'ไม่จดภาษีมูลค่าเพิ่ม'} · หัก ณ ที่จ่าย ${shop.whtRate}%`}>
       {sp.denied ? (
         <div className="note" style={{ background: '#FCF1F1', borderColor: '#EEC4C4', color: '#7A2020' }}>
           คุณไม่มีสิทธิ์เข้าเมนู <b>{PERM_LABEL[sp.denied] ?? sp.denied}</b> — ติดต่อเจ้าของกิจการหากต้องใช้งาน
@@ -180,6 +181,8 @@ export default async function HomePage({
           {tax?.latest ? (
             <section className="m-sec">
               <h2>ภาษีงวดล่าสุด<span className="cnt">{monthLabel(tax.latest.key)}</span></h2>
+              {/* ร้านที่ไม่จด VAT ไม่มีภาษีขาย–ภาษีซื้อให้นำส่งหรือยกเครดิต (ผู้ใช้เลือก 2 ต.ค. 2569) — เหลือหัก ณ ที่จ่าย */}
+              {shop.vatRegistered ? (
               <div className="mtax">
                 <div className="mstat"><span className="lbl">ภาษีขาย</span><span className="val">{baht(tax.latest.out)}</span></div>
                 <div className="mstat"><span className="lbl">ภาษีซื้อ</span><span className="val">{baht(tax.latest.in)}</span></div>
@@ -190,6 +193,7 @@ export default async function HomePage({
                   </span>
                 </div>
               </div>
+              ) : null}
               {/* ต้นแบบไม่มี — แต่เป็นยอดที่ต้องนำส่งจริงตามกฎหมาย จึงไม่ตัดทิ้ง */}
               <div className="mstat-grid" style={{ marginTop: 12 }}>
                 <MStat k="wht" href="/finance/sales" lbl="หัก ณ ที่จ่ายที่ต้องนำส่ง" wide
@@ -446,6 +450,9 @@ export default async function HomePage({
           </header>
           <div className="body">
             <div className="grid g4">
+              {/* ร้านที่ไม่จด VAT — ซ่อนภาษีขาย/ซื้อ/เครดิตยกไป เหมือนตาราง 06.1 เหลือหัก ณ ที่จ่าย */}
+              {shop.vatRegistered ? (
+              <>
               <div className="stat">
                 <div className="label">ภาษีขาย</div>
                 <div className="value" style={{ fontSize: 20 }}>{baht(tax.latest.out)}</div>
@@ -462,6 +469,8 @@ export default async function HomePage({
                   {baht(tax.latest.payable > 0.004 ? tax.latest.payable : tax.carryForward)}
                 </div>
               </div>
+              </>
+              ) : null}
               <div className="stat">
                 <div className="label">หัก ณ ที่จ่ายที่ต้องนำส่ง</div>
                 <div className="value" style={{ fontSize: 20 }}>{baht(tax.whtToRemit)}</div>
@@ -493,7 +502,7 @@ export default async function HomePage({
               </div>
             ) : null}
 
-            {tax.latest.carryIn > 0.004 ? (
+            {shop.vatRegistered && tax.latest.carryIn > 0.004 ? (
               <div className="subtle" style={{ marginTop: 12 }}>
                 งวดนี้มีเครดิตภาษียกมาจากงวดก่อน {baht(tax.latest.carryIn)} บาท หักออกให้แล้ว
               </div>

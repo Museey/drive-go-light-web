@@ -33,5 +33,6 @@
   "032_product_limit.sql": "c0686b339439e24b1a169e151f1636c4bcceaf3c126f205cf8c85f46cca4ba0e",
   "033_staff_admin.sql": "e825343052bcec31bb572dd41b5f0e6664f70f4018ade9909e09b500c33163ad",
   "034_product_code_ci.sql": "18fbbefad3175e4b30159ef5f0f8edfcd24c60aca2fcc5205561066c9bae5bbb",
-  "035_error_dedup.sql": "f526f93aadc5d1ebe12d662c04241249617fd920c85011b9232ee3c9efa321a4"
+  "035_error_dedup.sql": "f526f93aadc5d1ebe12d662c04241249617fd920c85011b9232ee3c9efa321a4",
+  "036_vat_registered.sql": "0fb891a0a1d846167473fb9bdfd60e41e0d44491393f5c9246a3b0743807e598"
 }

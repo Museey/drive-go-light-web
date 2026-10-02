@@ -404,4 +404,37 @@ describe.skipIf(!DB_URL)('กู้คืนข้อมูลทับอู่
     await app.query('commit');
     expect(await logoOf(target), 'ไฟล์ที่ไม่มีโลโก้ต้องไม่ลบของเดิม').toBe(LOGO);
   }, 240_000);
+
+  /**
+   * การจด VAT (036) ตามไฟล์มา · ไฟล์ที่ไม่มีคีย์นี้ (รวมไฟล์รุ่น 6.4) ไม่แตะค่าที่ตั้งไว้ในเว็บ
+   *
+   * ถ้ากู้จากไฟล์เก่าแล้วร้านที่ตั้ง "ไม่จด" กลับเป็น "จด" เงียบ ๆ เมนูใบกำกับภาษีจะกลับมา
+   * แล้วร้านที่ไม่ได้จดออกใบกำกับภาษีได้อีก โดยไม่มีใครรู้ว่าค่าเปลี่ยนตอนกู้คืน
+   */
+  it('การจด VAT ตามไฟล์สำรองมา · ไฟล์ที่ไม่มีค่านี้ไม่เปลี่ยนการตั้งค่าเดิม', async () => {
+    const vatOf = async (id: string) =>
+      (await admin.query(`select vat_registered from tenants where id = $1`, [id])).rows[0].vat_registered;
+
+    await admin.query(`update tenants set vat_registered = false where id = $1`, [source]);
+    await admin.query(`update tenants set vat_registered = true where id = $1`, [target]);
+
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [source]);
+    const file = parseBackupFile(JSON.stringify(await exportBackupWith(app)));
+    expect((file.shop as Record<string, unknown>)._vatRegistered).toBe(false);
+
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [target]);
+    await app.query('begin');
+    await restoreIntoTenant(app, target, file);
+    await app.query('commit');
+    expect(await vatOf(target), 'กู้คืนแล้วต้องได้ค่าจากไฟล์').toBe(false);
+
+    const { _vatRegistered: _drop, ...older } = file.shop as Record<string, unknown>;
+    await admin.query(`update tenants set vat_registered = true where id = $1`, [target]);
+    await app.query('begin');
+    await restoreIntoTenant(app, target, { ...file, shop: older } as typeof file);
+    await app.query('commit');
+    expect(await vatOf(target), 'ไฟล์ที่ไม่มีค่านี้ต้องไม่เปลี่ยนการตั้งค่าเดิม').toBe(true);
+
+    await admin.query(`update tenants set vat_registered = true where id = $1`, [source]);
+  }, 240_000);
 });

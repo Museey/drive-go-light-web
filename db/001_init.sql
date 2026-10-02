@@ -51,6 +51,8 @@ create table tenants (
   tel             text,
   tel2            text,
   vat_rate        numeric(6,3) not null default 7,         -- %
+  -- จดภาษีมูลค่าเพิ่มหรือไม่ (036) — false = เอกสารรายรับไม่คิด VAT และออกใบกำกับภาษีไม่ได้
+  vat_registered  boolean      not null default true,
   wht_rate        numeric(6,3) not null default 3,         -- % ค่าตั้งต้นของเอกสารขาย
   price_tier      char(1)      not null default 'A' check (price_tier in ('A','B','C')),
   logo_url        text,                                    -- ย้ายจาก base64 ไป object storage
@@ -77,6 +79,9 @@ create table tenants (
 
 comment on column tenants.ui_prefs is
   'ค่าปรับแต่งหน้าจอระดับร้าน เช่น {"stockHide":["oem","max"]} — ไม่ใช่ข้อมูลธุรกิจ ไม่ต้อง migrate เข้มงวด';
+
+comment on column tenants.vat_registered is
+  'จดภาษีมูลค่าเพิ่มหรือไม่ — false = เอกสารรายรับใบใหม่ไม่คิด VAT และออกใบกำกับภาษี (IVT) ไม่ได้ · ใบเก่าคงตามเดิม (036)';
 
 -- ---------------------------------------------------------------------
 -- สมาชิกและสิทธิ์ — มาจาก DB.users + DB.shop.ownerPass

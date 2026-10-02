@@ -1,5 +1,6 @@
-import { requireSession } from '@/lib/auth';
-import { getLicenseStatus } from '@/lib/subscription';
+import { query, requireSession } from '@/lib/auth';
+import { licenseStatusWith } from '@/lib/subscription';
+import { shopVatRegisteredWith } from '@/lib/sales-vat';
 import { LicenseNag } from './license-nag';
 import { EnterToNext } from './enter-to-next';
 import { ErrorScroll } from './error-scroll';
@@ -27,14 +28,18 @@ export async function Shell({
   children: React.ReactNode;
 }) {
   const session = await requireSession();
-  /* นับถอยหลังวันหมดอายุไว้ที่แถบเมนูทุกหน้า — ผู้ใช้ไม่ต้องเข้า 08 ลิขสิทธิ์เพื่อรู้ว่าเหลือกี่วัน */
-  const license = await getLicenseStatus();
+  /* นับถอยหลังวันหมดอายุไว้ที่แถบเมนูทุกหน้า — ผู้ใช้ไม่ต้องเข้า 08 ลิขสิทธิ์เพื่อรู้ว่าเหลือกี่วัน
+     การจด VAT อ่านไปในรอบเดียวกัน (connection เส้นเดียว) — ร้านที่ไม่จดไม่มีเมนู 03.2 ใบกำกับภาษี */
+  const { license, vatRegistered } = await query(async (c) => ({
+    license: await licenseStatusWith(c),
+    vatRegistered: await shopVatRegisteredWith(c),
+  }));
 
   return (
     <div className="app">
       {/* ปุ่มเครื่องมือของหน้าไปโผล่สองที่: หัวหน้า (เดสก์ท็อป) และลิ้นชัก (จอแคบ)
           เรนเดอร์ทีละที่ตามขนาดจอไม่ได้ — เซิร์ฟเวอร์ไม่รู้ความกว้างจอของผู้ใช้ */}
-      <MenuBar session={session} current={current} tools={tools}
+      <MenuBar session={session} current={current} tools={tools} shop={{ vatRegistered }}
                license={{ mode: license.mode, until: license.until, daysLeft: license.daysLeft }} />
       <div className="main">
         <div className={doc ? 'topbar doc' : 'topbar'}>

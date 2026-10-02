@@ -59,7 +59,7 @@ export default async function DocPage({
       <DocSteps kind={doc.kind} id={id} voided={doc.status === 'void'}
                 parent={doc.parent ? { id: doc.parent.id, docNo: doc.parent.docNo, kind: doc.parent.kind } : null}
                 child={child}
-                canContinue={can(session, 'income')} />
+                canContinue={can(session, 'income')} vatRegistered={shop.vatRegistered} />
       {doc.status === 'void' ? (
         <>
           <div className="err" style={{ marginBottom: 16 }}>
@@ -81,7 +81,7 @@ export default async function DocPage({
           <DocActions id={doc.id} kind={doc.kind} docNo={doc.docNo} partyName={doc.partyName}
                       canEdit={editable.ok} editReason={editable.reason} hasChild={!!child}
                       chain={chain.related} blocked={chain.blocked}
-                      startVoiding={sp.void === '1'} />
+                      startVoiding={sp.void === '1'} vatRegistered={shop.vatRegistered} />
         </div>
       )}
 
@@ -91,7 +91,10 @@ export default async function DocPage({
           <br />
           {doc.kind === 'IVT'
             ? 'ใบกำกับภาษีที่ข้อมูลผู้ซื้อไม่ครบ ลูกค้านำไปใช้เป็นภาษีซื้อไม่ได้ และต้องออกใหม่ทั้งใบ'
-            : 'เติมให้ครบก่อนออกใบกำกับภาษีต่อจากใบนี้ จะได้ไม่ต้องออกใหม่ทีหลัง'}
+            : shop.vatRegistered
+            ? 'เติมให้ครบก่อนออกใบกำกับภาษีต่อจากใบนี้ จะได้ไม่ต้องออกใหม่ทีหลัง'
+            /* ร้านที่ไม่จด VAT ไม่มีใบกำกับภาษีให้ออกต่อ — บอกแค่ว่าเติมที่ไหน */
+            : 'เติมได้ที่ทะเบียนลูกค้า หรือกดแก้ไขเอกสาร'}
         </div>
       ) : null}
 

@@ -21,7 +21,8 @@ import { findByScanWith, parseScan } from './scan';
 const n = (v: unknown): number => Number(v ?? 0);
 
 export { forcedVatMode, nextKinds, WALK_IN_CUSTOMER, type SalesKind } from './sales-rules';
-import { forcedVatMode, type SalesKind } from './sales-rules';
+import { newDocVatMode, type SalesKind } from './sales-rules';
+import { shopVatRegisteredWith, vatModeForSaveWith } from './sales-vat';
 
 export interface DocItemInput {
   productId: string | null;
@@ -121,11 +122,28 @@ function effectiveDiscount(
  */
 export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; docNo: string }> {
   return mutate('income', async (c, userId) => {
+    let id = input.id;
+    let docNo = '';
+
+    if (id) {
+      /* ล็อกแถวก่อนตรวจทุกอย่าง — อีกเครื่องที่ยกเลิก รับเงิน หรือแก้ใบเดียวกันอยู่ ต้องรอกันคนละรอบ
+         แล้วตรวจกับสถานะหลังรอ ไม่ใช่สถานะตอนเปิดหน้า (doc-version.ts)
+         ต้องมาก่อนคำนวณยอด — โหมดภาษีของร้านที่ไม่จด VAT อ่านจากค่าที่บันทึกไว้ในแถวนี้ (vatModeForSaveWith) */
+      ({ docNo } = await lockDocForEditWith(c, id, input.baseVersion));
+
+      /* กติกาเดียวกับที่หน้าแก้ไขตรวจตอนเปิด (ใบเสร็จ · รับเงินแล้ว แก้ไม่ได้) ตรวจซ้ำใต้ล็อก
+         เปิดฟอร์มค้างไว้ระหว่างที่อีกเครื่องรับเงินใบนี้ — การรับเงินไม่เปลี่ยนฉบับของใบ
+         ถ้าไม่ตรวจตรงนี้ ใบที่รับเงินแล้วจะถูกแก้ยอดทับได้ */
+      const rule = await editRuleWith(c, id);
+      if (!rule.ok) throw new Error(rule.reason ?? 'แก้ไขไม่ได้');
+    }
+
     const shop = await c.query(
       `select vat_rate, warranty_text from tenants where id = current_tenant_id()`,
     );
     const vatRate = n(shop.rows[0].vat_rate);
-    const vatMode = forcedVatMode(input.kind, input.vatMode);
+    /* ร้านจด / ไม่จด VAT — ตัดสินจากค่าในฐานใต้ล็อก (sales-vat.ts · กติกาอยู่ที่ vatChoices) */
+    const vatMode = await vatModeForSaveWith(c, input, await shopVatRegisteredWith(c));
 
     /* ยอดคำนวณฝั่งเซิร์ฟเวอร์เสมอ ไม่เชื่อค่าที่หน้าเว็บส่งมา
        ใช้สูตรชุดเดียวกับที่หน้าเว็บใช้แสดงผล ตัวเลขจึงตรงกันอยู่แล้ว */
@@ -146,20 +164,7 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
 
     const dueDate = input.creditDays > 0 ? addDays(input.docDate, input.creditDays) : input.docDate;
 
-    let id = input.id;
-    let docNo: string;
-
     if (id) {
-      /* ล็อกแถวก่อนตรวจทุกอย่าง — อีกเครื่องที่ยกเลิก รับเงิน หรือแก้ใบเดียวกันอยู่ ต้องรอกันคนละรอบ
-         แล้วตรวจกับสถานะหลังรอ ไม่ใช่สถานะตอนเปิดหน้า (doc-version.ts) */
-      ({ docNo } = await lockDocForEditWith(c, id, input.baseVersion));
-
-      /* กติกาเดียวกับที่หน้าแก้ไขตรวจตอนเปิด (ใบเสร็จ · รับเงินแล้ว แก้ไม่ได้) ตรวจซ้ำใต้ล็อก
-         เปิดฟอร์มค้างไว้ระหว่างที่อีกเครื่องรับเงินใบนี้ — การรับเงินไม่เปลี่ยนฉบับของใบ
-         ถ้าไม่ตรวจตรงนี้ ใบที่รับเงินแล้วจะถูกแก้ยอดทับได้ */
-      const rule = await editRuleWith(c, id);
-      if (!rule.ok) throw new Error(rule.reason ?? 'แก้ไขไม่ได้');
-
       await c.query(
         `update documents set doc_date=$2, party_id=$3, party_type=$4, party_name=$5,
                 party_tax_id=$6, party_tel=$7, party_email=$8, party_addr=$9, party_addr_text=$10,
@@ -606,8 +611,11 @@ export async function childOf(id: string): Promise<ChildRef | null> {
   return query((c) => activeChildWith(c, id));
 }
 
-/** ใบเปล่าตามชนิด — ใช้ทั้งหน้าออกเอกสารและหน้าขายหน้าร้าน */
-export function blankSalesDoc(kind: SalesKind, warranty: string, whtRate: number): SalesDocInput {
+/**
+ * ใบเปล่าตามชนิด — ใช้ทั้งหน้าออกเอกสารและหน้าขายหน้าร้าน
+ * `vatRegistered: false` = ร้านไม่จด VAT ใบใหม่เริ่มที่ไม่คิดภาษี (newDocVatMode)
+ */
+export function blankSalesDoc(kind: SalesKind, warranty: string, whtRate: number, vatRegistered = true): SalesDocInput {
   return {
     kind,
     docDate: today(),
@@ -619,7 +627,7 @@ export function blankSalesDoc(kind: SalesKind, warranty: string, whtRate: number
     discount: 0,
     discountMode: 'baht',
     discountPct: 0,
-    vatMode: kind === 'IVT' ? 'ex' : kind === 'IV' ? 'none' : 'ex',
+    vatMode: newDocVatMode(kind, vatRegistered),
     whtRate: kind === 'QT' ? 0 : whtRate,
     creditDays: 0,
     complaints: ['', '', ''], findings: ['', '', ''],
@@ -628,6 +636,22 @@ export function blankSalesDoc(kind: SalesKind, warranty: string, whtRate: number
     receivedBy: '', note: '',
     items: [], payments: [],
   };
+}
+
+/**
+ * ชนิดของใบต้นทางของใบนี้ — ฟอร์มแก้ไขใช้ตัดสินช่อง VAT ของร้านที่ไม่จด VAT
+ * (ใบเสร็จที่ออกต่อจากใบกำกับภาษีต้องคิด VAT ตามใบกำกับ ดู vatChoices)
+ */
+export async function parentKindOf(id: string): Promise<SalesKind | null> {
+  return query(async (c) => {
+    const { rows } = await c.query(
+      `select p.kind::text as kind
+         from documents d join documents p on p.id = d.parent_doc_id
+        where d.id = $1`,
+      [id],
+    );
+    return (rows[0]?.kind as SalesKind | undefined) ?? null;
+  });
 }
 
 /** เลขที่ของเอกสาร — ฟอร์มแก้ไขโชว์ในช่อง "เลขที่เอกสาร" */

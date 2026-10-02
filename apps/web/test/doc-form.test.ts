@@ -41,7 +41,12 @@ describe('โครงฟอร์ม', () => {
     expect(src).not.toMatch(/\{!isQuote \? \(\s*<ScanBox/);
   });
   it('บรรทัดว่างไม่ถูกส่งไปบันทึก', () => {
-    expect(src).toMatch(/JSON\.stringify\(\{ \.\.\.doc, items: realItems \}\)/);
+    expect(src).toMatch(/JSON\.stringify\(\{ \.\.\.doc, vatMode, items: realItems \}\)/);
+  });
+  it('ส่งโหมดภาษีตัวเดียวกับที่ใช้คิดยอดบนจอ — ไม่ใช่ค่าดิบในฟอร์มที่อาจใช้ไม่ได้แล้ว', () => {
+    /* ค่าดิบค้างได้ เช่นเลือกใบต้นทางแล้วเปลี่ยนใบ · ร้านที่ไม่จด VAT เซิร์ฟเวอร์ปฏิเสธค่าที่ใช้ไม่ได้ (sales.ts) */
+    expect(src).toMatch(/const vatMode: VatMode = vatOptions\.includes\(doc\.vatMode\) \? doc\.vatMode : vatOptions\[0\]!/);
+    expect(src).toMatch(/recTotals\(\s*\{ items: coreItems, discount: effDiscount, vatMode,/);
   });
 });
 

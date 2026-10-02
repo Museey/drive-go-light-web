@@ -21,6 +21,7 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
   const [logo, setLogo] = useState(shop.logoUrl);
   const [banks, setBanks] = useState<{ bank: string; no: string; name: string }[]>(shop.bankAccounts?.length ? shop.bankAccounts : (shop.bankAccountNo ? [{ bank: shop.bankName, no: shop.bankAccountNo, name: shop.bankAccountName }] : []));
   const [sig, setSig] = useState(shop.signatureUrl);
+  const [vatReg, setVatReg] = useState(shop.vatRegistered);
   const sigRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -74,12 +75,36 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
         <textarea className="in" id="addrText" name="addrText" defaultValue={v('addrText', shop.addrText)} />
       </div>
 
+      {/* จด / ไม่จด VAT (ผู้ใช้กำหนด 2 ต.ค. 2569) — กติกาของแต่ละชนิดเอกสารอยู่ที่ vatChoices() ใน lib/sales-rules.ts */}
+      <div className="field">
+        <label>การจดภาษีมูลค่าเพิ่ม</label>
+        <div className="tiles" role="radiogroup" aria-label="การจดภาษีมูลค่าเพิ่ม">
+          <label className="tile radio">
+            <input type="radio" name="vatRegistered" value="yes" checked={vatReg} onChange={() => setVatReg(true)} />
+            จดภาษีมูลค่าเพิ่ม
+          </label>
+          <label className="tile radio">
+            <input type="radio" name="vatRegistered" value="no" checked={!vatReg} onChange={() => setVatReg(false)} />
+            ไม่จดภาษีมูลค่าเพิ่ม
+          </label>
+        </div>
+        <span className="hint">
+          {vatReg
+            ? 'ออกใบกำกับภาษีได้ · ใบเสนอราคาและใบเสร็จเลือกคิด VAT ได้รายใบ'
+            : 'เอกสารรายรับใบใหม่ทุกใบไม่คิด VAT และไม่มีใบกำกับภาษีให้ออก · ใบที่ออกไปแล้วไม่เปลี่ยน'}
+        </span>
+      </div>
+
       <div className="row-fields f3">
         <div className={bad('vatRate')}>
           <label htmlFor="vatRate">ภาษีมูลค่าเพิ่ม (%)</label>
           <input className="in mono" id="vatRate" name="vatRate" inputMode="decimal"
                  defaultValue={v('vatRate', shop.vatRate)} />
-          <span className="hint">มีผลกับเอกสารที่ออกใหม่เท่านั้น ใบเก่าเก็บอัตราเดิมไว้แล้ว</span>
+          <span className="hint">
+            {vatReg
+              ? 'มีผลกับเอกสารที่ออกใหม่เท่านั้น ใบเก่าเก็บอัตราเดิมไว้แล้ว'
+              : 'ยังใช้คิด VAT ในใบซื้อและค่าใช้จ่ายจากผู้ขายที่จด VAT'}
+          </span>
         </div>
         <div className="field">
           <label htmlFor="whtRate">หัก ณ ที่จ่ายตั้งต้น (%)</label>

@@ -9,6 +9,7 @@ import { DateRange } from '@/components/date-range';
 import { getSalesReport, getVatChain } from '@/lib/reports';
 import { query } from '@/lib/auth';
 import { salesDocsWith } from '@/lib/home-report';
+import { getVatRegistered } from '@/lib/queries';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, KIND_SHORT, monthLabel, thDate } from '@/lib/format';
 import { DocCards } from '@/components/doc-cards';
@@ -27,10 +28,11 @@ export default async function SalesReportPage({
   const page = Math.max(1, Number(sp.page ?? '1') || 1);
   const pageSize = pageSizeOf(sp.size);
 
-  const [report, vat, docs] = await Promise.all([
+  const [report, vat, docs, vatRegistered] = await Promise.all([
     getSalesReport(sp.from, sp.to),
     getVatChain(),
     query((c) => salesDocsWith(c, { from: sp.from, to: sp.to, page, pageSize })),
+    getVatRegistered(),
   ]);
 
   const lastPage = Math.max(1, Math.ceil(docs.total / pageSize));
@@ -205,6 +207,8 @@ export default async function SalesReportPage({
         )}
       </div>
 
+      {/* ร้านที่ไม่จด VAT นำภาษีซื้อไปหักไม่ได้ เครดิตยกไปจะทำให้เข้าใจผิด — ซ่อนทั้งการ์ด (ผู้ใช้เลือก 2 ต.ค. 2569) */}
+      {vatRegistered ? (
       <div className="card">
         <header>
           <h2>ภาษีมูลค่าเพิ่มรายงวด</h2>
@@ -251,6 +255,7 @@ export default async function SalesReportPage({
           </span>
         </div>
       </div>
+      ) : null}
       </SubNav>
     </Shell>
   );

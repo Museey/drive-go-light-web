@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { invoiceKind } from '../src/lib/sales-rules';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(resolve(here, '../src/components/doc-steps.tsx'), 'utf8');
@@ -17,7 +18,12 @@ describe('DocSteps', () => {
     expect(src).toContain("{ key: 'C', label: 'ใบเสร็จรับเงิน'");
   });
   it('ขั้นถัดไปเป็นลิงก์ออกใบต่อ (IVT ถ้ายังไม่ส่งมอบ / RC ถ้าส่งมอบแล้ว)', () => {
-    expect(src).toMatch(/href = `\/income\/new\?kind=\$\{i === 1 \? 'IVT' : 'RC'\}&from=\$\{id\}`/);
+    expect(src).toMatch(/href = `\/income\/new\?kind=\$\{i === 1 \? invoiceKind\(vatRegistered\) : 'RC'\}&from=\$\{id\}`/);
+    expect(invoiceKind(true)).toBe('IVT');
+  });
+  it('ร้านที่ไม่จด VAT — ขั้น B พาไปใบส่งมอบไม่มี VAT เพราะออกใบกำกับภาษีไม่ได้', () => {
+    expect(invoiceKind(false)).toBe('IV');
+    expect(src).toContain("i === 1 && !vatRegistered ? 'ใบแจ้งหนี้ (ไม่มี VAT)'");
   });
   it('สีตามที่ตกลง: ปัจจุบันเขียวเข้ม · ถัดไปอำพัน · ผ่านแล้วขอบเขียว · พื้นขาว', () => {
     expect(css).toMatch(/\.step\.current \{ background: var\(--steel-dk\)/);
@@ -28,6 +34,6 @@ describe('DocSteps', () => {
   it('ใช้ทั้งหน้าเอกสาร (รู้แม่/ลูก) และในฟอร์ม', () => {
     expect(detail).toContain('<DocSteps kind={doc.kind} id={id}');
     expect(detail).toContain('childOf(id)');
-    expect(editor).toContain('<DocSteps kind={doc.kind} canContinue={false} />');
+    expect(editor).toContain('<DocSteps kind={doc.kind} canContinue={false} vatRegistered={vatRegistered} />');
   });
 });

@@ -30,6 +30,11 @@ export interface ShopSettings {
   tel: string;
   tel2: string;
   vatRate: number;
+  /**
+   * จดภาษีมูลค่าเพิ่มหรือไม่ (036) — false = เอกสารรายรับใบใหม่ไม่คิด VAT และออกใบกำกับภาษีไม่ได้
+   * อัตรา VAT ยังใช้กับใบซื้อ/ค่าใช้จ่ายจากผู้ขายที่จด VAT
+   */
+  vatRegistered: boolean;
   whtRate: number;
   priceTier: 'A' | 'B' | 'C';
   proposerName: string;
@@ -54,7 +59,7 @@ export interface ShopSettings {
 export async function getShopSettings(): Promise<ShopSettings> {
   return query(async (c) => {
     const { rows } = await c.query(
-      `select name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
+      `select name, tax_id, addr_text, tel, tel2, vat_rate, vat_registered, wht_rate,
               price_tier, proposer_name, warranty_text, logo_url, note_default,
               owner_name, signature_url, bank_accounts,
               bank_name, bank_account_no, bank_account_name, expiry_warn_days
@@ -64,7 +69,7 @@ export async function getShopSettings(): Promise<ShopSettings> {
     return {
       name: r.name, taxId: r.tax_id ?? '', addrText: r.addr_text ?? '',
       tel: r.tel ?? '', tel2: r.tel2 ?? '',
-      vatRate: n(r.vat_rate), whtRate: n(r.wht_rate),
+      vatRate: n(r.vat_rate), vatRegistered: r.vat_registered !== false, whtRate: n(r.wht_rate),
       priceTier: r.price_tier, proposerName: r.proposer_name ?? '',
       warrantyText: r.warranty_text ?? '', logoUrl: r.logo_url ?? '',
       noteDefault: r.note_default ?? '',
@@ -83,6 +88,7 @@ export async function getShopSettings(): Promise<ShopSettings> {
  *
  * อัตราภาษีที่แก้ตรงนี้มีผลกับเอกสารที่ออกใหม่เท่านั้น
  * เอกสารเดิมเก็บอัตรา ณ วันที่ออกไว้ในตัวเองแล้ว จึงไม่เปลี่ยนตาม
+ * การจด/ไม่จด VAT ก็เช่นกัน — ใบเก่าไม่ถูกแก้ ดูกติกาที่ vatChoices() ใน sales-rules.ts
  */
 export async function saveShopSettings(input: ShopSettings): Promise<void> {
   return mutate('settings', async (c) => {
@@ -92,7 +98,7 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
               warranty_text=$10, logo_url=$11,
               bank_name=$12, bank_account_no=$13, bank_account_name=$14,
               expiry_warn_days=$15, note_default=$16, owner_name=$17, signature_url=$18,
-              bank_accounts=$19
+              bank_accounts=$19, vat_registered=$20
        where id = current_tenant_id()`,
       [
         input.name, input.taxId || null, input.addrText, input.tel, input.tel2,
@@ -103,6 +109,7 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
         input.noteDefault ?? '',
         input.ownerName ?? '', input.signatureUrl || null,
         JSON.stringify(input.bankAccounts ?? []),
+        input.vatRegistered,
       ],
     );
   }, { sub: 'shop', allowExpired: true });

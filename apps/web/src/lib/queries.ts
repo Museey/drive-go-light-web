@@ -4,6 +4,7 @@ import { query } from './auth';
 import { quoteFollowUpsWith, receiptsOfWith, type DocRef } from './doc-chain';
 import { expiringSummaryWith } from './expiry';
 import { BOOK_VALUE_SQL } from './stock-cost';
+import { shopVatRegisteredWith } from './sales-vat';
 import {
   owingSidesWith, salesByMonthWith, salesSummaryWith, whtByRateWith,
   type OwingSide, type SalesMonthBar, type WhtByRate,
@@ -20,6 +21,8 @@ export interface ShopInfo {
   tel: string | null;
   tel2: string | null;
   vatRate: number;
+  /** จดภาษีมูลค่าเพิ่มหรือไม่ (036) — กติกาต่อชนิดเอกสารอยู่ที่ vatChoices() ใน sales-rules.ts */
+  vatRegistered: boolean;
   whtRate: number;
   /** บัญชีธนาคารของอู่ — พิมพ์ลงบนใบเสร็จและใบวางบิลให้ลูกค้าโอนเงิน */
   bankName: string;
@@ -31,10 +34,15 @@ export interface ShopInfo {
   expiryWarnDays: number;
 }
 
+/** ร้านนี้จด VAT ไหม (036) — หน้าที่ต้องการแค่ค่านี้ ไม่ต้องอ่านข้อมูลร้านทั้งแถว */
+export async function getVatRegistered(): Promise<boolean> {
+  return query((c) => shopVatRegisteredWith(c));
+}
+
 export async function getShop(): Promise<ShopInfo> {
   return query(async (c) => {
     const { rows } = await c.query(
-      `select id, name, tax_id, addr_text, tel, tel2, vat_rate, wht_rate,
+      `select id, name, tax_id, addr_text, tel, tel2, vat_rate, vat_registered, wht_rate,
               bank_name, bank_account_no, bank_account_name, expiry_warn_days, bank_accounts
        from tenants where id = current_tenant_id()`,
     );
@@ -42,7 +50,7 @@ export async function getShop(): Promise<ShopInfo> {
     return {
       id: r.id, name: r.name, taxId: r.tax_id, addrText: r.addr_text,
       tel: r.tel, tel2: r.tel2,
-      vatRate: money(r.vat_rate), whtRate: money(r.wht_rate),
+      vatRate: money(r.vat_rate), vatRegistered: r.vat_registered !== false, whtRate: money(r.wht_rate),
       bankName: r.bank_name ?? '',
       bankAccounts: Array.isArray(r.bank_accounts) ? r.bank_accounts.filter((x: { no?: string; bank?: string }) => x && (x.no || x.bank)) : [],
       bankAccountNo: r.bank_account_no ?? '',

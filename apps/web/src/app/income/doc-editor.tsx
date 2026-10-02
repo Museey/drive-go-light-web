@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { bahttext, expiredLines, lineAmount, recTotals, WHT_MIN_BASE, type VatMode } from '@drivegolight/core';
+import { forcedVatMode, vatChoices } from '@/lib/sales-rules';
 import { loadSourceAction, saveDocAction, scanPartAction, searchCustomersAction, searchOpenSourcesAction, searchProductsAction } from './actions';
 import { useLiveSearch } from '@/components/use-live-search';
 import { ConfirmSave } from '@/components/confirm-save';
@@ -43,6 +44,13 @@ const KIND_HELP: Record<SalesKind, string> = {
   IV: 'ส่งมอบงานและแจ้งหนี้ โดยไม่มีภาษีมูลค่าเพิ่ม',
   IVT: 'ส่งมอบงานพร้อมใบกำกับภาษี — ลูกค้าต้องมีเลขประจำตัวผู้เสียภาษี',
   RC: 'รับเงินและปิดงาน — ตัดสต๊อกอะไหล่ตอนบันทึกใบนี้',
+};
+
+/** ข้อความในช่องเลือกภาษี — แสดงเฉพาะตัวที่ vatChoices() อนุญาต */
+const VAT_OPTION_LABEL: Record<VatMode, string> = {
+  none: 'ไม่คิดภาษี',
+  ex: 'ราคายังไม่รวมภาษี',
+  in: 'ราคารวมภาษีแล้ว',
 };
 
 const emptyItem = (): DocItemInput => ({
@@ -191,10 +199,15 @@ function LineRow({
 
 export function DocEditor({
   initial, vatRate, shopWhtRate, mode, lotExpiry, expiryWarnDays, today, cashOnOpen, docNo, banks, returnTo, docNoPreview,
+  vatRegistered = true, parentKind = null,
 }: {
   initial: SalesDocInput;
   vatRate: number;
   shopWhtRate: number;
+  /** ร้านจดภาษีมูลค่าเพิ่มหรือไม่ — ไม่จด = ช่อง VAT ล็อกตามกติกาใน vatChoices() (ตั้งที่ 07) */
+  vatRegistered?: boolean;
+  /** ชนิดของใบต้นทาง (ใบที่ใบนี้ออกต่อมา) — ใบเสร็จต่อจากใบกำกับภาษีต้องคิด VAT ตามใบกำกับ */
+  parentKind?: SalesKind | null;
   mode: 'new' | 'edit';
   /** วันหมดอายุของล็อตที่จะถูกตัดก่อน ของอะไหล่ที่อยู่บนใบตั้งแต่เปิดหน้ามา */
   lotExpiry: Record<string, string>;
@@ -231,6 +244,8 @@ export function DocEditor({
   const [srcQuery, setSrcQuery] = useState('');
   const [srcNo, setSrcNo] = useState('');
   const [srcBusy, setSrcBusy] = useState(false);
+  /* ชนิดของใบต้นทาง — เปลี่ยนตามใบที่เลือกในช่อง "อ้างอิงใบเสนอราคา" */
+  const [srcKind, setSrcKind] = useState<SalesKind | null>(parentKind);
   const srcTarget: 'invoice' | 'receipt' = initial.kind === 'RC' ? 'receipt' : 'invoice';
   const { results: srcResults, clear: clearSrc } = useLiveSearch(srcQuery, (q: string) => searchOpenSourcesAction(srcTarget, q));
   const applySource = async (o: { id: string; docNo: string }) => {
@@ -238,9 +253,10 @@ export function DocEditor({
     try {
       const src = await loadSourceAction(o.id);
       if (!src) return;
+      setSrcKind(src.kind);
       setDoc((d) => ({
         ...src, kind: d.kind, docDate: d.docDate, parentDocId: o.id,
-        vatMode: d.kind === 'IV' ? 'none' : (src.vatMode === 'none' && d.kind === 'IVT' ? 'ex' : src.vatMode),
+        vatMode: forcedVatMode(d.kind, src.vatMode, { registered: vatRegistered, parentKind: src.kind }),
         whtRate: d.kind === 'QT' ? 0 : d.whtRate,
         warrantyText: d.kind === 'RC' ? (d.warrantyText || src.warrantyText) : src.warrantyText,
         payments: [],
@@ -295,6 +311,23 @@ export function DocEditor({
   const priceOf = (p: PickedProduct) =>
     doc.priceTier === 'C' ? p.priceC : doc.priceTier === 'B' ? p.priceB : p.priceA;
 
+  /* ---------- ภาษีมูลค่าเพิ่ม (กติกาเดียวกับเซิร์ฟเวอร์ — lib/sales-rules.ts) ----------
+     ใบที่แก้ส่งโหมดที่บันทึกไว้เป็นหลัก ไม่ใช่ค่าที่เพิ่งเลือก — ไม่งั้นเลือก "ไม่คิด" แล้วเปลี่ยนกลับไม่ได้
+     ค่าที่ใช้ไม่ได้ (เช่นเปลี่ยนใบต้นทางแล้ว) ถูกแทนด้วยตัวแรก ยอดบนจอจึงเท่ากับที่บันทึกได้จริงเสมอ */
+  const vatOptions = vatChoices(doc.kind, {
+    registered: vatRegistered,
+    saved: mode === 'edit' ? initial.vatMode : null,
+    parentKind: doc.parentDocId ? srcKind : null,
+  });
+  const vatMode: VatMode = vatOptions.includes(doc.vatMode) ? doc.vatMode : vatOptions[0]!;
+  const vatHint =
+    doc.kind === 'IVT' ? 'ใบกำกับภาษีต้องมี VAT เสมอ'
+    : doc.kind === 'IV' ? 'ใบส่งมอบแบบนี้ไม่มี VAT เสมอ'
+    : vatRegistered ? ''
+    : vatOptions.length > 1 ? 'ใบนี้ออกไว้ตอนร้านยังจด VAT — คงไว้ตามเดิมหรือเปลี่ยนเป็นไม่คิดภาษีได้'
+    : vatOptions[0] !== 'none' ? 'ออกต่อจากใบกำกับภาษี — คิด VAT ตามใบกำกับ ยอดเก็บเงินจะได้ตรงกับหนี้'
+    : 'ร้านไม่ได้จดภาษีมูลค่าเพิ่ม — เอกสารไม่คิด VAT (ตั้งที่ 07 ตั้งค่าร้าน)';
+
   /* ---------- ยอด (สูตรเดียวกับเซิร์ฟเวอร์) ---------- */
   const realItems = doc.items.filter(isRealItem);
   const coreItems = realItems.map((i) => ({ qty: i.qty, price: i.unitPrice, svc: i.isService, discPct: i.discPct ?? 0 }));
@@ -303,7 +336,7 @@ export function DocEditor({
     ? money(subBefore * (doc.discountPct ?? 0) / 100)
     : money(Math.max(0, doc.discount || 0));
   const t = recTotals(
-    { items: coreItems, discount: effDiscount, vatMode: doc.vatMode, whtRate: doc.kind === 'QT' ? 0 : doc.whtRate, date: doc.docDate },
+    { items: coreItems, discount: effDiscount, vatMode, whtRate: doc.kind === 'QT' ? 0 : doc.whtRate, date: doc.docDate },
     { vatRate },
   );
 
@@ -404,7 +437,6 @@ export function DocEditor({
   const expired = expiredLines(realItems, expiry, today);
   const isQuote = doc.kind === 'QT';
   const isReceipt = doc.kind === 'RC';
-  const vatLocked = doc.kind === 'IV' || doc.kind === 'IVT';
   const dueDate = !isQuote && doc.creditDays > 0 ? addDaysIso(doc.docDate, doc.creditDays) : doc.docDate;
 
   /* บรรทัดที่จะไม่ตัดสต๊อก — เตือนเฉพาะใบเสร็จ เพราะใบชนิดอื่นยังไม่ตัดอยู่แล้วทั้งใบ
@@ -416,7 +448,7 @@ export function DocEditor({
     : '';
 
   /* ส่งเฉพาะบรรทัดที่มีของ และส่วนลดตามที่ผู้ใช้เลือก (เซิร์ฟเวอร์คำนวณบาทที่มีผลจริงเอง) */
-  const payload = useMemo(() => JSON.stringify({ ...doc, items: realItems }), [doc, realItems]);
+  const payload = useMemo(() => JSON.stringify({ ...doc, vatMode, items: realItems }), [doc, vatMode, realItems]);
 
   /* ปุ่มลัดวิธีรับชำระ — โหมดที่ตรงกับข้อมูลจริงตอนนี้ (lib/pay-mode.ts มีเทสต์คุม) */
   const payMode = payModeOf(doc.payments, t.payable);
@@ -458,7 +490,7 @@ export function DocEditor({
         </header>
       </div>
       {/* ขั้นตอน A→B→C — ขั้นที่กำลังทำเป็นสีเข้ม (เจ๊ก ข้อ 5) */}
-      <DocSteps kind={doc.kind} canContinue={false} />
+      <DocSteps kind={doc.kind} canContinue={false} vatRegistered={vatRegistered} />
 
       {/* ================= หัวเอกสาร: ลูกค้า | เอกสาร ================= */}
       <div className="docgrid">
@@ -585,12 +617,12 @@ export function DocEditor({
               </div>
               <div className="field">
                 <label htmlFor="vatMode">ภาษีมูลค่าเพิ่ม</label>
-                <select className="in amber" id="vatMode" value={doc.vatMode} disabled={vatLocked} onChange={(e) => set('vatMode', e.target.value as VatMode)}>
-                  <option value="none">ไม่คิดภาษี</option>
-                  <option value="ex">ราคายังไม่รวมภาษี</option>
-                  <option value="in">ราคารวมภาษีแล้ว</option>
+                <select className="in amber" id="vatMode" value={vatMode} disabled={vatOptions.length < 2} onChange={(e) => set('vatMode', e.target.value as VatMode)}>
+                  {(['none', 'ex', 'in'] as VatMode[]).filter((m) => vatOptions.includes(m)).map((m) => (
+                    <option key={m} value={m}>{VAT_OPTION_LABEL[m]}</option>
+                  ))}
                 </select>
-                {vatLocked ? <span className="hint">{doc.kind === 'IVT' ? 'ใบกำกับภาษีต้องมี VAT เสมอ' : 'ใบส่งมอบแบบนี้ไม่มี VAT เสมอ'}</span> : null}
+                {vatHint ? <span className="hint">{vatHint}</span> : null}
               </div>
             </div>
 
@@ -631,7 +663,7 @@ export function DocEditor({
                     {doc.parentDocId ? (
                       <div className="tag-row">
                         <span className="chip ok">ออกต่อจาก {srcNo || 'เอกสารที่เลือกไว้'}</span>
-                        {mode === 'new' ? <button className="btn sm" type="button" onClick={() => { setSrcNo(''); setDoc((d) => ({ ...d, parentDocId: null })); }}>เปลี่ยน</button> : null}
+                        {mode === 'new' ? <button className="btn sm" type="button" onClick={() => { setSrcNo(''); setSrcKind(null); setDoc((d) => ({ ...d, parentDocId: null })); }}>เปลี่ยน</button> : null}
                       </div>
                     ) : mode === 'new' ? (
                       <>
@@ -821,11 +853,11 @@ export function DocEditor({
             <h2>สรุปยอด</h2>
             <div className="spacer" />
             <span className="chip">
-              {doc.vatMode === 'none' ? `ไม่มีภาษีมูลค่าเพิ่ม (${doc.kind})` : doc.vatMode === 'in' ? 'ราคารวมภาษีแล้ว' : `ภาษีมูลค่าเพิ่ม ${vatRate}%`}
+              {vatMode === 'none' ? `ไม่มีภาษีมูลค่าเพิ่ม (${doc.kind})` : vatMode === 'in' ? 'ราคารวมภาษีแล้ว' : `ภาษีมูลค่าเพิ่ม ${vatRate}%`}
             </span>
           </header>
           <div className="body">
-            <div className="row"><span className="lbl">รวมเป็นเงิน{doc.vatMode !== 'none' ? ' (ก่อนภาษี)' : ''}</span><span>{baht(t.sub)}</span></div>
+            <div className="row"><span className="lbl">รวมเป็นเงิน{vatMode !== 'none' ? ' (ก่อนภาษี)' : ''}</span><span>{baht(t.sub)}</span></div>
 
             {/* ส่วนลดท้ายบิล — สลับ % / บาท (เจ๊ก ข้อ 3) */}
             <div className="row">
@@ -850,13 +882,15 @@ export function DocEditor({
               <span>{effDiscount > 0 ? `−${baht(effDiscount)}` : baht(0)}</span>
             </div>
 
-            {doc.vatMode !== 'none' ? (
+            {vatMode !== 'none' ? (
               <>
                 <div className="row"><span className="lbl">มูลค่าก่อนภาษี</span><span>{baht(t.net)}</span></div>
                 <div className="row"><span className="lbl">ภาษีมูลค่าเพิ่ม {vatRate}%</span><span>{baht(t.vat)}</span></div>
               </>
             ) : (
-              <div className="note" style={{ margin: '6px 0' }}>เอกสารรหัส {doc.kind} — ไม่คำนวณภาษีมูลค่าเพิ่ม</div>
+              <div className="note" style={{ margin: '6px 0' }}>
+                {vatRegistered ? `เอกสารรหัส ${doc.kind} — ไม่คำนวณภาษีมูลค่าเพิ่ม` : 'ร้านไม่ได้จดภาษีมูลค่าเพิ่ม — ไม่คำนวณภาษีมูลค่าเพิ่ม'}
+              </div>
             )}
             <div className="row grand"><span>{isQuote ? 'ยอดเสนอราคาทั้งสิ้น' : 'รวมทั้งสิ้น'}</span><span>{baht(t.grand)}</span></div>
             {t.wht > 0 ? (

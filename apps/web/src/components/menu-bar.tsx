@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Icon } from './icon';
-import { BLANK_FORM, TAB_LABEL, isCurrent, navItems, tabItems } from './nav-data';
+import { BLANK_FORM, TAB_LABEL, isCurrent, navItems, tabItems, type ShopNav } from './nav-data';
 import { NavDrawer } from './nav-drawer';
 import type { Session } from '@/lib/auth';
 import { licenseLine, type LicenseBrief } from './license-line';
@@ -36,14 +36,16 @@ const RAIL_LABEL: Record<string, string> = {
   blankform: 'ฟอร์มเปล่า',
 };
 
-export function MenuBar({ session, current, license, tools }: {
+export function MenuBar({ session, current, license, tools, shop }: {
   session: Session; current: string; license?: LicenseBrief;
+  /** การตั้งค่าร้านที่ซ่อนบางแท็บ (ร้านไม่จด VAT ไม่มี 03.2) — ไม่ส่ง = เห็นครบตามสิทธิ์ */
+  shop?: ShopNav;
   /** ปุ่มเครื่องมือของหน้า (พิมพ์ · ส่งออก CSV) — จอแคบไม่มีที่ในหัวหน้า จึงไปอยู่ในลิ้นชัก */
   tools?: React.ReactNode;
 }) {
   const lic = license ? licenseLine(license) : null;
-  const items = navItems(session);
-  const tabs = tabItems(session);
+  const items = navItems(session, shop);
+  const tabs = tabItems(session, shop);
   const role = session.role === 'owner' ? 'เจ้าของกิจการ' : 'พนักงาน';
   const [drawer, setDrawer] = useState(false);
 

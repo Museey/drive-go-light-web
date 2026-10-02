@@ -284,6 +284,8 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         _signature: s.signature_url ?? '',
         _noteDefault: s.note_default ?? '',
         _bankAccounts: Array.isArray(s.bank_accounts) ? s.bank_accounts : [],
+        /* จด VAT หรือไม่ (036) — กู้คืนแล้วร้านที่ไม่จดต้องไม่กลับมาออกใบกำกับภาษีได้เอง */
+        _vatRegistered: s.vat_registered !== false,
       },
 
       categories: cats.rows.map((r) => r.name),
