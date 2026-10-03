@@ -66,7 +66,10 @@ export default async function ExpensePage({
     </div>
   ) : null;
 
+  /* hist=1 ต้องติดไปกับลิงก์ที่ทำงานกับประวัติ (แบ่งหน้า · จำนวนแถว · ชิปหมวดค่าใช้จ่าย)
+     ไม่งั้นกดแล้วเด้งไปฟอร์มสร้างใหม่ — แบบเดียวกับรายรับ (ผู้ใช้แจ้ง 3 ต.ค. 2569) */
   const keep: Record<string, string> = {
+    ...(histFirst ? { hist: '1' } : {}),
     ...(sp.q ? { q: sp.q } : {}),
     ...(sp.kind ? { kind: sp.kind } : {}),
     ...(sp.cat ? { cat: sp.cat } : {}),
@@ -76,7 +79,9 @@ export default async function ExpensePage({
   };
   /* เหมือน keep แต่ไม่มี size — ปุ่มเลือกจำนวนแถวใส่ค่าของตัวเอง และหน้าพิมพ์ไม่แบ่งหน้าอยู่แล้ว */
   const { size: _size, ...filters } = keep;
-  const printQuery = new URLSearchParams(filters).toString();
+  /* หน้าพิมพ์ไม่มีฟอร์ม hist ไม่มีความหมายที่นั่น */
+  const { hist: _hist, ...printFilters } = filters;
+  const printQuery = new URLSearchParams(printFilters).toString();
   const chipStyle = (on: boolean) =>
     on ? { background: 'var(--brand)', color: '#fff', borderColor: 'var(--brand)' } : undefined;
 

@@ -61,7 +61,10 @@ export default async function BillingPage({
   const { rows, total, live } = list;
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
+  /* hist=1 ต้องติดไปกับปุ่มแบ่งหน้าและจำนวนแถว — หน้านี้เปิดมาโดยไม่มี hist=1 คือฟอร์มสร้างใบวางบิล
+     ไม่งั้นกด 10/20/30 หรือ "ถัดไป" ในประวัติแล้วเด้งไปฟอร์ม (ผู้ใช้แจ้ง 3 ต.ค. 2569) */
   const keep: Record<string, string> = {
+    ...(histFirst ? { hist: '1' } : {}),
     ...(sp.q ? { q: sp.q } : {}),
     ...(from ? { from } : {}),
     ...(vat ? { vat } : {}),
