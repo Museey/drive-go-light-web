@@ -5,7 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
   saveSalesDoc, scanForDoc, searchCustomers, searchProducts, voidSalesChain, voidSalesDoc,
-  type DocScan, type PickedContact, type PickedProduct, type SalesDocInput, openDocsFor, loadDocForCopy, type OpenDoc } from '@/lib/sales';
+  type DocScan, type PickedContact, type PickedProduct, type SalesDocInput, openDocsFor, loadDocForCopy, type OpenDoc,
+  docHoldsStock } from '@/lib/sales';
+import { isUuid } from '@/lib/ids';
 import { friendlyDbError, type FormResult } from '@/lib/mutate';
 import { safeBack, withSaved } from '@/lib/saved-target';
 
@@ -112,6 +114,11 @@ export async function searchOpenSourcesAction(target: 'invoice' | 'receipt', q: 
 /** โหลดเอกสารต้นทางทั้งใบ (ลูกค้า รถ รายการ) มาใส่ฟอร์มใบต่อ */
 export async function loadSourceAction(id: string): Promise<SalesDocInput | null> {
   return loadDocForCopy(id);
+}
+
+/** ใบต้นทางตัดสต๊อกไปแล้วไหม — ฟอร์มใบเสร็จใช้บอกว่าใบนี้ไม่ตัดซ้ำ (เซิร์ฟเวอร์ตัดสินเองอีกรอบตอนบันทึก) */
+export async function sourceHoldsStockAction(id: string): Promise<boolean> {
+  return isUuid(id) ? docHoldsStock(id) : false;
 }
 
 export async function searchCustomersAction(q: string): Promise<PickedContact[]> {

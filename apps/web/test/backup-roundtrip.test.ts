@@ -21,6 +21,8 @@ import {
   addCountItems, applyCount, createCount, getCount, setCountedQty,
 } from '../src/lib/stock-counts';
 import { freshSchema } from '../../../tools/test-schema.mjs';
+import { consumeStock } from '../src/lib/stock-cost';
+import { cutsStockWith, holdsStockWith } from '../src/lib/sales-stock';
 
 pg.types.setTypeParser(1082, (v) => v);
 
@@ -54,6 +56,8 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
   let purgedDocNo = '';
   let supplierProductCode = '';
   let vendorCode = '';
+  let heldDocNo = '';
+  let heldProductCode = '';
 
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: DB_URL });
@@ -282,6 +286,22 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
        ไม่งั้นอู่ที่ย้ายเครื่องจะพิมพ์เอกสารออกมาไม่มีโลโก้โดยไม่รู้ตัว */
     await admin.query(`update tenants set logo_url = $2 where id = $1`, [firstTenant, LOGO]);
 
+    /* ใบส่งมอบที่ยังไม่ออกใบเสร็จ ตัดสต๊อกไว้แล้ว — แบบใบที่บันทึกหลังเปลี่ยนมาตัดตอนส่งมอบ (4 ต.ค. 2569)
+       ไฟล์สำรองไม่มีบัญชีสต๊อก ถ้าไม่พกไปด้วย กู้คืนแล้วใบเสร็จที่ออกต่อจะตัดซ้ำ */
+    const openIv = (await app.query(
+      `select d.id, d.doc_no, d.doc_date, i.product_id, p.code, i.qty
+         from documents d
+         join doc_items i on i.doc_id = d.id and i.product_id is not null
+         join products p on p.id = i.product_id
+        where d.kind in ('IV','IVT') and d.status = 'issued'
+          and not exists (select 1 from documents x where x.parent_doc_id = d.id and x.status <> 'void')
+        order by d.doc_no, i.line_no limit 1`)).rows[0];
+    heldDocNo = openIv.doc_no;
+    heldProductCode = openIv.code;
+    await consumeStock(app, {
+      productId: openIv.product_id, qty: Number(openIv.qty), movedOn: openIv.doc_date, reason: 'sale', docId: openIv.id,
+    });
+
     /* ส่งออกจากอู่แรก แล้วนำเข้าเป็นอู่ที่สอง */
     const exported = await exportBackupWith(app);
 
@@ -367,6 +387,35 @@ describe.skipIf(!DB_URL)('ส่งออกแล้วนำกลับเข
     const a = await summary(firstTenant);
     const b = await summary(secondTenant);
     expect(n(b.stock)).toBe(n(a.stock));
+  });
+
+  it('ใบส่งมอบที่ตัดสต๊อกไว้ ไปกลับแล้วยังถือสต๊อกเท่าเดิม — ใบเสร็จที่ออกต่อไม่ตัดซ้ำ · คงเหลือและมูลค่าเท่าเดิม', async () => {
+    const read = async (tenant: string) => {
+      await app.query(`select set_config('app.tenant_id', $1, false)`, [tenant]);
+      const doc = (await app.query(`select id from documents where doc_no = $1`, [heldDocNo])).rows[0];
+      const prod = (await app.query(
+        `select s.qty_on_hand, p.last_cost,
+                (select sum(sign(m.qty_delta) * coalesce(m.cost_amount, abs(m.qty_delta) * m.unit_cost))
+                   from stock_moves m where m.product_id = p.id) as book
+           from products p join product_stock s on s.product_id = p.id where p.code = $1`, [heldProductCode])).rows[0];
+      const heldQty = (await app.query(
+        `select -coalesce(sum(qty_delta), 0) as q from stock_moves where doc_id = $1`, [doc.id])).rows[0].q;
+      return {
+        holds: await holdsStockWith(app, doc.id),
+        receiptCuts: await cutsStockWith(app, { kind: 'RC', parentDocId: doc.id }),
+        heldQty: n(heldQty), qty: n(prod.qty_on_hand), book: n(prod.book), lastCost: n(prod.last_cost),
+      };
+    };
+    const a = await read(firstTenant);
+    const b = await read(secondTenant);
+    expect(a.holds).toBe(true);
+    expect(b.holds, 'ใบส่งมอบที่กู้คืนยังถือสต๊อก').toBe(true);
+    expect(b.receiptCuts, 'ใบเสร็จที่ออกต่อจากใบที่กู้คืนต้องไม่ตัดซ้ำ').toBe(false);
+    expect(b.heldQty).toBe(a.heldQty);
+    expect(b.qty, 'คงเหลือเท่าเดิม').toBe(a.qty);
+    /* กู้คืนตีมูลค่าสต๊อกด้วยต้นทุนล่าสุดอยู่แล้ว — ยอดยกมาที่บวกของที่ใบส่งมอบถือ แล้วตัดออกด้วยต้นทุนเดียวกัน
+       ต้องไม่ทำให้มูลค่าที่เหลือเพี้ยนไปจากคงเหลือ × ต้นทุนยกมา */
+    expect(b.book, 'มูลค่าสต๊อกตามบัญชีไม่เพี้ยน').toBeCloseTo(b.qty * b.lastCost, 2);
   });
 
   it('สายเอกสารยังผูกครบเหมือนเดิม', async () => {

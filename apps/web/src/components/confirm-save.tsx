@@ -20,7 +20,7 @@ export interface ConfirmItem {
   amount: number;
 }
 
-export function ConfirmSave({ open, title, lines, items, warn, submitLabel = 'บันทึก', onEdit }: {
+export function ConfirmSave({ open, title, lines, items, warn, note, submitLabel = 'บันทึก', onEdit }: {
   open: boolean;
   /** เช่น "ใบเสนอราคา" */
   title: string;
@@ -35,6 +35,11 @@ export function ConfirmSave({ open, title, lines, items, warn, submitLabel = '�
    * ตอนกดบันทึก — จุดนี้คือจุดสุดท้ายที่ยังกลับไปแก้ได้
    */
   warn?: string;
+  /**
+   * สิ่งที่ต้องทำต่อหลังบันทึก — ไม่ใช่ข้อผิดพลาด แต่ลืมแล้วงานค้าง
+   * เช่นใบส่งมอบตัดสต๊อกแล้วแต่ยังต้องออกใบเสร็จรับเงินเมื่อเก็บเงิน (ผู้ใช้กำหนด 4 ต.ค. 2569)
+   */
+  note?: string;
   submitLabel?: string;
   onEdit: () => void;
 }) {
@@ -75,6 +80,7 @@ export function ConfirmSave({ open, title, lines, items, warn, submitLabel = '�
           </div>
         ) : null}
 
+        {note ? <div className="confirm-note" role="note">🧾 {note}</div> : null}
         {warn ? <div className="confirm-warn" role="alert">⚠ {warn}</div> : null}
 
         <div className="acts">

@@ -177,7 +177,8 @@ test('ใบเสนอราคา → ใบกำกับภาษี → �
         : page.locator(`.doc-cards a[href="/income/${id}"] .chip`).last();
     };
     await expect(await chipOf(qt), 'ใบเสนอราคาที่ออกใบส่งมอบแล้ว').toHaveText('เรียบร้อย');
-    await expect(await chipOf(ivt), 'ใบกำกับภาษีที่บันทึกแล้ว').toHaveText('เรียบร้อย');
+    /* ใบส่งมอบที่ยังไม่มีใบเสร็จ = "รอออกใบเสร็จ" (ผู้ใช้เลือก 4 ต.ค. 2569 แทน "เรียบร้อย" ของ 17 ก.ย.) */
+    await expect(await chipOf(ivt), 'ใบกำกับภาษีที่ยังไม่ออกใบเสร็จ').toHaveText('รอออกใบเสร็จ');
 
     /* ใบเสร็จจากใบกำกับภาษี ชำระบางส่วน แล้วพิมพ์ */
     await page.goto(`/income/${ivt}`);
@@ -195,6 +196,10 @@ test('ใบเสนอราคา → ใบกำกับภาษี → �
     /* ใบกำกับภาษีที่ออกใบเสร็จแล้ว ก็ออกใบเสร็จซ้ำไม่ได้ */
     await page.goto(`/income/${ivt}`);
     await expect(page.getByRole('link', { name: /^ออกใบ/ })).toHaveCount(0);
+
+    /* ออกใบเสร็จแล้ว — ใบกำกับภาษีขึ้นเรียบร้อยในประวัติ */
+    await page.goto(`/income?hist=1&q=${encodeURIComponent(tag)}`);
+    await expect(await chipOf(ivt), 'ใบกำกับภาษีที่ออกใบเสร็จแล้ว').toHaveText('เรียบร้อย');
   } finally {
     await cleanup(tag);
   }

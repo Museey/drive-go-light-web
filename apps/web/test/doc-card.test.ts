@@ -61,17 +61,19 @@ describe('incomeDocCard — เอกสารขาย', () => {
     expect(delivered.status).toEqual({ label: 'เรียบร้อย', tone: 'ok' });
   });
 
-  /* ใบส่งมอบ: บันทึกแล้ว = ส่งรถแล้ว "เรียบร้อย" · เลยวันครบกำหนดยังไม่ได้เงิน ยังต้องเตือน */
-  it.each(['IV', 'IVT'])('%s — เรียบร้อยแม้ยังค้าง · ยอดคงค้างยังโชว์ · เลยครบกำหนดขึ้นเกินกำหนด', (kind) => {
+  /* ใบส่งมอบที่ยังไม่มีใบเสร็จ = "รอออกใบเสร็จ" (ผู้ใช้เลือก 4 ต.ค. 2569 — เดิม 17 ก.ย. ขึ้น "เรียบร้อย")
+     ใบส่งมอบตัดสต๊อกตั้งแต่บันทึก ยังไม่มีใบเสร็จคืองานที่ยังไม่จบ · เลยวันครบกำหนดยังไม่ได้เงิน เตือนแรงกว่า */
+  it.each(['IV', 'IVT'])('%s — ยังไม่มีใบเสร็จขึ้นรอออกใบเสร็จ · ยอดคงค้างยังโชว์ · เลยครบกำหนดขึ้นเกินกำหนด', (kind) => {
     const fresh = incomeDocCard(inc({ kind, outstanding: 5350, dueDate: '2026-10-01' }), TODAY);
-    expect(fresh.status).toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+    expect(fresh.status).toEqual({ label: 'รอออกใบเสร็จ', tone: 'warn' });
     expect(fresh.outstanding).toBe(5350);
 
     expect(incomeStatus(inc({ kind, outstanding: 5350, dueDate: TODAY }), TODAY))
-      .toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+      .toEqual({ label: 'รอออกใบเสร็จ', tone: 'warn' });
     expect(incomeStatus(inc({ kind, outstanding: 5350, dueDate: '2026-09-15' }), TODAY))
       .toEqual({ label: 'เกินกำหนด', tone: 'due' });
-    expect(incomeStatus(inc({ kind, outstanding: 0 }), TODAY)).toEqual({ label: 'เรียบร้อย', tone: 'ok' });
+    /* รับเงินครบแล้วแต่ยังไม่ออกใบเสร็จ — ยังต้องออกใบเสร็จอยู่ดี */
+    expect(incomeStatus(inc({ kind, outstanding: 0 }), TODAY)).toEqual({ label: 'รอออกใบเสร็จ', tone: 'warn' });
   });
 
   /* หนี้ย้ายไปอยู่ที่ใบเสร็จแล้ว (หน้าลูกหนี้ก็ไม่นับใบส่งมอบที่มีใบเสร็จ) — ไม่เตือนซ้ำที่ใบส่งมอบ */

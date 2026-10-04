@@ -25,6 +25,7 @@ const ปลายทาง: Record<string, string> = {
   ap: '/finance/ap',
   reorder: '/stock?reorder=1',
   openqt: '/income?kind=QT&open=1&hist=1',
+  norc: '/income?norc=1&hist=1',
   pending: '/stock/pending',
   dead: '/stock?flag=dead',
 };

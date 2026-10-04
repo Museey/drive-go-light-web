@@ -470,14 +470,57 @@ export async function importBackup(
       warnings.push(`รูปสินค้า ${picSkipped} รูปในไฟล์อ่านไม่ออก — ข้ามไป ข้อมูลอื่นครบ`);
     }
 
+    /*
+     * ---------- ของที่ใบส่งมอบถือไว้ (ไฟล์ของเว็บ · _heldStock) ----------
+     *
+     * ใบส่งมอบตัดสต๊อกตั้งแต่บันทึก (apps/web/src/lib/sales-stock.ts) แต่ไฟล์สำรองไม่มีบัญชีสต๊อก
+     * มีแค่ยอดคงเหลือหลังหักไปแล้ว ถ้านำเข้าเฉย ๆ ใบส่งมอบจะกลายเป็นใบที่ไม่เคยตัด
+     * แล้วใบเสร็จที่ออกต่อทีหลังจะตัดซ้ำ — ของหายจากสต๊อกสองรอบโดยไม่มีใครเห็น
+     *
+     * จึงลงยอดยกมาให้รวมของที่ใบส่งมอบถือไว้ (ลงวันก่อนใบส่งมอบใบแรก ให้การเล่นบัญชีเห็นของก่อนตัด)
+     * แล้วตัดออกในนามใบนั้นด้วยต้นทุนยกมา — คงเหลือ มูลค่า และล็อตที่เหลือเท่าเดิมทุกอย่าง
+     * ไฟล์ที่ไม่มีคีย์นี้ (รวมไฟล์รุ่น HTML) นำเข้าแบบเดิม
+     */
+    const held: { doc: any; productId: string; qty: number }[] = [];
+    for (const inv of db.invoices) {
+      /* ใบที่ยกเลิกคืนของไปแล้ว ไม่ถือสต๊อก — ไฟล์ของเราไม่ใส่ค่านี้ให้อยู่แล้ว กันไฟล์ที่ถูกแก้มือ */
+      if (inv?.voided === true) continue;
+      for (const h of Array.isArray(inv?._heldStock) ? inv._heldStock : []) {
+        const pid = productId.get(text(h?.pid));
+        const q = num(h?.qty);
+        if (pid && q > 0) held.push({ doc: inv, productId: pid, qty: q });
+      }
+    }
+    const heldOfProduct = new Map<string, { qty: number; first: string }>();
+    for (const h of held) {
+      const on = text(h.doc.date) || openingDate;
+      const cur = heldOfProduct.get(h.productId);
+      heldOfProduct.set(h.productId, cur
+        ? { qty: cur.qty + h.qty, first: on < cur.first ? on : cur.first }
+        : { qty: h.qty, first: on });
+    }
+    const dayBefore = (iso: string) => {
+      const d = new Date(`${iso}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - 1);
+      return d.toISOString().slice(0, 10);
+    };
+
     /* ---------- สต๊อกยกมา ---------- */
     const stockRows = db.products
-      .filter((p: any) => num(p.qty) !== 0)
-      .map((p: any) => [
-        randomUUID(), tenantId, productId.get(p.id), p.lastMove || openingDate,
-        qty(num(p.qty)), money(num(p.cost)), money(num(p.qty) * num(p.cost)),
-        'opening', 'ยอดยกมาจากโปรแกรมรุ่น HTML',
-      ]);
+      .map((p: any) => {
+        const pid = productId.get(p.id)!;
+        const h = heldOfProduct.get(pid);
+        const total = num(p.qty) + (h?.qty ?? 0);
+        if (total === 0) return null;
+        const on = p.lastMove || openingDate;
+        return [
+          randomUUID(), tenantId, pid, h && h.first <= on ? dayBefore(h.first) : on,
+          qty(total), money(num(p.cost)), money(total * num(p.cost)),
+          'opening', 'ยอดยกมาจากโปรแกรมรุ่น HTML',
+        ];
+      })
+      .filter((r: unknown[] | null): r is unknown[] => r !== null);
+    const openingCost = new Map<string, number>(db.products.map((p: any) => [productId.get(p.id)!, num(p.cost)]));
     await insertRows(client, 'stock_moves',
       ['id', 'tenant_id', 'product_id', 'moved_on', 'qty_delta', 'unit_cost', 'cost_amount',
        'reason', 'note'],
@@ -878,6 +921,19 @@ export async function importBackup(
     await insertRows(client, 'payments',
       ['id', 'tenant_id', 'doc_id', 'paid_on', 'amount', 'method', 'ref', 'at_issue'],
       paymentRows);
+
+    /* ใบส่งมอบที่ถือสต๊อกไว้ตอนส่งออก — ตัดออกในนามใบนั้นอีกครั้ง (ยอดยกมาบวกไว้ให้แล้วข้างบน) */
+    await insertRows(client, 'stock_moves',
+      ['id', 'tenant_id', 'product_id', 'moved_on', 'qty_delta', 'unit_cost', 'cost_amount',
+       'reason', 'doc_id', 'note'],
+      held.map((h) => {
+        const unit = openingCost.get(h.productId) ?? 0;
+        return [
+          randomUUID(), tenantId, h.productId, text(h.doc.date) || openingDate,
+          qty(-h.qty), money(unit), money(h.qty * unit),
+          'sale', docUuid.get(h.doc), 'ตัดสต๊อกตอนออกใบส่งมอบ (ยกมาจากไฟล์สำรอง)',
+        ];
+      }));
 
     /* ---------- ตัวนับเลขที่เอกสาร ----------
        ไฟล์ของเว็บมี _seqPeriods ครบทุกเดือน ใช้ตามจริง

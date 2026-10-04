@@ -5,7 +5,7 @@ import { safeBack } from '@/lib/saved-target';
 import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
-import { canEdit, loadDocForEdit, lotExpiryOf, docNoOf, parentKindOf } from '@/lib/sales';
+import { canEdit, loadDocForEdit, lotExpiryOf, docNoOf, parentKindOf, receiptHoldsStockOf } from '@/lib/sales';
 import { today } from '@drivegolight/core';
 import { KIND_LABEL } from '@/lib/format';
 import { DocEditor } from '../../doc-editor';
@@ -30,6 +30,8 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
   if (!initial) notFound();
   const source = initial;
   const lotExpiry = await lotExpiryOf(source.items.map((i) => i.productId));
+  /* ใบส่งมอบที่ออกก่อนเปลี่ยนกติกา ใบเสร็จต่อของมันตัดสต๊อกไปแล้ว — แก้ใบส่งมอบแล้วไม่ตัดซ้ำ (lib/sales-stock.ts) */
+  const receiptHoldsStock = source.kind === 'IV' || source.kind === 'IVT' ? await receiptHoldsStockOf(id) : false;
   /* บันทึกแล้วกลับหน้าที่กดแก้ไขมา (ผู้ใช้กำหนด) — กรองใน safeBack เหลือเฉพาะหน้าในเมนูรายรับ */
   const back = safeBack((await headers()).get('referer'), ['/income']);
 
@@ -40,7 +42,7 @@ export default async function EditDocPage({ params }: { params: Promise<{ id: st
     >
       {/* key = รหัสเอกสาร — จากหน้าแก้ไขใบหนึ่งไปอีกใบ ฟอร์มต้องไม่ค้างข้อมูลใบเดิม */}
       <DocEditor key={id} initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="edit"
-                 vatRegistered={shop.vatRegistered} parentKind={parentKind}
+                 vatRegistered={shop.vatRegistered} parentKind={parentKind} receiptHoldsStock={receiptHoldsStock}
                  lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
                  docNo={docNo ?? undefined} returnTo={back ?? undefined} />
     </Shell>

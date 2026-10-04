@@ -69,11 +69,13 @@ export function incomeStatus(
       ? { label: 'เรียบร้อย', tone: 'ok' }
       : { label: 'ค้างส่งมอบ', tone: 'warn' };
   }
-  /* ใบส่งมอบ: บันทึกแล้ว = ส่งมอบงานแล้ว "เรียบร้อย" — ยอดคงค้างยังโชว์เป็นตัวเลข
-     เลยวันครบกำหนดแล้วยังไม่ได้เงินยังเตือน · ออกใบเสร็จแล้วหนี้ย้ายไปใบเสร็จ ไม่เตือนซ้ำ */
+  /* ใบส่งมอบ: ออกใบเสร็จแล้ว = "เรียบร้อย" (หนี้ย้ายไปใบเสร็จ ไม่เตือนซ้ำ)
+     ยังไม่ออก = "รอออกใบเสร็จ" — ใบส่งมอบตัดสต๊อกตั้งแต่บันทึก งานยังไม่จบจนกว่าจะออกใบเสร็จ
+     (ผู้ใช้เลือก 4 ต.ค. 2569 แทน "บันทึกแล้วเรียบร้อย" ของ 17 ก.ย.) · เลยวันครบกำหนดแล้วยังไม่ได้เงิน เตือนแรงกว่า */
   if (r.kind === 'IV' || r.kind === 'IVT') {
-    if (!r.receipt && overdue(r.outstanding, r.dueDate, todayIso)) return { label: 'เกินกำหนด', tone: 'due' };
-    return { label: 'เรียบร้อย', tone: 'ok' };
+    if (r.receipt) return { label: 'เรียบร้อย', tone: 'ok' };
+    if (overdue(r.outstanding, r.dueDate, todayIso)) return { label: 'เกินกำหนด', tone: 'due' };
+    return { label: 'รอออกใบเสร็จ', tone: 'warn' };
   }
   if (overdue(r.outstanding, r.dueDate, todayIso)) return { label: 'เกินกำหนด', tone: 'due' };
   if (r.outstanding > 0.004) return { label: 'ค้างชำระ', tone: 'warn' };

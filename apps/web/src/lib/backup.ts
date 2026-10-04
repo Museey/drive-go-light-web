@@ -114,6 +114,22 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
     );
     const items = await c.query(`select * from doc_items order by doc_id, line_no`);
     const pays = await c.query(`select * from payments order by doc_id, paid_on, created_at`);
+    /*
+     * ของที่ใบส่งมอบตัดสต๊อกไว้และยังไม่คืน (ใบส่งมอบตัดสต๊อกตั้งแต่บันทึก — lib/sales-stock.ts)
+     *
+     * ไฟล์สำรองไม่มีบัญชีสต๊อก มีแค่ยอดคงเหลือ ถ้าไม่บอกไว้ กู้คืนแล้วใบส่งมอบจะกลายเป็นใบที่ "ไม่เคยตัด"
+     * ใบเสร็จที่ออกต่อทีหลังจะตัดซ้ำ — ตัวนำเข้าใช้ค่านี้ลงบัญชีให้ใบส่งมอบถือสต๊อกเท่าเดิม
+     */
+    const held = await c.query(
+      `select m.doc_id, m.product_id, -sum(m.qty_delta) as qty
+         from stock_moves m join documents d on d.id = m.doc_id
+        where d.kind in ('IV','IVT') and d.status <> 'void'
+        group by m.doc_id, m.product_id
+       having sum(m.qty_delta) < 0
+        order by m.doc_id, m.product_id`);
+    const heldOf = (docId: string) => held.rows
+      .filter((r) => r.doc_id === docId)
+      .map((r) => ({ pid: r.product_id as string, qty: n(r.qty) }));
     const users = await c.query(`select * from users order by code`);
     /* ตัวนับเลขที่ — เก็บครบทุกเดือนไว้ใน _seqPeriods ส่วน seq ของรุ่น 6.4 ใช้ค่าสูงสุด
        (เดิมเอาแถวไหนก็ได้ของชนิดนั้น ซึ่งไม่แน่นอนเมื่อมีหลายเดือน) */
@@ -333,13 +349,18 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         proposer: d.proposer ?? '',
       })),
 
-      invoices: [...byKind('IV'), ...byKind('IVT')].map((d) => ({
-        ...salesDoc(d),
-        kind: d.kind_text,
-        quoteId: d.parent_kind === 'QT' ? d.parent_doc_id : null,
-        quoteNo: d.parent_kind === 'QT' ? d.parent_no : '',
-        invId: null, invNo: '',
-      })),
+      invoices: [...byKind('IV'), ...byKind('IVT')].map((d) => {
+        const heldStock = heldOf(d.id);
+        return {
+          ...salesDoc(d),
+          kind: d.kind_text,
+          quoteId: d.parent_kind === 'QT' ? d.parent_doc_id : null,
+          quoteNo: d.parent_kind === 'QT' ? d.parent_no : '',
+          invId: null, invNo: '',
+          /* ขึ้นต้น _ ให้รุ่น 6.4 ข้าม · ไม่มีคีย์ = ใบนี้ไม่ได้ถือสต๊อก */
+          ...(heldStock.length ? { _heldStock: heldStock } : {}),
+        };
+      }),
 
       receipts: byKind('RC').map((d) => ({
         ...salesDoc(d),

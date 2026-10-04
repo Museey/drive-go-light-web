@@ -6,7 +6,7 @@ import { can, requireTab } from '@/lib/auth';
 import { DocSteps } from '@/components/doc-steps';
 import { Shell } from '@/components/shell';
 import { getDocDetail, getShop } from '@/lib/queries';
-import { canEdit, childOf } from '@/lib/sales';
+import { canEdit, childOf, docHoldsStock } from '@/lib/sales';
 import { listPayments } from '@/lib/receivables';
 import { PaymentsPanel } from '../../finance/payments-panel';
 import { DocActions } from '../doc-actions';
@@ -29,14 +29,16 @@ export default async function DocPage({
   /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
   if (!isUuid(id)) notFound();
   const sp = await searchParams;
-  const [doc, shop, editable, payments, child] = await Promise.all([
+  const [doc, shop, editable, payments, child, holdsStock] = await Promise.all([
     getDocDetail(id), getShop(), canEdit(id), listPayments(id),
-    childOf(id),
+    childOf(id), docHoldsStock(id),
   ]);
   if (!doc) notFound();
   /* หลังรู้ว่าเอกสารมีจริงแล้วเท่านั้น — ใบที่ลบถาวรไปแล้วต้องจบที่ 404 ไม่ใช่ 500 จากตัวหาสายเอกสาร */
   const chain = await docChainOf(id);
 
+  /* ใบส่งมอบที่ยังไม่มีใบเสร็จ — แถบเตือนพร้อมปุ่มออกใบเสร็จ (ปุ่มเดียว แทนปุ่มในแถบปุ่มด้านบน) */
+  const receiptDue = (doc.kind === 'IV' || doc.kind === 'IVT') && doc.status !== 'void' && !child;
   const paid = doc.payments.reduce((s, p) => s + p.amount, 0);
   const outstanding = Math.round((doc.payable - paid) * 100) / 100;
   /* ชิปเดียวกับตารางประวัติและการ์ด (lib/doc-card.ts) — หน้าเอกสารต้องไม่พูดคนละเรื่องกับรายการ */
@@ -81,9 +83,27 @@ export default async function DocPage({
           <DocActions id={doc.id} kind={doc.kind} docNo={doc.docNo} partyName={doc.partyName}
                       canEdit={editable.ok} editReason={editable.reason} hasChild={!!child}
                       chain={chain.related} blocked={chain.blocked}
-                      startVoiding={sp.void === '1'} vatRegistered={shop.vatRegistered} />
+                      startVoiding={sp.void === '1'} vatRegistered={shop.vatRegistered}
+                      omitNext={receiptDue && can(session, 'income') ? ['RC'] : []} />
         </div>
       )}
+
+      {/* ใบส่งมอบที่ยังไม่มีใบเสร็จ — ของออกจากร้านไปแล้ว (ตัดสต๊อกตอนบันทึก) แต่ยังไม่ได้รับเงิน
+          เตือนค้างไว้จนกว่าจะออกใบเสร็จ พร้อมทางไปออกใบเสร็จต่อจากใบนี้ (ผู้ใช้เลือก 4 ต.ค. 2569) */}
+      {receiptDue ? (
+        <div className="note receipt-due" role="status" style={{ marginBottom: 16 }}>
+          <b>ยังไม่ได้ออกใบเสร็จรับเงิน</b> —{' '}
+          {holdsStock
+            ? 'ใบส่งมอบนี้ตัดสต๊อกไปแล้ว'
+            : 'สต๊อกของใบนี้จะตัดตอนออกใบเสร็จ (ใบส่งมอบที่ออกก่อนเปลี่ยนมาตัดตอนส่งมอบ)'}
+          {' '}เมื่อเก็บเงินลูกค้าให้ออกใบเสร็จรับเงินต่อจากใบนี้
+          {can(session, 'income') ? (
+            <div className="tag-row" style={{ marginTop: 8 }}>
+              <Link className="btn primary" href={`/income/new?kind=RC&from=${doc.id}`}>ออกใบเสร็จรับเงิน</Link>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {doc.missing.length && doc.status !== 'void' ? (
         <div className="note" style={{ marginBottom: 16 }}>

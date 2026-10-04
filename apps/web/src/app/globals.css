@@ -1046,6 +1046,12 @@ table.lines tr.hitrow table.tbl td { padding: 6px 10px; }
   border-radius: 6px; padding: 9px 12px; font-size: 12.5px; line-height: 1.5;
   word-break: break-word;
 }
+/* สิ่งที่ต้องทำต่อหลังบันทึก (เช่น ใบส่งมอบ → ต้องออกใบเสร็จเมื่อเก็บเงิน) — ไม่ใช่คำเตือนว่าผิด จึงใช้โทนเขียว */
+.confirm-note {
+  background: var(--steel-soft); border: 1px solid #BFE3D6; color: #0F5C3E;
+  border-radius: 6px; padding: 9px 12px; font-size: 12.5px; line-height: 1.5; font-weight: 600;
+  word-break: break-word;
+}
 
 .confirm .acts { display: flex; gap: 10px; margin-top: auto; }
 .confirm .acts .btn { flex: 1; justify-content: center; min-height: 48px; font-size: 15px; }

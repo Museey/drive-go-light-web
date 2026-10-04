@@ -23,6 +23,7 @@ const n = (v: unknown): number => Number(v ?? 0);
 export { forcedVatMode, nextKinds, WALK_IN_CUSTOMER, type SalesKind } from './sales-rules';
 import { newDocVatMode, type SalesKind } from './sales-rules';
 import { shopVatRegisteredWith, vatModeForSaveWith } from './sales-vat';
+import { cutsStockWith, holdsStockWith, receiptHoldsStockWith } from './sales-stock';
 
 export interface DocItemInput {
   productId: string | null;
@@ -256,12 +257,10 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
     }
 
     /* ---------- ตัดสต๊อก ----------
-       ตัดตอนออกใบเสร็จเท่านั้น ตามพฤติกรรมของโปรแกรมเดิม
-
-       ข้อสังเกต: ใบส่งมอบที่ยังไม่เก็บเงินจะยังไม่ตัดสต๊อก ทั้งที่ของออกจากร้านไปแล้ว
-       เป็นพฤติกรรมที่ยกมาจากต้นแบบโดยตั้งใจ ถ้าจะเปลี่ยนต้องตัดสินใจร่วมกับเจ้าของอู่
-       เพราะตัวเลขสต๊อกจะไม่ตรงกับที่เขาคุ้นเคย */
-    if (input.kind === 'RC') {
+       ตัดตั้งแต่บันทึกใบส่งมอบ เพราะของออกจากร้านไปแล้ว (ผู้ใช้กำหนด 4 ต.ค. 2569 · ตรงกับรุ่น 6.4)
+       ใบเสร็จที่ออกต่อจากใบส่งมอบนั้นไม่ตัดซ้ำ · ใบเสร็จที่ไม่มีใบส่งมอบนำหน้ายังตัดตอนบันทึก
+       ใบส่งมอบที่ออกก่อนเปลี่ยนกติกาไม่ได้ตัด ใบเสร็จต่อของมันจึงยังตัดเหมือนเดิม — กติกาอยู่ที่ sales-stock.ts */
+    if (await cutsStockWith(c, { id: input.id, kind: input.kind, parentDocId: input.parentDocId })) {
       const cuts: { productId: string; qty: number; note?: string }[] = [];
       for (const it of input.items) {
         /* บรรทัดชุดอะไหล่: ตัดสต๊อกชิ้นส่วนที่ผูกทะเบียน (จำนวนในชุด × จำนวนชุด) */
@@ -636,6 +635,16 @@ export function blankSalesDoc(kind: SalesKind, warranty: string, whtRate: number
     receivedBy: '', note: '',
     items: [], payments: [],
   };
+}
+
+/** ใบนี้ตัดสต๊อกไปแล้วไหม (ถือสต๊อกอยู่) — ใบเสร็จที่ออกต่อจากใบส่งมอบที่ถือสต๊อกไม่ตัดซ้ำ (sales-stock.ts) */
+export async function docHoldsStock(id: string): Promise<boolean> {
+  return query((c) => holdsStockWith(c, id));
+}
+
+/** ใบเสร็จที่ออกต่อจากใบส่งมอบใบนี้เป็นคนถือสต๊อก (ใบส่งมอบที่ออกก่อนเปลี่ยนกติกา) — แก้ใบส่งมอบแล้วไม่ตัดซ้ำ */
+export async function receiptHoldsStockOf(id: string): Promise<boolean> {
+  return query((c) => receiptHoldsStockWith(c, id));
 }
 
 /**

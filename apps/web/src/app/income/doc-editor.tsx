@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState, useTransition } from 'rea
 import Link from 'next/link';
 import { bahttext, expiredLines, lineAmount, recTotals, WHT_MIN_BASE, type VatMode } from '@drivegolight/core';
 import { forcedVatMode, vatChoices } from '@/lib/sales-rules';
-import { loadSourceAction, saveDocAction, scanPartAction, searchCustomersAction, searchOpenSourcesAction, searchProductsAction } from './actions';
+import { loadSourceAction, saveDocAction, scanPartAction, searchCustomersAction, searchOpenSourcesAction, searchProductsAction, sourceHoldsStockAction } from './actions';
 import { useLiveSearch } from '@/components/use-live-search';
 import { ConfirmSave } from '@/components/confirm-save';
 import { payModeOf } from '@/lib/pay-mode';
@@ -39,10 +39,11 @@ const EPS = 0.004;
 const money = (n: number) => (Math.round(n * 100) / 100);
 const MIN_ROWS = 5;
 
+/* ใบส่งมอบตัดสต๊อกตั้งแต่บันทึก (ผู้ใช้กำหนด 4 ต.ค. 2569) — ใบเสร็จที่ต่อจากใบส่งมอบไม่ตัดซ้ำ ดู kindHelp ข้างล่าง */
 const KIND_HELP: Record<SalesKind, string> = {
   QT: 'เสนอราคาให้ลูกค้าอนุมัติก่อนลงมือซ่อม ยังไม่เป็นหนี้และยังไม่ตัดสต๊อก',
-  IV: 'ส่งมอบงานและแจ้งหนี้ โดยไม่มีภาษีมูลค่าเพิ่ม',
-  IVT: 'ส่งมอบงานพร้อมใบกำกับภาษี — ลูกค้าต้องมีเลขประจำตัวผู้เสียภาษี',
+  IV: 'ส่งมอบงานและแจ้งหนี้ โดยไม่มีภาษีมูลค่าเพิ่ม — ตัดสต๊อกอะไหล่ตอนบันทึกใบนี้',
+  IVT: 'ส่งมอบงานพร้อมใบกำกับภาษี — ลูกค้าต้องมีเลขประจำตัวผู้เสียภาษี · ตัดสต๊อกอะไหล่ตอนบันทึกใบนี้',
   RC: 'รับเงินและปิดงาน — ตัดสต๊อกอะไหล่ตอนบันทึกใบนี้',
 };
 
@@ -199,7 +200,7 @@ function LineRow({
 
 export function DocEditor({
   initial, vatRate, shopWhtRate, mode, lotExpiry, expiryWarnDays, today, cashOnOpen, docNo, banks, returnTo, docNoPreview,
-  vatRegistered = true, parentKind = null,
+  vatRegistered = true, parentKind = null, parentHoldsStock = false, receiptHoldsStock = false,
 }: {
   initial: SalesDocInput;
   vatRate: number;
@@ -208,6 +209,10 @@ export function DocEditor({
   vatRegistered?: boolean;
   /** ชนิดของใบต้นทาง (ใบที่ใบนี้ออกต่อมา) — ใบเสร็จต่อจากใบกำกับภาษีต้องคิด VAT ตามใบกำกับ */
   parentKind?: SalesKind | null;
+  /** ใบต้นทางตัดสต๊อกไปแล้ว (ใบส่งมอบ) — ใบเสร็จนี้ไม่ตัดซ้ำ (lib/sales-stock.ts) */
+  parentHoldsStock?: boolean;
+  /** แก้ใบส่งมอบที่ใบเสร็จต่อของมันเป็นคนตัดสต๊อก (ใบที่ออกก่อนเปลี่ยนกติกา) — ใบนี้ไม่ตัดซ้ำ */
+  receiptHoldsStock?: boolean;
   mode: 'new' | 'edit';
   /** วันหมดอายุของล็อตที่จะถูกตัดก่อน ของอะไหล่ที่อยู่บนใบตั้งแต่เปิดหน้ามา */
   lotExpiry: Record<string, string>;
@@ -244,16 +249,18 @@ export function DocEditor({
   const [srcQuery, setSrcQuery] = useState('');
   const [srcNo, setSrcNo] = useState('');
   const [srcBusy, setSrcBusy] = useState(false);
-  /* ชนิดของใบต้นทาง — เปลี่ยนตามใบที่เลือกในช่อง "อ้างอิงใบเสนอราคา" */
+  /* ชนิดของใบต้นทาง และใบต้นทางตัดสต๊อกไปแล้วหรือยัง — เปลี่ยนตามใบที่เลือกในช่อง "อ้างอิงใบเสนอราคา" */
   const [srcKind, setSrcKind] = useState<SalesKind | null>(parentKind);
+  const [srcHolds, setSrcHolds] = useState(parentHoldsStock);
   const srcTarget: 'invoice' | 'receipt' = initial.kind === 'RC' ? 'receipt' : 'invoice';
   const { results: srcResults, clear: clearSrc } = useLiveSearch(srcQuery, (q: string) => searchOpenSourcesAction(srcTarget, q));
   const applySource = async (o: { id: string; docNo: string }) => {
     setSrcBusy(true);
     try {
-      const src = await loadSourceAction(o.id);
+      const [src, holds] = await Promise.all([loadSourceAction(o.id), sourceHoldsStockAction(o.id)]);
       if (!src) return;
       setSrcKind(src.kind);
+      setSrcHolds(holds);
       setDoc((d) => ({
         ...src, kind: d.kind, docDate: d.docDate, parentDocId: o.id,
         vatMode: forcedVatMode(d.kind, src.vatMode, { registered: vatRegistered, parentKind: src.kind }),
@@ -437,11 +444,20 @@ export function DocEditor({
   const expired = expiredLines(realItems, expiry, today);
   const isQuote = doc.kind === 'QT';
   const isReceipt = doc.kind === 'RC';
+  const isInvoice = doc.kind === 'IV' || doc.kind === 'IVT';
+  /* ใบนี้ตัดสต๊อกตอนบันทึกไหม — กติกาเดียวกับเซิร์ฟเวอร์ (cutsStockWith ใน lib/sales-stock.ts) */
+  const cutsStock = isQuote ? false
+    : isReceipt ? !(doc.parentDocId && srcHolds)
+    : !receiptHoldsStock;
+  const kindHelp =
+    isReceipt && !cutsStock ? 'รับเงินและปิดงาน — สต๊อกตัดไปแล้วตอนออกใบส่งมอบ ใบนี้ไม่ตัดซ้ำ'
+    : isInvoice && !cutsStock ? 'สต๊อกของงานนี้ตัดไปแล้วตอนออกใบเสร็จ (ใบส่งมอบที่ออกก่อนเปลี่ยนกติกา) — แก้ใบนี้แล้วไม่ตัดซ้ำ'
+    : KIND_HELP[doc.kind];
   const dueDate = !isQuote && doc.creditDays > 0 ? addDaysIso(doc.docDate, doc.creditDays) : doc.docDate;
 
-  /* บรรทัดที่จะไม่ตัดสต๊อก — เตือนเฉพาะใบเสร็จ เพราะใบชนิดอื่นยังไม่ตัดอยู่แล้วทั้งใบ
+  /* บรรทัดที่จะไม่ตัดสต๊อก — เตือนเฉพาะใบที่ตัดสต๊อก เพราะใบอื่นไม่ตัดอยู่แล้วทั้งใบ
      กติกาเดียวกับที่เซิร์ฟเวอร์ใช้ข้ามบรรทัด (lib/line-link.ts มีเทสต์คุม) */
-  const unstocked = isReceipt ? unstockedLines(realItems) : [];
+  const unstocked = cutsStock ? unstockedLines(realItems) : [];
   const unstockedWarn = unstocked.length > 0
     ? `${unstocked.length} บรรทัดไม่ได้ผูกทะเบียนสินค้า — ของจะไม่ถูกตัดออกจากสต๊อก: ` +
       unstocked.map((it) => it.code || it.name).join(' · ')
@@ -486,7 +502,7 @@ export function DocEditor({
         <header>
           <h2>{mode === 'new' ? `สร้าง${KIND_LABEL[doc.kind]}` : `แก้ไข${KIND_LABEL[doc.kind]}`}</h2>
           <div className="spacer" />
-          <span className="subtle">{KIND_HELP[doc.kind]}</span>
+          <span className="subtle">{kindHelp}</span>
         </header>
       </div>
       {/* ขั้นตอน A→B→C — ขั้นที่กำลังทำเป็นสีเข้ม (เจ๊ก ข้อ 5) */}
@@ -663,7 +679,7 @@ export function DocEditor({
                     {doc.parentDocId ? (
                       <div className="tag-row">
                         <span className="chip ok">ออกต่อจาก {srcNo || 'เอกสารที่เลือกไว้'}</span>
-                        {mode === 'new' ? <button className="btn sm" type="button" onClick={() => { setSrcNo(''); setSrcKind(null); setDoc((d) => ({ ...d, parentDocId: null })); }}>เปลี่ยน</button> : null}
+                        {mode === 'new' ? <button className="btn sm" type="button" onClick={() => { setSrcNo(''); setSrcKind(null); setSrcHolds(false); setDoc((d) => ({ ...d, parentDocId: null })); }}>เปลี่ยน</button> : null}
                       </div>
                     ) : mode === 'new' ? (
                       <>
@@ -732,8 +748,8 @@ export function DocEditor({
               <b>ของที่จะถูกตัดหมดอายุแล้ว {expired.length} บรรทัด</b> —{' '}
               {expired.map((x) => `${x.item.code || x.item.name}`).join(' · ')}
               <br />
-              {isReceipt ? 'ใบนี้ตัดสต๊อกตอนบันทึก ระบบจะตัดล็อตที่หมดอายุก่อนตามลำดับหมดอายุก่อนออกก่อน'
-                         : 'ใบนี้ยังไม่ตัดสต๊อก แต่ของที่จะถูกตัดตอนออกใบเสร็จคือล็อตที่หมดอายุแล้ว'}
+              {cutsStock ? 'ใบนี้ตัดสต๊อกตอนบันทึก ระบบจะตัดล็อตที่หมดอายุก่อนตามลำดับหมดอายุก่อนออกก่อน'
+                         : 'ใบนี้ไม่ได้ตัดสต๊อกเอง แต่ของที่ถูกตัดหรือจะถูกตัดคือล็อตที่หมดอายุแล้ว'}
               {' '}บันทึกได้ตามปกติ — ตรวจของจริงบนชั้นวางก่อนส่งมอบ
             </div>
           </div>
@@ -983,6 +999,10 @@ export function DocEditor({
 
       <ConfirmSave open={confirm} title={KIND_LABEL[doc.kind]} lines={confirmLines} items={confirmItems}
                    warn={unstockedWarn}
+                   /* ใบส่งมอบตัดสต๊อกทันทีที่บันทึก แต่ยังไม่ได้รับเงิน — เตือนตรงจุดสุดท้ายก่อนบันทึก (ผู้ใช้เลือก 4 ต.ค. 2569) */
+                   note={isInvoice && mode === 'new'
+                     ? 'บันทึกแล้วตัดสต๊อกทันที — เมื่อเก็บเงินลูกค้า ต้องออกใบเสร็จรับเงินต่อจากใบนี้'
+                     : undefined}
                    submitLabel={mode === 'new' ? 'บันทึก' : 'บันทึกการแก้ไข'}
                    onEdit={() => setConfirm(false)} />
     </form>

@@ -161,6 +161,11 @@ export default async function HomePage({
                        val={String(summary.openQuoteCount)} unit="ใบ" sub="ยังไม่ออกใบต่อ"
                        tone={summary.openQuoteCount > 0 ? 'warn' : ''} />
               ) : null}
+              {seesIncome ? (
+                <MStat k="norc" href="/income?norc=1&hist=1" lbl="🧾 ใบส่งมอบรอออกใบเสร็จ"
+                       val={String(summary.awaitReceiptCount)} unit="ใบ" sub="ตัดสต๊อกแล้ว ยังไม่ออกใบเสร็จ"
+                       tone={summary.awaitReceiptCount > 0 ? 'warn' : ''} />
+              ) : null}
               {seesStock ? (
                 <MStat k="pending" href="/stock/pending" lbl="⏳ รายการค้างทำ"
                        val={String(pendingNames.length)} unit="ชื่อ" sub="ยังไม่ผูกทะเบียน"
@@ -331,6 +336,30 @@ export default async function HomePage({
               <span>ค้างนานสุด</span>
               <b style={{ color: summary.openQuoteOldestDays > 7 ? 'var(--due)' : undefined }}>
                 {summary.openQuoteCount > 0 ? `${summary.openQuoteOldestDays} วัน` : '-'}
+              </b>
+            </div>
+          </div>
+        </div>
+        ) : null}
+
+        {/* ใบส่งมอบรอออกใบเสร็จ — ใบส่งมอบตัดสต๊อกตั้งแต่บันทึก (ของออกจากร้านแล้ว) แต่ยังไม่ได้ออกใบเสร็จ
+            เตือนให้ตามเก็บเงินและออกใบเสร็จ กดแล้วไปรายการที่กรองไว้ให้ (ผู้ใช้เลือก 4 ต.ค. 2569) */}
+        {seesIncome ? (
+        <div className="hcard">
+          <header>
+            <Icon name="receipt" size={22} color="#C25A18" />
+            <h2>ใบส่งมอบรอออกใบเสร็จ</h2>
+            <Link className="go" href="/income?norc=1&hist=1">ดูรายการ<span className="ar">→</span></Link>
+          </header>
+          <div className="body">
+            <div className="big" style={{ color: summary.awaitReceiptCount > 0 ? 'var(--warn)' : undefined }}>
+              {summary.awaitReceiptCount} <small>ใบ</small>
+            </div>
+            <div className="row"><span>ยอดที่ยังต้องเก็บ</span><b>{baht(summary.awaitReceiptAmount)}</b></div>
+            <div className="row">
+              <span>ค้างนานสุด</span>
+              <b style={{ color: summary.awaitReceiptOldestDays > 30 ? 'var(--due)' : undefined }}>
+                {summary.awaitReceiptCount > 0 ? `${summary.awaitReceiptOldestDays} วัน` : '-'}
               </b>
             </div>
           </div>

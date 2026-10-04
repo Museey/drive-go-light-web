@@ -7,7 +7,7 @@ import { requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { getShop } from '@/lib/queries';
 import { childTakenMessage } from '@/lib/doc-lock';
-import { blankSalesDoc, childOf, docNoOf,
+import { blankSalesDoc, childOf, docHoldsStock, docNoOf,
   getDefaultNote, getDefaultWarranty, loadDocForCopy, lotExpiryOf, openDocsFor, pickContactById, resolveSourceForNew,
   WALK_IN_CUSTOMER, type SalesDocInput, type SalesKind, peekDocSeq } from '@/lib/sales';
 import { PickSource } from './pick-source';
@@ -154,6 +154,10 @@ export default async function NewDocPage({
   }
 
   const lotExpiry = await lotExpiryOf(initial.items.map((i) => i.productId));
+  /* ใบเสร็จที่ออกต่อจากใบส่งมอบที่ตัดสต๊อกไปแล้วไม่ตัดซ้ำ — ฟอร์มบอกตั้งแต่เปิด (lib/sales-stock.ts) */
+  const parentHoldsStock = source && !copying && kind === 'RC'
+    ? await docHoldsStock(resolved.sourceId || sp.from!)
+    : false;
 
   return (
     <Shell doc
@@ -193,6 +197,7 @@ export default async function NewDocPage({
       <DocEditor key={`${kind}:${resolved.sourceId}:${copying ? 'copy' : ''}:${sp.party ?? ''}:${walkin ? 'walkin' : ''}`}
                  initial={initial} vatRate={shop.vatRate} shopWhtRate={shop.whtRate} mode="new"
                  vatRegistered={shop.vatRegistered} parentKind={source && !copying ? source.kind : null}
+                 parentHoldsStock={parentHoldsStock}
                  docNoPreview={{ seq: await peekDocSeq(kind, initial.docDate), month: initial.docDate.slice(0, 7) }}
                  lotExpiry={lotExpiry} expiryWarnDays={shop.expiryWarnDays} today={today()}
                  cashOnOpen={walkin} banks={shop.bankAccounts} />

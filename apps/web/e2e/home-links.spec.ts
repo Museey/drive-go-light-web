@@ -64,7 +64,8 @@ test('งานค้างส่งมอบ → "ดูรายการ" ไ
   await expect(page).toHaveURL(/\/income\?.*kind=QT/);
   await expect(page, 'ตัวกรองเฉพาะงานค้างยังติดไป').toHaveURL(/[?&]open=1/);
   await expectHistoryPage(page, count > 0);
-  await expect(page.locator('input[name="open"]'), 'ช่องติ๊ก "เฉพาะงานค้างส่งมอบ" ติ๊กไว้').toBeChecked();
+  /* ระบุ checkbox — ฟอร์มช่วงวันที่ก็ถือ open=1 ไว้เป็นช่องซ่อน (ตัวกรองต้องไม่หลุดตอนเปลี่ยนช่วงวันที่) */
+  await expect(page.locator('input[type="checkbox"][name="open"]'), 'ช่องติ๊ก "เฉพาะงานค้างส่งมอบ" ติ๊กไว้').toBeChecked();
 });
 
 test('ตาราง "เอกสารในระบบ" → "ดูรายการ" ทุกแถวไปประวัติของชนิดนั้น', async ({ page }) => {

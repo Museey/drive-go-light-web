@@ -61,6 +61,7 @@ export default async function IncomePage({
   searchParams: Promise<{
     q?: string; kind?: string; page?: string; size?: string;
     from?: string; to?: string; month?: string; year?: string; voided?: string; open?: string; vat?: string; hist?: string; saved?: string; savedId?: string;
+    norc?: string;
   }>;
 }) {
   const session = await requireTab('income', 'receipt');
@@ -75,6 +76,8 @@ export default async function IncomePage({
   const includeVoid = sp.voided === '1';
   /* งานค้างส่งมอบ — ใบเสนอราคาที่ยังไม่ออกใบต่อ (ลิงก์มาจากการ์ดหน้าแรก) */
   const openOnly = sp.open === '1';
+  /* ใบส่งมอบรอออกใบเสร็จ — ตัดสต๊อกแล้วแต่ยังไม่มีใบเสร็จ (การ์ดหน้าแรก · ผู้ใช้เลือก 4 ต.ค. 2569) */
+  const awaitingReceipt = sp.norc === '1';
   const todayIso = today();
   const shop = await getShop();
   /* ทุกเมนูย่อยของรายรับเปิดมาเป็น "หน้าสร้างเอกสารใหม่" ทันที ประวัติต่อด้านล่าง
@@ -87,7 +90,7 @@ export default async function IncomePage({
   const returnTo = `/income?kind=${kind}${sp.hist === '1' ? '&hist=1' : ''}${sp.vat ? `&vat=${sp.vat}` : ''}`;
   const vat = sp.vat === 'yes' || sp.vat === 'no' ? sp.vat : undefined;
   const { rows, total } = await listIncomeDocs({
-    search, kind, page, from, to, pageSize, includeVoid, openOnly, vat,
+    search, kind, page, from, to, pageSize, includeVoid, openOnly, vat, awaitingReceipt,
   });
   const shopBanks = shop.bankAccounts ?? [];
 
@@ -129,6 +132,7 @@ export default async function IncomePage({
     ...(sp.size ? { size: sp.size } : {}),
     ...(includeVoid ? { voided: '1' } : {}),
     ...(openOnly ? { open: '1' } : {}),
+    ...(awaitingReceipt ? { norc: '1' } : {}),
     ...(vat ? { vat } : {}),
   };
   /* เหมือน keep แต่ไม่มี size — ปุ่มเลือกจำนวนแถวใส่ค่าของตัวเอง */
@@ -190,6 +194,13 @@ export default async function IncomePage({
                 เฉพาะงานค้างส่งมอบ
               </label>
             ) : null}
+            {kind === 'IV' || kind === 'IVT' || awaitingReceipt ? (
+              <label className="chip" style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+                     title="ใบส่งมอบที่ตัดสต๊อกแล้วแต่ยังไม่ได้ออกใบเสร็จรับเงิน">
+                <input type="checkbox" name="norc" value="1" defaultChecked={awaitingReceipt} />
+                เฉพาะที่รอออกใบเสร็จ
+              </label>
+            ) : null}
             {/* ไม่มีปุ่มค้นหา (ผู้ใช้กำหนด: ซ้ำซ้อน) — ฟอร์มมีช่องข้อความช่องเดียว พิมพ์แล้ว Enter ส่งฟอร์มเอง */}
             <PrintReport />
           </form>
@@ -200,13 +211,18 @@ export default async function IncomePage({
         {/* hist=1 ต้องติดไปกับตัวกรองวันที่ด้วย — ไม่งั้นกรองจากหน้าประวัติแล้วเด้งไปฟอร์มสร้างใหม่
                            (เทสต์ doc-cards จับได้ตอนทำ dropdown ของจอแคบ · ชิปบนเดสก์ท็อปก็เป็นมาก่อนหน้านี้) */}
         <DocDateFilter base="/income" from={from} to={to} monthPicker={false}
-                       keep={{ hist: '1', ...(search ? { q: search } : {}), ...(kind ? { kind } : {}) }} />
+                       keep={{
+                         hist: '1', ...(search ? { q: search } : {}), ...(kind ? { kind } : {}),
+                         /* ตัวกรองที่ติ๊กไว้ต้องไม่หลุดตอนเปลี่ยนช่วงวันที่ */
+                         ...(openOnly ? { open: '1' } : {}), ...(awaitingReceipt ? { norc: '1' } : {}),
+                       }} />
 
         {rows.length === 0 ? (
           <div className="empty">ไม่พบเอกสารที่ตรงกับเงื่อนไข</div>
         ) : (
           <IncomeHistoryTable rows={rows} todayIso={todayIso} mayEdit={mayEdit} banks={shopBanks}
-                              cardTitle={kind ? `ประวัติ${KIND_SHORT[kind] ?? ''}` : 'ประวัติเอกสารทั้งหมด'}
+                              cardTitle={awaitingReceipt ? 'ใบส่งมอบรอออกใบเสร็จ'
+                                : kind ? `ประวัติ${KIND_SHORT[kind] ?? ''}` : 'ประวัติเอกสารทั้งหมด'}
                               more={lastPage > 1}
                               /* ปุ่มสร้างใหม่ต้องรู้ว่าจะสร้างใบอะไร — ยังไม่ได้เลือกชนิดก็ไม่มีปุ่ม */
                               newHref={formKind ? `/income?kind=${kind}` : undefined}

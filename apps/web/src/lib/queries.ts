@@ -39,6 +39,14 @@ export async function getVatRegistered(): Promise<boolean> {
   return query((c) => shopVatRegisteredWith(c));
 }
 
+/**
+ * ใบส่งมอบที่ยังไม่ได้ออกใบเสร็จ — ของออกจากร้านแล้ว (ตัดสต๊อกตอนบันทึกใบส่งมอบ) แต่งานยังไม่จบ
+ * เงื่อนไขเดียวกับชิป "รอออกใบเสร็จ" (incomeStatus) ใช้ทั้งการ์ดหน้าแรกและตัวกรองหน้ารายรับ ต้องนับตรงกัน
+ */
+const AWAITING_RECEIPT_SQL = `d.kind in ('IV','IVT') and d.status = 'issued'
+  and not exists (select 1 from documents x
+                   where x.parent_doc_id = d.id and x.kind = 'RC' and x.status <> 'void')`;
+
 export async function getShop(): Promise<ShopInfo> {
   return query(async (c) => {
     const { rows } = await c.query(
@@ -94,6 +102,10 @@ export interface HomeSummary {
   openQuoteAmount: number;
   /** อายุใบที่ค้างนานสุด (วัน) — 0 ถ้าไม่มี */
   openQuoteOldestDays: number;
+  /** ใบส่งมอบที่ยังไม่ได้ออกใบเสร็จ — ตัดสต๊อกไปแล้วแต่งานยังไม่จบ (AWAITING_RECEIPT_SQL) */
+  awaitReceiptCount: number;
+  awaitReceiptAmount: number;
+  awaitReceiptOldestDays: number;
   /** เงินที่ต้องใช้ถ้าสั่งของที่ถึงจุดสั่งซื้อทั้งหมดให้เต็ม Max */
   reorderCost: number;
   /** รายการที่ควรสั่งก่อน เรียงจากที่ขาดมือหนักที่สุด */
@@ -134,6 +146,13 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
       `select count(*)::int as c, coalesce(sum(grand_total), 0) as amt,
               coalesce(max(current_date - doc_date), 0)::int as oldest
        from documents where tenant_id = current_tenant_id() and kind = 'QT' and status = 'issued'`,
+    );
+
+    /* ใบส่งมอบรอออกใบเสร็จ — เงื่อนไขเดียวกับตัวกรองหน้ารายรับ (?norc=1) */
+    const awaitRc = await c.query(
+      `select count(*)::int as c, coalesce(sum(d.payable), 0) as amt,
+              coalesce(max(current_date - d.doc_date), 0)::int as oldest
+       from documents d where ${AWAITING_RECEIPT_SQL}`,
     );
 
     const reorder = await c.query(
@@ -219,6 +238,9 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
       openQuoteCount: Number(openQt.rows[0].c),
       openQuoteAmount: Math.round(Number(openQt.rows[0].amt) * 100) / 100,
       openQuoteOldestDays: Number(openQt.rows[0].oldest),
+      awaitReceiptCount: Number(awaitRc.rows[0].c),
+      awaitReceiptAmount: Math.round(Number(awaitRc.rows[0].amt) * 100) / 100,
+      awaitReceiptOldestDays: Number(awaitRc.rows[0].oldest),
       reorderCost: Math.round(reorderTop.reduce((s, r) => s + r.cost, 0) * 100) / 100,
       reorderTop: reorderTop.slice(0, 5),
       productCount: stockStats.rows[0].total,
@@ -292,6 +314,8 @@ export async function listIncomeDocs(opts: {
   includeVoid?: boolean;
   /** เฉพาะใบที่ยัง 'issued' — ใบเสนอราคาที่ยังไม่มีใบใดออกต่อ = งานค้างส่งมอบ */
   openOnly?: boolean;
+  /** เฉพาะใบส่งมอบที่ยังไม่ได้ออกใบเสร็จ — การ์ดหน้าแรก "ใบส่งมอบรอออกใบเสร็จ" (ผู้ใช้เลือก 4 ต.ค. 2569) */
+  awaitingReceipt?: boolean;
   /** ใบเสร็จ: 'yes' = มี VAT (ต่อจาก IVT) · 'no' = ไม่มี VAT (ต่อจาก IV) */
   vat?: 'yes' | 'no';
   /** ขายหน้าร้าน = ใบเสร็จที่ไม่มีใบอ้างอิง */
@@ -331,6 +355,7 @@ export async function listIncomeDocs(opts: {
       where.push(`d.kind = $${params.length}`);
     }
     if (opts.openOnly) where.push(`d.status = 'issued'`);
+    if (opts.awaitingReceipt) where.push(AWAITING_RECEIPT_SQL);
     if (opts.vat === 'yes') where.push(`d.vat_mode <> 'none'`);
     if (opts.vat === 'no') where.push(`d.vat_mode = 'none'`);
     if (opts.walkinOnly) where.push(`d.parent_doc_id is null`);
