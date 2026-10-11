@@ -11,3 +11,7 @@ backups/
 # ผลการรันเทสต์เบราว์เซอร์ — เป็นของชั่วคราวของแต่ละเครื่อง
 apps/web/test-results/
 apps/web/playwright-report/
+
+# ค่าลับของเครื่องมือดูแลระบบ (ADMIN_URL ของฐานจริง) และผลตรวจระบบประจำเช้า
+.env.ops
+ops-reports/
