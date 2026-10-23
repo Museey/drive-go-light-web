@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import pg from 'pg';
 import { makeSession } from './session';
 
 /**
@@ -216,4 +217,40 @@ test('เดสก์ท็อปไม่เปลี่ยน — ตารา
     await expect(page.locator(sel).first(), `${sel} ต้องไม่โผล่บนเดสก์ท็อป`).toBeHidden();
   }
   await expect(page.locator('.contact-view table').first(), 'ตารางประวัติยังอยู่').toBeVisible();
+});
+
+/* ประวัติซื้อขายของลูกค้า: ทะเบียนรถที่ซ่อมของแต่ละใบ (ผู้ใช้ขอ 23 ต.ค. 2569)
+   ลูกค้าองค์กรมีรถหลายคัน — ต้องรู้ว่าใบไหนซ่อมคันไหน · เทียบกับทะเบียนที่บันทึกบนเอกสารจริง */
+test('ประวัติซื้อขาย: ทุกใบบอกทะเบียนรถที่ซ่อมตรงกับเอกสาร', async ({ page }) => {
+  if (แคบ(page)) await openContact(page);
+  else {
+    await page.goto(มีประวัติ);
+    await page.locator('table.cust tbody tr').first().click();
+    await expect(page).toHaveURL(/\/customers\/[0-9a-f-]{20,}/);
+  }
+  const id = page.url().split('/customers/')[1]!.split(/[?#]/)[0]!;
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  const want = new Map<string, string>((await c.query(
+    `select doc_no, vehicle_plate from documents where party_id = $1 and status <> 'void' and kind <> 'QT'`, [id],
+  )).rows.map((r) => [r.doc_no, r.vehicle_plate || '-']));
+  await c.end();
+  expect([...want.values()].some((p) => p !== '-'), 'ลูกค้ารายนี้มีใบที่ระบุรถ').toBe(true);
+
+  if (แคบ(page)) {
+    for (const card of await page.locator('.contact-view .doc-cards .dcard').all()) {
+      const text = await card.innerText();
+      const no = [...want.keys()].find((k) => text.includes(k))!;
+      if (want.get(no) !== '-') expect(text, `การ์ด ${no}`).toContain(want.get(no)!);
+    }
+    return;
+  }
+  const table = page.locator('.contact-view table').first();
+  await expect(table.locator('thead th').filter({ hasText: 'ทะเบียนรถ' })).toHaveCount(1);
+  const rows = table.locator('tbody tr');
+  expect(await rows.count()).toBe(want.size);
+  for (const row of await rows.all()) {
+    const no = (await row.locator('td').first().innerText()).trim();
+    await expect(row.locator('td').nth(3), `ใบ ${no}`).toHaveText(want.get(no)!);
+  }
 });

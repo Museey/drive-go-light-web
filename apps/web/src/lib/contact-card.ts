@@ -85,7 +85,7 @@ export function contactDetailRows(c: {
 export function contactHistoryCard(
   d: {
     id: string; kind: string; docNo: string; docDate: string; payable: number; paid: number; outstanding: number;
-    dueDate?: string | null; hasReceipt?: boolean;
+    dueDate?: string | null; hasReceipt?: boolean; vehiclePlate?: string;
   },
   partyName: string,
   todayIso = '',
@@ -106,7 +106,8 @@ export function contactHistoryCard(
     kind: d.kind,
     no: d.docNo,
     name: partyName || '-',
-    plate: '',
+    /* ทะเบียนรถที่ซ่อมในใบนั้น (ผู้ใช้ขอ 23 ต.ค. 2569) — ลูกค้ารายเดียวมีรถหลายคันได้ */
+    plate: d.vehiclePlate ?? '',
     date: d.docDate,
     amount: d.payable,
     outstanding: d.outstanding,

@@ -131,6 +131,8 @@ export default async function ContactPage({
                   <thead>
                     <tr>
                       <th>เลขที่</th><th>ชนิด</th><th>วันที่</th>
+                      {/* ทะเบียนรถที่ซ่อมในใบนั้น (ผู้ใช้ขอ 23 ต.ค. 2569) — ผู้ขายไม่มีรถ จึงไม่มีคอลัมน์นี้ */}
+                      {contact.kind === 'vendor' ? null : <th>ทะเบียนรถ</th>}
                       <th className="num">ยอด</th><th className="num">ชำระแล้ว</th><th className="num">คงค้าง</th>
                     </tr>
                   </thead>
@@ -142,6 +144,7 @@ export default async function ContactPage({
                         </td>
                         <td>{KIND_SHORT[d.kind] ?? d.kind}</td>
                         <td>{thDate(d.docDate)}</td>
+                        {contact.kind === 'vendor' ? null : <td className="mono">{d.vehiclePlate || '-'}</td>}
                         <td className="num">{baht(d.payable)}</td>
                         <td className="num">{baht(d.paid)}</td>
                         <td className="num" style={{ color: d.outstanding > 0.004 ? 'var(--due)' : undefined }}>

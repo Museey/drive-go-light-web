@@ -11,7 +11,9 @@ set -euo pipefail
 
 MIN=20
 
-major() { "$1" -v 2>/dev/null | sed 's/^v//; s/\..*//'; }
+# ตัวที่รันไม่ได้เลย (เช่น node x86 บน macOS ที่ไม่มี Rosetta แล้ว — "Bad CPU type") ต้องได้ค่าว่างแล้วข้ามไป
+# ไม่ใช่ทำให้ทั้งสคริปต์ตายเงียบด้วย exit 126 เพราะ set -euo pipefail ข้างบน
+major() { { "$1" -v 2>/dev/null || true; } | sed 's/^v//; s/\..*//'; }
 
 pick() {
   if command -v node >/dev/null 2>&1; then

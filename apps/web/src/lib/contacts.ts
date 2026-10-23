@@ -232,6 +232,8 @@ export interface ContactHistory {
     id: string; kind: string; docNo: string; docDate: string;
     payable: number; paid: number; outstanding: number;
     dueDate: string | null; hasReceipt: boolean;
+    /** ทะเบียนรถที่ซ่อมในใบนั้น (snapshot ตอนออกใบ) — ใบซื้อ/ค่าใช้จ่ายว่าง */
+    vehiclePlate: string;
   }[];
   totalAmount: number;
   totalOutstanding: number;
@@ -241,7 +243,7 @@ export interface ContactHistory {
 export async function getContactHistory(id: string): Promise<ContactHistory> {
   return query(async (c) => {
     const { rows } = await c.query(
-      `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.payable, d.due_date,
+      `select d.id, d.kind::text as kind, d.doc_no, d.doc_date, d.payable, d.due_date, d.vehicle_plate,
               coalesce(p.paid, 0) as paid,
               exists (select 1 from documents x
                        where x.parent_doc_id = d.id and x.kind = 'RC' and x.status <> 'void') as has_receipt
@@ -261,6 +263,7 @@ export async function getContactHistory(id: string): Promise<ContactHistory> {
       return {
         id: r.id, kind: r.kind, docNo: r.doc_no, docDate: r.doc_date,
         payable, paid, dueDate: r.due_date as string | null, hasReceipt: Boolean(r.has_receipt),
+        vehiclePlate: (r.vehicle_plate as string | null) ?? '',
         outstanding: Math.round((payable - paid) * 100) / 100,
       };
     });

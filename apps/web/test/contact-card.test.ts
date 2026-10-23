@@ -103,6 +103,12 @@ describe('contactHistoryCard — เอกสารในประวัติ�
     expect(c.status).toEqual({ label: 'ชำระแล้ว', tone: 'ok' });
   });
 
+  /* ลูกค้ารายเดียวมีรถหลายคัน — ต้องรู้ว่าใบไหนซ่อมคันไหน (ผู้ใช้ขอ 23 ต.ค. 2569) */
+  it('การ์ดบอกทะเบียนรถที่ซ่อมในใบนั้น · ใบที่ไม่มีรถว่าง', () => {
+    expect(contactHistoryCard(doc({ vehiclePlate: 'กข 1234' }), 'x').plate).toBe('กข 1234');
+    expect(contactHistoryCard(doc({ kind: 'PO' }), 'ร้าน A').plate).toBe('');
+  });
+
   /* ประวัติของผู้ขายเป็นใบซื้อ/ค่าใช้จ่าย — ลิงก์ไปรายรับจะเปิดไม่เจอ */
   it('ใบซื้อและค่าใช้จ่ายลิงก์ไปหน้ารายจ่าย', () => {
     expect(contactHistoryCard(doc({ kind: 'PO' }), 'ร้าน A').href).toBe('/expense/d1');
