@@ -24,10 +24,29 @@ export interface ShopRow {
   /** อีเมลเจ้าของอู่ — คอนโซลต้องรู้ว่าลิงก์ตั้งรหัสผ่านจะเข้าบัญชีไหน (ผู้ใช้ขอ) · ไม่มีเจ้าของที่เปิดใช้อยู่ = null */
   ownerEmail: string | null;
   license: LicenseStatus;
+  usage: ShopUsage;
+}
+
+/** การใช้งาน — เวลาและจำนวนเท่านั้น ไม่มีเนื้อหาเอกสาร (db/037_usage_activity.sql) */
+export interface ShopUsage {
+  /** เข้าระบบล่าสุดของใครก็ได้ในอู่ (ละเอียดระดับ 5 นาที) */
+  lastSeenAt: string | null;
+  lastLoginAt: string | null;
+  /** สร้างเอกสารใบล่าสุด — ไม่จำกัดช่วง */
+  lastDocAt: string | null;
+  /** วันที่มีคนเข้า หรือมีเอกสารสร้าง ใน 30 วันรวมวันนี้ */
+  activeDays30: number;
+  docs30: number;
+  /** เอกสารต่อวัน 30 ช่อง เก่าสุด → วันนี้ */
+  docsSpark: number[];
 }
 
 const iso = (v: unknown): string =>
   v instanceof Date ? isoOf(v) : String(v ?? '').slice(0, 10);
+
+/** timestamp เต็ม — เก็บเวลาไว้ด้วย ต่างจาก iso() ที่ตัดเหลือวันที่ */
+const ts = (v: unknown): string | null =>
+  v == null ? null : v instanceof Date ? v.toISOString() : String(v);
 
 export async function listShops(s: OperatorSession): Promise<ShopRow[]> {
   /* วันนี้ตามเวลาไทย — ฐานข้อมูลกับแอปตั้งเขตเวลาไว้ตรงกันแล้ว ดู assertClockAgrees() */
@@ -47,6 +66,14 @@ export async function listShops(s: OperatorSession): Promise<ShopRow[]> {
         latestExpiry: r.expires_on ? iso(r.expires_on) : null,
         plan: r.plan ?? null,
       }),
+      usage: {
+        lastSeenAt: ts(r.last_seen_at),
+        lastLoginAt: ts(r.last_login_at),
+        lastDocAt: ts(r.last_doc_at),
+        activeDays30: Number(r.active_days_30 ?? 0),
+        docs30: Number(r.docs_30 ?? 0),
+        docsSpark: (r.docs_spark ?? []).map(Number),
+      },
     }));
   });
 }
@@ -54,6 +81,53 @@ export async function listShops(s: OperatorSession): Promise<ShopRow[]> {
 export async function getShop(s: OperatorSession, tenantId: string): Promise<ShopRow | null> {
   const all = await listShops(s);
   return all.find((x) => x.tenantId === tenantId) ?? null;
+}
+
+export interface ShopActivity {
+  firstSeen: string | null;
+  firstDoc: string | null;
+  docsTotal: number;
+  /** 91 วันรวมวันนี้ เก่าสุดก่อน */
+  days: { day: string; users: number; docs: number }[];
+  /** เอกสาร 30 วันแยกชนิด เช่น { QT: 4, RC: 10 } */
+  kinds30: Record<string, number>;
+  /** ไม่มีชื่อหรืออีเมล — ฐานข้อมูลไม่ส่งมาให้ตั้งแต่แรก */
+  users: {
+    role: string;
+    active: boolean;
+    createdAt: string | null;
+    lastLoginAt: string | null;
+    lastSeenAt: string | null;
+    days30: number;
+  }[];
+}
+
+export async function getShopActivity(
+  s: OperatorSession, tenantId: string,
+): Promise<ShopActivity | null> {
+  return withoutTenant(async (c) => {
+    const { rows } = await c.query(
+      `select ops.shop_activity($1, $2) as a`, [s.token, tenantId]);
+    const a = rows[0]?.a;
+    if (!a) return null;
+    return {
+      firstSeen: a.first_seen ?? null,
+      firstDoc: a.first_doc ?? null,
+      docsTotal: Number(a.docs_total ?? 0),
+      days: (a.days ?? []).map((d: { day: string; users: number; docs: number }) => ({
+        day: String(d.day).slice(0, 10), users: Number(d.users), docs: Number(d.docs),
+      })),
+      kinds30: a.kinds_30 ?? {},
+      users: (a.users ?? []).map((u: Record<string, unknown>) => ({
+        role: String(u.role),
+        active: Boolean(u.active),
+        createdAt: ts(u.created_at),
+        lastLoginAt: ts(u.last_login_at),
+        lastSeenAt: ts(u.last_seen_at),
+        days30: Number(u.days_30 ?? 0),
+      })),
+    };
+  });
 }
 
 export interface OpenShopInput {

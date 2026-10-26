@@ -138,6 +138,19 @@ begin
 end;
 $$;
 
+/* ---------------------------------------------------------------------
+   วันที่ผู้ใช้แต่ละคนเข้าใช้ — คอนโซลผู้ให้บริการใช้ดูว่าอู่ไหนใช้อยู่ (037)
+   หนึ่งแถวต่อคนต่อวัน เขียนจาก load_session ไม่เกินครั้งละ 5 นาทีต่อคน
+   ไม่ใช้ sessions.last_seen_at เพราะแถวถูกลบตอนออกจากระบบ ประวัติจึงหายไป
+   --------------------------------------------------------------------- */
+create table auth.activity_days (
+  tenant_id  uuid        not null references tenants(id) on delete cascade,
+  user_id    uuid        not null references users(id) on delete cascade,
+  day        date        not null,
+  last_at    timestamptz not null default now(),
+  primary key (tenant_id, day, user_id)
+);
+
 /**
  * อ่าน session จาก token — คืนแถวว่างถ้าหมดอายุ ถูกเพิกถอน หรือผู้ใช้ถูกปิดการใช้งาน
  * ถือโอกาสอัปเดต last_seen_at และเก็บกวาด session ที่หมดอายุไปพร้อมกัน
@@ -160,6 +173,19 @@ begin
 
   update auth.sessions set last_seen_at = now()
    where token_hash = p_token_hash and expires_at > now();
+
+  /* วันที่เข้าใช้ สำหรับคอนโซลผู้ให้บริการ (037) — ฟังก์ชันนี้ถูกเรียกทุก request
+     จึงเขียนเวลาล่าสุดไม่เกินครั้งละ 5 นาทีต่อคน ระหว่างนั้น on conflict ไม่เขียนอะไร
+     อ้างชื่อ constraint ไม่ใช่รายชื่อคอลัมน์ — tenant_id/user_id ชนกับคอลัมน์ผลลัพธ์ของฟังก์ชัน */
+  insert into auth.activity_days as a (tenant_id, user_id, day, last_at)
+  select u.tenant_id, u.id, current_date, now()
+    from auth.sessions s
+    join users u on u.id = s.user_id
+   where s.token_hash = p_token_hash
+     and s.expires_at > now()
+     and u.active
+  on conflict on constraint activity_days_pkey do update set last_at = excluded.last_at
+   where a.last_at < excluded.last_at - interval '5 minutes';
 
   return query
     select u.id, u.tenant_id, t.name, u.name, u.role, u.perms

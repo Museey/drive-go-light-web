@@ -457,6 +457,8 @@ create index on documents (tenant_id, kind, doc_date desc);
 create index on documents (tenant_id, party_id);
 create index on documents (tenant_id, parent_doc_id);
 create index on documents (tenant_id, vehicle_plate);
+-- คอนโซลผู้ให้บริการนับเอกสารที่สร้างในช่วงวันที่ต่ออู่ (037)
+create index documents_created_idx on documents (tenant_id, created_at);
 -- ค้างชำระ: ลูกหนี้/เจ้าหนี้เปิดหน้ามาต้องเร็ว
 create index documents_open_idx on documents (tenant_id, direction, due_date)
   where status = 'issued';

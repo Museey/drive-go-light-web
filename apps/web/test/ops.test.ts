@@ -58,6 +58,8 @@ describe.skipIf(!DB_URL)('ตาราง ops.errors', () => {
       /* ต้องอยู่ท้ายสุดเหมือนลำดับไมเกรชันจริง — ไฟล์นี้สร้าง list_errors ใหม่
          ถ้ารันก่อน 011 ตัวเก่าจะทับกลับแล้วคอลัมน์จำนวนครั้งหายไป */
       'db/035_error_dedup.sql',
+      /* 037 สร้าง list_shops ใหม่ทับของ 031 และเพิ่ม shop_activity */
+      'db/037_usage_activity.sql',
     ]);
     await admin.query(`
       do $$ begin

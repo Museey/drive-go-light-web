@@ -139,6 +139,8 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
       /* ต้องอยู่ท้ายสุดเหมือนลำดับไมเกรชันจริง — ไฟล์นี้สร้าง list_errors ใหม่
          ถ้ารันก่อน 011 ตัวเก่าจะทับกลับแล้วคอลัมน์จำนวนครั้งหายไป */
       'db/035_error_dedup.sql',
+      /* 037 สร้าง list_shops ใหม่ทับของ 031 และเพิ่ม shop_activity */
+      'db/037_usage_activity.sql',
     ]);
     await admin.query(`
       do $$ begin
@@ -183,6 +185,7 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
     const t = randomBytes(32);
     const calls: [string, string, unknown[]][] = [
       ['list_shops', 'select * from ops.list_shops($1)', [bad]],
+      ['shop_activity', 'select ops.shop_activity($1, gen_random_uuid())', [bad]],
       ['open_shop',
         `select ops.open_shop($1,'อู่','0','a@example.com','ก',$2, now()+interval '7 days')`,
         [bad, t]],
@@ -272,6 +275,11 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
     expect(missing, 'ฟังก์ชันเหล่านี้ไม่ได้รับ session เข้าไปตรวจ').toEqual([]);
   });
 
+  it('แอปอ่านวันที่เข้าใช้ตรง ๆ ไม่ได้ — ได้แค่ผ่านฟังก์ชันของคอนโซล', async () => {
+    await expect(app.query('select * from auth.activity_days'))
+      .rejects.toThrow(/permission denied/);
+  });
+
   it('แอปแตะตารางใน ops ตรง ๆ ไม่ได้', async () => {
     for (const t of ['operators', 'sessions', 'setup_tokens', 'audit']) {
       await expect(app.query(`select * from ops.${t}`), `ops.${t} ต้องอ่านไม่ได้`)
@@ -290,15 +298,19 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
 
     /* รายการที่อนุญาต — เพิ่มคอลัมน์ใหม่ต้องมาแก้ตรงนี้ ซึ่งเป็นจุดที่ตั้งใจให้สะดุด
        owner_email เพิ่มตามที่ผู้ใช้ขอ (16 ก.ย. 2569) — คอนโซลต้องรู้ว่าลิงก์ตั้งรหัสผ่านจะเข้าบัญชีไหน
-       เป็นอีเมลของเจ้าของอู่เท่านั้น ไม่ใช่การเปิดตาราง users ให้อ่าน */
+       เป็นอีเมลของเจ้าของอู่เท่านั้น ไม่ใช่การเปิดตาราง users ให้อ่าน
+       การใช้งานเพิ่มตามที่ผู้ใช้ขอ (26 ต.ค. 2569 แบบ ข.) — เวลาและ **จำนวน** เท่านั้น
+       docs_30 / last_doc_at / docs_spark เป็นตัวนับ ไม่มีเลขที่ ลูกค้า หรือยอดเงิน (db/037) */
     expect(cols.sort()).toEqual([
-      'created_on', 'ever_paid', 'expires_on', 'max_users', 'name', 'owner_email', 'plan',
+      'active_days_30', 'created_on', 'docs_30', 'docs_spark', 'ever_paid', 'expires_on',
+      'last_doc_at', 'last_login_at', 'last_seen_at', 'max_users', 'name', 'owner_email', 'plan',
       'tenant_id', 'user_count',
     ]);
 
-    /* และไม่มีอะไรที่ส่อว่าเป็นข้อมูลธุรกิจหลุดมา */
+    /* และไม่มีอะไรที่ส่อว่าเป็นข้อมูลธุรกิจหลุดมา — ตัวนับเอกสารสามตัวข้างบนยกเว้นไว้ทีละชื่อ */
+    const COUNTS = new Set(['docs_30', 'last_doc_at', 'docs_spark']);
     const FORBIDDEN = /party|doc|amount|price|cost|invoice|customer|product|revenue/i;
-    expect(cols.filter((c) => FORBIDDEN.test(c))).toEqual([]);
+    expect(cols.filter((c) => !COUNTS.has(c) && FORBIDDEN.test(c))).toEqual([]);
   });
 
   it('ถือ session จริงก็ยังอ่านตารางข้อมูลของอู่ไม่ได้', async () => {
@@ -491,6 +503,139 @@ describe.skipIf(!DB_URL)('งานของคอนโซล', () => {
     expect(String(by.get(b)!.owner_email)).toBe('b@example.com');
   });
 
+
+  /** เข้าระบบในนามผู้ใช้คนหนึ่ง — ผ่าน auth.load_session แบบเดียวกับทุก request ของอู่ */
+  const signInAs = async (userId: string, tenantId: string) => {
+    const tok = sha(randomBytes(32));
+    await admin.query(
+      `insert into auth.sessions (token_hash, user_id, tenant_id, expires_at)
+       values ($1, $2, $3, now() + interval '1 day')`, [tok, userId, tenantId]);
+    return tok;
+  };
+  const ownerOf = async (tid: string) =>
+    (await admin.query(`select id from users where tenant_id = $1 and role = 'owner'`, [tid]))
+      .rows[0].id as string;
+
+  it('เข้าระบบแล้วถูกนับวันที่ใช้ — เขียนเวลาไม่เกินครั้งละ 5 นาที', async () => {
+    const a = (await openShop('อู่ ก', 'a@example.com')).rows[0].id;
+    const tok = await signInAs(await ownerOf(a), a);
+
+    await app.query('select * from auth.load_session($1)', [tok]);
+    const first = await admin.query(
+      'select day, last_at from auth.activity_days where tenant_id = $1', [a]);
+    expect(first.rows).toHaveLength(1);
+
+    /* เรียกซ้ำทันที — ต้องไม่เขียนทับ (ทุก request เรียกฟังก์ชันนี้) */
+    await app.query('select * from auth.load_session($1)', [tok]);
+    const again = await admin.query(
+      'select last_at from auth.activity_days where tenant_id = $1', [a]);
+    expect(again.rows[0].last_at.getTime()).toBe(first.rows[0].last_at.getTime());
+
+    /* เกิน 5 นาทีแล้ว — เขียนเวลาใหม่ */
+    await admin.query(
+      `update auth.activity_days set last_at = now() - interval '6 minutes' where tenant_id = $1`, [a]);
+    await app.query('select * from auth.load_session($1)', [tok]);
+    const later = await admin.query(
+      `select last_at > now() - interval '1 minute' as fresh from auth.activity_days where tenant_id = $1`, [a]);
+    expect(later.rows[0].fresh).toBe(true);
+  });
+
+  it('ผู้ใช้ที่ถูกปิดไม่ถูกนับ', async () => {
+    const a = (await openShop('อู่ ก', 'a@example.com')).rows[0].id;
+    const owner = await ownerOf(a);
+    const tok = await signInAs(owner, a);
+    await admin.query('update users set active = false where id = $1', [owner]);
+    await app.query('select * from auth.load_session($1)', [tok]);
+    const n = await admin.query('select count(*)::int n from auth.activity_days where tenant_id = $1', [a]);
+    expect(n.rows[0].n).toBe(0);
+  });
+
+  it('การใช้งานในรายชื่ออู่ — นับเฉพาะอู่ตัวเอง ทั้งวันที่เข้าใช้และเอกสาร', async () => {
+    const a = (await openShop('อู่ ก', 'a@example.com')).rows[0].id;
+    const b = (await openShop('อู่ ข', 'b@example.com')).rows[0].id;
+
+    /* อู่ ข เข้าใช้วันนี้ และมีเอกสาร 3 ใบ (สองใบวันนี้ หนึ่งใบเมื่อ 40 วันก่อน)
+       อู่ ก ไม่ได้ทำอะไรเลย — ถ้านับข้ามอู่ อู่ ก จะได้ตัวเลขของอู่ ข ไปด้วย */
+    await app.query('select * from auth.load_session($1)', [await signInAs(await ownerOf(b), b)]);
+    await admin.query(
+      `insert into documents (tenant_id, kind, doc_no, doc_date, created_at) values
+         ($1,'QT','QT-1',current_date, now()),
+         ($1,'RC','RC-1',current_date, now()),
+         ($1,'QT','QT-0',current_date - 40, now() - interval '40 days')`, [b]);
+
+    const rows = await app.query('select * from ops.list_shops($1)', [good]);
+    const by = new Map(rows.rows.map((r: { tenant_id: string }) => [r.tenant_id, r as Record<string, unknown>]));
+
+    const ra = by.get(a)!;
+    expect(ra.last_seen_at, 'อู่ ก ไม่เคยเข้า').toBeNull();
+    expect(ra.last_doc_at).toBeNull();
+    expect(ra.docs_30).toBe(0);
+    expect(ra.active_days_30).toBe(0);
+    expect((ra.docs_spark as number[]).every((v) => v === 0)).toBe(true);
+
+    const rb = by.get(b)!;
+    expect(rb.last_seen_at).not.toBeNull();
+    expect(rb.docs_30, 'ใบเมื่อ 40 วันก่อนไม่นับใน 30 วัน').toBe(2);
+    expect(rb.active_days_30).toBe(1);
+    const spark = rb.docs_spark as number[];
+    expect(spark).toHaveLength(30);
+    expect(spark[29], 'ช่องสุดท้ายคือวันนี้').toBe(2);
+  });
+
+  it('เอกสารใบล่าสุดเก่ากว่า 30 วัน ยังบอกเวลาได้ — ไม่ขึ้นว่าไม่เคยออก', async () => {
+    const a = (await openShop('อู่ ก', 'a@example.com')).rows[0].id;
+    await admin.query(
+      `insert into documents (tenant_id, kind, doc_no, doc_date, created_at)
+       values ($1,'QT','QT-0',current_date - 50, now() - interval '50 days')`, [a]);
+    const r = (await app.query('select * from ops.list_shops($1)', [good]))
+      .rows.find((x: { tenant_id: string }) => x.tenant_id === a);
+    expect(r.docs_30).toBe(0);
+    expect(r.last_doc_at).not.toBeNull();
+  });
+
+  it('รายละเอียดการใช้งานของอู่ — ไม่มีชื่อหรืออีเมลของผู้ใช้ และไม่ปนอู่อื่น', async () => {
+    const a = (await openShop('อู่ ก', 'a@example.com')).rows[0].id;
+    const b = (await openShop('อู่ ข', 'b@example.com')).rows[0].id;
+    await admin.query(
+      `insert into users (tenant_id, code, name, email, role)
+       values ($1,'ST01','ช่างสมศักดิ์','s1@example.com','staff')`, [a]);
+    await app.query('select * from auth.load_session($1)', [await signInAs(await ownerOf(a), a)]);
+    await admin.query(
+      `insert into documents (tenant_id, kind, doc_no, doc_date) values
+         ($1,'QT','QT-1',current_date), ($1,'RC','RC-1',current_date), ($2,'QT','QT-9',current_date)`,
+      [a, b]);
+
+    const act = (await app.query('select ops.shop_activity($1, $2) as a', [good, a])).rows[0].a;
+
+    const text = JSON.stringify(act);
+    expect(text).not.toMatch(/สมศักดิ์|สมชาย|@example\.com|QT-1|RC-1/);
+
+    expect(act.users).toHaveLength(2);
+    expect(act.users[0].role, 'เจ้าของขึ้นก่อน').toBe('owner');
+    expect(act.users[0].days_30).toBe(1);
+    expect(act.users[1].last_seen_at).toBeNull();
+    expect(act.docs_total, 'เอกสารของอู่ ข ต้องไม่ปนมา').toBe(2);
+    expect(act.kinds_30).toEqual({ QT: 1, RC: 1 });
+    expect(act.days).toHaveLength(91);
+    expect(act.days[90]).toMatchObject({ users: 1, docs: 2 });
+
+    /* อู่ที่ไม่มีอยู่ = null ไม่ใช่ error */
+    const none = await app.query('select ops.shop_activity($1, gen_random_uuid()) as a', [good]);
+    expect(none.rows[0].a).toBeNull();
+  });
+
+  it('อ่านการใช้งานแล้วไม่ทิ้ง app.tenant_id ค้างไว้ในทรานแซกชัน', async () => {
+    const a = (await openShop('อู่ ก', 'a@example.com')).rows[0].id;
+    await app.query('begin');
+    try {
+      await app.query('select * from ops.list_shops($1)', [good]);
+      await app.query('select ops.shop_activity($1, $2)', [good, a]);
+      const v = await app.query(`select current_setting('app.tenant_id', true) as t`);
+      expect(v.rows[0].t ?? '').toBe('');
+    } finally {
+      await app.query('rollback');
+    }
+  });
 
   it('ต่ออายุแล้ววันหมดอายุถูกบันทึก', async () => {
     const id = (await openShop('อู่ ก', 'o@example.com')).rows[0].id;
