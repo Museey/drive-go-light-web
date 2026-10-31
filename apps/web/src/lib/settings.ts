@@ -151,9 +151,10 @@ export interface StaffInput {
 /** รหัสพนักงานถัดไป — U01, U02, … เหมือน genUserCode() ของเดิม */
 export async function nextUserCode(): Promise<string> {
   return query(async (c) => {
+    /* เลขท้ายไม่เกิน 9 หลักเท่านั้น — เหตุผลเดียวกับ nextContactCode() ใน contacts.ts */
     const { rows } = await c.query(
       `select coalesce(max(substring(code from '[0-9]+$')::int), 0) as last
-       from users where code ~ '^U[0-9]+$'`,
+       from users where code ~ '^U[0-9]{1,9}$'`,
     );
     return 'U' + String(Number(rows[0].last) + 1).padStart(2, '0');
   });

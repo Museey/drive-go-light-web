@@ -124,9 +124,10 @@ async function poolOf(c: Client, kind: ContactKind): Promise<ExistingContact[]> 
 /** ออกรหัสถัดไปหลายตัวรวดเดียว — เรียกทีละตัวในลูปจะได้รหัสซ้ำเพราะยังไม่ commit */
 async function codeMaker(c: Client, kind: ContactKind): Promise<() => string> {
   const prefix = kind === 'vendor' ? 'VEN-' : 'CUS-';
+  /* เลขท้ายไม่เกิน 9 หลักเท่านั้น — เหตุผลเดียวกับ nextContactCode() ใน contacts.ts */
   const { rows } = await c.query(
     `select coalesce(max(substring(code from '[0-9]+$')::int), 0) as last
-       from contacts where kind = $1 and code ~ ('^' || $2 || '[0-9]+$')`,
+       from contacts where kind = $1 and code ~ ('^' || $2 || '[0-9]{1,9}$')`,
     [kind, prefix],
   );
   let n = Number(rows[0].last);

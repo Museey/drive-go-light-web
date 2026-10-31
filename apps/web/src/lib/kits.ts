@@ -58,8 +58,9 @@ export async function searchKits(q: string, limit = 5): Promise<KitRow[]> {
  */
 export async function nextKitCode(): Promise<string> {
   return query(async (c) => {
+    /* เลขท้ายไม่เกิน 9 หลักเท่านั้น — เหตุผลเดียวกับ nextContactCode() ใน contacts.ts */
     const { rows } = await c.query(
-      `select coalesce(max((substring(code from '^KIT-([0-9]+)$'))::int), 0) + 1 as n from kits`);
+      `select coalesce(max((substring(code from '^KIT-([0-9]{1,9})$'))::int), 0) + 1 as n from kits`);
     return `KIT-${String(rows[0]?.n ?? 1).padStart(3, '0')}`;
   });
 }

@@ -307,9 +307,12 @@ export interface ContactInput {
 export async function nextContactCode(kind: 'customer' | 'vendor'): Promise<string> {
   return query(async (c) => {
     const prefix = kind === 'vendor' ? 'VEN-' : 'CUS-';
+    /* นับเฉพาะเลขท้าย 1–9 หลัก — ช่องรหัสพิมพ์อะไรก็ได้ (เบอร์โทร ทะเบียนรถ)
+       รหัสอย่าง CUS-100302306445 ทำ ::int ล้นจนเปิดฟอร์มเพิ่มใหม่ไม่ได้ทั้งอู่ (31 ต.ค. 2569)
+       และต่อให้ไม่ล้น ลำดับของทั้งอู่ก็จะไปต่อจากเลขนั้น — รหัสที่ไม่ได้มาจากลำดับปกติจึงไม่นับ */
     const { rows } = await c.query(
       `select coalesce(max(substring(code from '[0-9]+$')::int), 0) as last
-       from contacts where kind = $1 and code ~ ('^' || $2 || '[0-9]+$')`,
+       from contacts where kind = $1 and code ~ ('^' || $2 || '[0-9]{1,9}$')`,
       [kind, prefix],
     );
     return prefix + String(Number(rows[0].last) + 1).padStart(4, '0');

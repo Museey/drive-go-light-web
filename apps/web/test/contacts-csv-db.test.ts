@@ -287,6 +287,20 @@ describe.skipIf(!DB_URL)('นำเข้าผู้ติดต่อจาก
       .toEqual(['CUS-0001', 'CUS-0002', 'CUS-0003', 'CUS-0004', 'CUS-0005']);
   });
 
+  it('มีรหัสเลขยาวเกิน int อยู่แล้ว — ยังออกรหัสต่อจากลำดับปกติ ไม่ล้ม (31 ต.ค. 2569)', async () => {
+    /* ช่องรหัสพิมพ์อะไรก็ได้ — อู่จริงมี CUS-100302306445 แล้ว ::int ล้นจนเปิดฟอร์มเพิ่มลูกค้าไม่ได้ */
+    await admin.query(
+      `insert into contacts (tenant_id, code, kind, type, first_name)
+       values ($1,'CUS-0007','customer','person','เดิม'),
+              ($1,'CUS-100302306445','customer','person','รหัสแปลก')`, [tenantId]);
+
+    await importContactsWith(app, 'customer', csv('customer', [
+      { firstName: 'ใหม่', lastName: 'ทดสอบ' },
+    ]));
+
+    expect((await one('CUS-0008'))?.first_name, 'ต่อจาก CUS-0007 ไม่ใช่จากเลขยาว').toBe('ใหม่');
+  });
+
   it('เกินเพดานต่อไฟล์ ต้องปฏิเสธทั้งไฟล์ ไม่ใช่นำเข้าครึ่งเดียว', async () => {
     const rows = Array.from({ length: 3001 }, (_, i) => ({
       firstName: `ค${i}`, lastName: 'ทดสอบ',
