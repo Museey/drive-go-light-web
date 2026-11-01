@@ -62,6 +62,13 @@ services:
       - key: APP_URL
         value: https://app.drivegolight.com
 
+      # แจ้งข้อผิดพลาดเข้า Telegram ของผู้ให้บริการ (DEPLOY.md ข้อ 3.2)
+      # ไม่ตั้งสองตัวนี้ = ไม่แจ้ง ส่งแค่ชนิด หน้า และจำนวน ไม่มีข้อความผิดพลาด
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+
   # ล้างข้อผิดพลาดที่เกิน 90 วัน ให้ตรงกับที่หน้านโยบายข้อมูลส่วนบุคคลบอกไว้
   # ใช้ connection ของผู้ดูแล เพราะ role ของแอปตั้งใจให้ลบไม่ได้
   - type: cron

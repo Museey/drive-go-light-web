@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
+import { alertError } from './error-alerts';
 
 /**
  * บันทึกข้อผิดพลาดและตรวจสุขภาพระบบ — ตรรกะล้วนที่รับ client เข้ามา
@@ -142,6 +143,8 @@ export async function recordErrorWith(
         fingerprintOf(input.kind, digest, message, path),
       ],
     );
+    /* แจ้งหลังบันทึกสำเร็จ — ตัวแจ้งรวบเป็นรอบเอง ไม่ส่งทีละรายการ */
+    alertError({ kind: input.kind, path });
     return String(rows[0].id);
   } catch {
     return null;
