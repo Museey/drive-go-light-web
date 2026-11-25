@@ -273,4 +273,111 @@ export const AUDIT_LABEL: Record<string, string> = {
   add_operator: 'เพิ่มบัญชีผู้ให้บริการ',
   enable_operator: 'เปิดบัญชีผู้ให้บริการ',
   disable_operator: 'ปิดบัญชีผู้ให้บริการ',
+  approve_request: 'อนุมัติใบสมัคร / การชำระเงิน',
+  reject_request: 'ปฏิเสธใบสมัคร / การชำระเงิน',
 };
+
+/* ---------------------------------------------------------------------
+   คำขอที่แนบสลิป — ใบสมัครใหม่ (และการต่ออายุในขั้น D) · db/038_payment_requests.sql
+   --------------------------------------------------------------------- */
+
+export type RequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface RequestRow {
+  id: string;
+  at: string;
+  kind: 'signup' | 'renewal';
+  status: RequestStatus;
+  shopName: string;
+  shopProvince: string;
+  ctype: 'juristic' | 'person' | null;
+  vatRegistered: boolean | null;
+  ownerEmail: string;
+  amountDue: number;
+  amountPaid: number;
+  paidAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  tenantId: string | null;
+}
+
+const num = (v: unknown) => Number(v ?? 0);
+
+export async function listRequests(s: OperatorSession, status: RequestStatus | null): Promise<RequestRow[]> {
+  return withoutTenant(async (c) => {
+    const { rows } = await c.query(`select * from ops.list_requests($1, $2)`, [s.token, status]);
+    return rows.map((r) => ({
+      id: r.id, at: ts(r.at)!, kind: r.kind, status: r.status,
+      shopName: r.shop_name ?? '', shopProvince: r.shop_province ?? '',
+      ctype: r.ctype, vatRegistered: r.vat_registered, ownerEmail: String(r.owner_email ?? ''),
+      amountDue: num(r.amount_due), amountPaid: num(r.amount_paid), paidAt: ts(r.paid_at)!,
+      decidedAt: ts(r.decided_at), decidedBy: r.decided_by, tenantId: r.tenant_id,
+    }));
+  });
+}
+
+export interface RequestDetail extends RequestRow {
+  billName: string;
+  taxId: string | null;
+  branchNo: string | null;
+  billAddrText: string;
+  billEmail: string;
+  wht: boolean | null;
+  contactName: string;
+  contactPos: string;
+  contactTel: string;
+  consentAt: string | null;
+  years: number;
+  hasSlip: boolean;
+  hasWhtCert: boolean;
+  lineUser: boolean;
+  rejectReason: string | null;
+}
+
+export async function getRequest(s: OperatorSession, id: string): Promise<RequestDetail | null> {
+  return withoutTenant(async (c) => {
+    const { rows } = await c.query(`select * from ops.get_request($1, $2)`, [s.token, id]);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      id: r.id, at: ts(r.at)!, kind: r.kind, status: r.status,
+      shopName: r.shop_name ?? '', shopProvince: r.shop_province ?? '',
+      ctype: r.ctype, vatRegistered: r.vat_registered, ownerEmail: String(r.owner_email ?? ''),
+      amountDue: num(r.amount_due), amountPaid: num(r.amount_paid), paidAt: ts(r.paid_at)!,
+      decidedAt: ts(r.decided_at), decidedBy: r.decided_by, tenantId: r.tenant_id,
+      billName: r.bill_name ?? '', taxId: r.tax_id, branchNo: r.branch_no,
+      billAddrText: r.bill_addr_text ?? '', billEmail: String(r.bill_email ?? ''), wht: r.wht,
+      contactName: r.contact_name ?? '', contactPos: r.contact_pos ?? '', contactTel: r.contact_tel ?? '',
+      consentAt: ts(r.consent_at), years: Number(r.years), hasSlip: r.has_slip,
+      hasWhtCert: r.has_wht_cert, lineUser: r.line_user, rejectReason: r.reject_reason,
+    };
+  });
+}
+
+/** รูปสลิปหรือ 50 ทวิ — ไม่มีรูป (ถูกเก็บกวาดแล้ว หรือไม่ได้แนบ) = null */
+export async function getRequestFile(
+  s: OperatorSession, id: string, which: 'slip' | 'wht',
+): Promise<{ mime: string; bytes: Buffer } | null> {
+  return withoutTenant(async (c) => {
+    const { rows } = await c.query(
+      `select * from ops.get_request_file($1, $2, $3)`, [s.token, id, which]);
+    const r = rows[0];
+    return r?.bytes && r.mime ? { mime: r.mime, bytes: r.bytes } : null;
+  });
+}
+
+export async function decideRequest(
+  s: OperatorSession, id: string,
+  d: { approve: true; tokenHash: Buffer; expiresAt: Date } | { approve: false; reason: string },
+): Promise<{ tenantId: string; ownerEmail: string; expiresOn: string } | null> {
+  return withoutTenant(async (c) => {
+    const { rows } = await c.query(
+      `select * from ops.decide_request($1, $2, $3, $4, $5, $6)`,
+      d.approve
+        ? [s.token, id, true, null, d.tokenHash, d.expiresAt]
+        : [s.token, id, false, d.reason, null, null],
+    );
+    const r = rows[0];
+    return r ? { tenantId: r.tenant_id, ownerEmail: String(r.owner_email), expiresOn: iso(r.expires_on) } : null;
+  });
+}

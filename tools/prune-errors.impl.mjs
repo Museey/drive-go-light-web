@@ -1,5 +1,5 @@
 /**
- * ลบข้อผิดพลาดที่เก่ากว่าที่กำหนดออกจาก ops.errors
+ * ลบข้อผิดพลาดที่เก่ากว่าที่กำหนดออกจาก ops.errors — และใบสมัคร/รูปสลิปเก่าใน ops.payment_requests
  *
  *   ADMIN_URL='postgresql://...' node tools/prune-errors.mjs [จำนวนวัน]
  *
@@ -25,6 +25,15 @@ try {
   const { rows } = await client.query('select ops.prune_errors($1) as n', [days]);
   const left = await client.query('select count(*)::int as n from ops.errors');
   console.log(`ลบข้อผิดพลาดที่เก่ากว่า ${days} วันไปแล้ว ${rows[0].n} รายการ · เหลือ ${left.rows[0].n}`);
+
+  /* ใบสมัครที่ปฏิเสธ และรูปสลิปของใบที่อนุมัติ — ระยะเดียวกับที่หน้า /privacy บอก (038)
+     ฐานที่ยังไม่ได้รัน 038 ไม่มีฟังก์ชันนี้ ข้ามไปเงียบ ๆ */
+  const { rows: [has] } = await client.query(
+    `select to_regprocedure('ops.prune_requests(integer)') is not null as ok`);
+  if (has.ok) {
+    const r = await client.query('select ops.prune_requests($1) as n', [days]);
+    console.log(`เก็บกวาดใบสมัครและรูปสลิปที่เก่ากว่า ${days} วันไปแล้ว ${r.rows[0].n} รายการ`);
+  }
 } catch (err) {
   console.error(err instanceof Error ? err.message : String(err));
   const hint = sslHint(err);

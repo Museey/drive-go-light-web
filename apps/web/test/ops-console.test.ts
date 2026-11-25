@@ -141,6 +141,8 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
       'db/035_error_dedup.sql',
       /* 037 สร้าง list_shops ใหม่ทับของ 031 และเพิ่ม shop_activity */
       'db/037_usage_activity.sql',
+      /* 038 ย้าย open_shop ไปเรียก open_shop_core และเพิ่มฟังก์ชันของคำขอที่แนบสลิป */
+      'db/038_payment_requests.sql',
     ]);
     await admin.query(`
       do $$ begin
@@ -203,6 +205,12 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
         'select ops.set_operator_active($1, gen_random_uuid(), false)', [bad]],
       ['list_errors', 'select * from ops.list_errors($1, 10)', [bad]],
       ['list_audit', 'select * from ops.list_audit($1, 10)', [bad]],
+      ['list_requests', 'select * from ops.list_requests($1, null)', [bad]],
+      ['get_request', 'select * from ops.get_request($1, gen_random_uuid())', [bad]],
+      ['get_request_file', `select * from ops.get_request_file($1, gen_random_uuid(), 'slip')`, [bad]],
+      ['decide_request',
+        `select * from ops.decide_request($1, gen_random_uuid(), true, null, $2, now()+interval '7 days')`,
+        [bad, t]],
     ];
 
     /**
@@ -260,11 +268,14 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
          load_session / delete_session  รับ token อยู่แล้วในตัว
          peek_setup_token / consume_setup_token / issue_setup_token  ใช้โทเคนคนละชุด
          viewing / require_session  เป็นตัวด่านเอง
-         prune_errors               งานตามเวลา ไม่ใช่ของคอนโซล */
+         prune_errors               งานตามเวลา ไม่ใช่ของคอนโซล
+         submit_signup              ลูกค้าส่งใบสมัครจาก /signup ก่อนมีบัญชี — เขียนได้อย่างเดียว อ่านกลับไม่ได้
+                                    มีเพดานใบรอตรวจในฐาน และเพดานต่อไอพีในแอป (signup-db.test.ts) */
     const EXEMPT = new Set([
       'find_operator_for_signin', 'record_failed_signin', 'create_session',
       'load_session', 'delete_session', 'peek_setup_token', 'consume_setup_token',
       'issue_setup_token', 'viewing', 'require_session', 'prune_errors', 'email_taken',
+      'submit_signup',
     ]);
 
     const missing = rows
@@ -281,7 +292,7 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
   });
 
   it('แอปแตะตารางใน ops ตรง ๆ ไม่ได้', async () => {
-    for (const t of ['operators', 'sessions', 'setup_tokens', 'audit']) {
+    for (const t of ['operators', 'sessions', 'setup_tokens', 'audit', 'payment_requests']) {
       await expect(app.query(`select * from ops.${t}`), `ops.${t} ต้องอ่านไม่ได้`)
         .rejects.toThrow(/permission denied/);
     }

@@ -40,4 +40,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '035_error_dedup.sql',
   '036_vat_registered.sql',
   '037_usage_activity.sql',
+  '038_payment_requests.sql',
 ];

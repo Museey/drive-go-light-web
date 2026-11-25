@@ -86,7 +86,10 @@ describe('ทุกเส้นทางที่ส่งข้อมูลอ�
                       '/pics/[productId]/[sha]/route.ts',
                       /* ออกจากคอนโซลผู้ให้บริการ — แค่ลบ session ไม่ส่งข้อมูลอะไรออก
                          และต้องทำได้เสมอแม้ session พังไปแล้ว */
-                      '/ops/logout/route.ts'];
+                      '/ops/logout/route.ts',
+                      /* รูปสลิปของคำขอสมัคร — ไม่ใช่ข้อมูลของอู่ใด (อู่ยังไม่ถูกเปิด) และเปิดได้เฉพาะ
+                         ผู้ให้บริการ ซึ่งไม่มีสิทธิ์แบบอู่ให้ตรวจ · กันด้วย requireOperator + session ในฐาน */
+                      '/ops/requests/[id]/file/[which]/route.ts'];
       if (EXEMPT.includes(rel(p))) continue;
       if (!/require(Export|Cost)\(/.test(src)) missing.push(rel(p));
     }
@@ -101,6 +104,8 @@ describe('ทุกเส้นทางที่ส่งข้อมูลอ�
     const src = readFileSync(join(APP, '/pics/[productId]/[sha]/route.ts'), 'utf8');
     expect(src, 'รูปเป็นข้อมูลของอู่ ต้องล็อกอินและมีสิทธิ์ดูทะเบียนสินค้าก่อน')
       .toContain("requireTab('stock', 'list')");
+    const slip = readFileSync(join(APP, '/ops/requests/[id]/file/[which]/route.ts'), 'utf8');
+    expect(slip, 'สลิปมีชื่อและเลขบัญชีของคนโอน ต้องเป็นผู้ให้บริการที่ล็อกอินอยู่').toContain('requireOperator()');
   });
 
   /**

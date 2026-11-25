@@ -20,6 +20,7 @@ export function OpsShell({
 }) {
   const tabs: [string, string][] = [
     ['/ops', 'อู่ทั้งหมด'],
+    ['/ops/requests', 'คำขอรออนุมัติ'],
     ['/ops/operators', 'ผู้ให้บริการ'],
     ['/ops/errors', 'ข้อผิดพลาด'],
     ['/ops/audit', 'บันทึกการใช้งาน'],

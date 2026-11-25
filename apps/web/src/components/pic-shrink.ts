@@ -7,9 +7,10 @@ import { PIC_EDGE, PIC_QUALITY, THUMB_EDGE } from '@/lib/pics-core';
  * ผู้ให้บริการเปราะขึ้นอีกชั้น และเพราะรูปจากมือถือขนาด 5 MB ไม่ต้องวิ่งขึ้นเน็ตทั้งก้อน
  *
  * เซิร์ฟเวอร์ตรวจไบต์จริงซ้ำอยู่ดี ตรงนี้เป็นแค่ความสะดวก ไม่ใช่ด่านความปลอดภัย
- * ใช้ร่วมกันระหว่างกล่องรูปหน้าสินค้า (pic-panel) กับฟอร์มเพิ่มสินค้าใหม่
+ * ใช้ร่วมกันระหว่างกล่องรูปหน้าสินค้า (pic-panel) ฟอร์มเพิ่มสินค้าใหม่ และสลิปในหน้าสมัคร
+ * (สลิปใช้ด้านยาวกว่าและคุณภาพสูงกว่า — ตัวเลขเล็ก ๆ บนสลิปต้องยังอ่านออก)
  */
-export async function shrink(file: File, edge: number): Promise<Blob> {
+export async function shrink(file: File, edge: number, quality: number = PIC_QUALITY): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   try {
     const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
@@ -29,7 +30,7 @@ export async function shrink(file: File, edge: number): Promise<Blob> {
     return await new Promise<Blob>((res, rej) => {
       canvas.toBlob(
         (b) => (b ? res(b) : rej(new Error('ย่อรูปไม่สำเร็จ'))),
-        'image/jpeg', PIC_QUALITY,
+        'image/jpeg', quality,
       );
     });
   } finally {

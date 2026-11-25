@@ -231,6 +231,7 @@ export function Landing() {
             </p>
             <div className="lp-cta">
               <Link className="btn primary lp-btn-lg" href="/login">เข้าสู่ระบบ</Link>
+              <Link className="btn lp-btn-lg" href="/signup">สมัครใช้บริการ</Link>
               <a className="btn lp-btn-lg" href="#features">ดูว่าทำอะไรได้บ้าง</a>
             </div>
             <p className="lp-micro">
@@ -384,6 +385,7 @@ export function Landing() {
             </p>
             <div className="lp-cta">
               <Link className="btn primary lp-btn-lg" href="/login">เข้าสู่ระบบ</Link>
+              <Link className="btn lp-btn-lg" href="/signup">สมัครใช้บริการ</Link>
               <a className="btn lp-btn-lg" href={VENDOR.telHref}>โทร {VENDOR.tel}</a>
               <a className="btn lp-btn-lg" href={VENDOR.line} target="_blank" rel="noreferrer noopener">
                 ทักทาง LINE
@@ -419,6 +421,7 @@ export function Landing() {
               <b>ลิงก์</b>
               <p>
                 <Link href="/login">เข้าสู่ระบบ</Link><br />
+                <Link href="/signup">สมัครใช้บริการ</Link><br />
                 <Link href="/privacy">นโยบายข้อมูลส่วนบุคคล</Link>
               </p>
             </div>
