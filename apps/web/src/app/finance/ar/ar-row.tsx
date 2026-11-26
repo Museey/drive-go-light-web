@@ -1,5 +1,6 @@
 'use client';
 
+import { Plate } from '@/components/plate';
 import { useState } from 'react';
 import Link from 'next/link';
 import { PayForm } from '../pay-form';
@@ -18,7 +19,7 @@ export function ArRow({ row }: { row: ReceivableRow }) {
         </td>
         <td>{KIND_SHORT[row.kind] ?? row.kind}</td>
         <td className="wrap">{row.partyName || '-'}</td>
-        <td className="mono">{row.vehiclePlate || '-'}</td>
+        <td>{row.vehiclePlate ? <Plate value={row.vehiclePlate} /> : '-'}</td>
         <td>{thDate(row.docDate)}</td>
         <td>
           {thDate(row.dueDate)}

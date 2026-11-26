@@ -68,6 +68,11 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
         `insert into subscriptions (tenant_id, plan, started_on, expires_on)
          values ($1, 'light-yearly', current_date, current_date + 365)`, [t],
       );
+      /* คำขอต่ออายุที่รอตรวจการชำระเงิน (ไมเกรชัน 038) */
+      await admin.query(
+        `insert into renewal_requests (tenant_id, years, amount, paid_on, note)
+         values ($1, 1, 3600, current_date, 'โอนทดสอบ')`, [t],
+      );
       await admin.query(
         `insert into ignored_item_names (tenant_id, name_norm) values ($1, 'ค่าส่ง')`, [t],
       );
@@ -140,6 +145,26 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
         `insert into kit_items (tenant_id, kit_id, product_id, name, qty, unit_cost)
          values ($1,$2,$3,'น้ำมันเครื่อง',4,120), ($1,$2,null,'ค่าแรง',1,0)`,
         [t, kit.rows[0].id, someProduct.rows[0].id],
+      );
+
+      /* DriveGo Light Plus (ไมเกรชัน 041) — พนักงาน งวดเงินเดือน นัดหมาย · ไฟล์ชุดทดสอบของรุ่น 6.4 ไม่มีข้อมูลนี้
+         เงินเดือนเป็นข้อมูลที่รั่วข้ามอู่แล้วเสียหายที่สุด ตารางว่างพิสูจน์อะไรไม่ได้ */
+      const emp = await admin.query(
+        `insert into employees (tenant_id, code, name, base_salary)
+         values ($1, 'EMP-001', 'พนักงานทดสอบ', 15000) returning id`, [t],
+      );
+      const run = await admin.query(
+        `insert into payroll_runs (tenant_id, period, pay_date)
+         values ($1, '2026-03', '2026-03-31') returning id`, [t],
+      );
+      await admin.query(
+        `insert into payroll_items (tenant_id, run_id, employee_id, line_no, name, base, sso)
+         values ($1, $2, $3, 1, 'พนักงานทดสอบ', 15000, 750)`,
+        [t, run.rows[0].id, emp.rows[0].id],
+      );
+      await admin.query(
+        `insert into appointments (tenant_id, appt_date, party_name, title)
+         values ($1, '2026-04-01', 'ลูกค้านัด', 'เช็กระยะ')`, [t],
       );
     }
 

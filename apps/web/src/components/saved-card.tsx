@@ -20,6 +20,11 @@ export interface SavedSummary {
   printLabel: string;
   editHref: string | null;
   editLabel: string;
+  /**
+   * ใบที่ออกต่อจากใบนี้ได้ทันที (26 พ.ย. 2569 — ผู้ใช้ขอปุ่ม "ออกใบถัดไปต่อ" แบบ DriveGoFree)
+   * บันทึกใบเสนอราคาแล้วกดออกใบส่งมอบต่อได้เลย ไม่ต้องไปเมนูใหม่แล้วเลือกใบต้นทางเอง
+   */
+  next?: { href: string; label: string }[];
 }
 
 /** ข้อความ "บันทึกเรียบร้อย" แสดงเดี่ยว ๆ ก่อน 2 วินาที แล้วการ์ดเดิมแสดงรายละเอียดกับปุ่ม (ผู้ใช้กำหนด) */
@@ -92,6 +97,14 @@ export function SavedCard({ s }: { s: SavedSummary }) {
               <button ref={(el) => { if (!s.printHref && !s.editHref) firstBtn.current = el; }}
                       className="btn" type="button" onClick={close}>ปิด</button>
             </div>
+            {s.next?.length ? (
+              <div className="next" data-saved-next>
+                <span className="next-h">ออกเอกสารต่อจากใบนี้</span>
+                <div className="acts">
+                  {s.next.map((n) => <Link key={n.href} className="btn primary" href={n.href}>{n.label} →</Link>)}
+                </div>
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>

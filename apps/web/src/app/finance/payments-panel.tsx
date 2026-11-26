@@ -65,7 +65,7 @@ export function PaymentsPanel({
                   <td className="subtle">{p.byWho ?? '-'}</td>
                   <td>
                     {p.atIssue ? (
-                      <span className="subtle" style={{ fontSize: 12 }}>แก้ที่ตัวเอกสาร</span>
+                      <span className="subtle" style={{ fontSize: '0.875rem' }}>แก้ที่ตัวเอกสาร</span>
                     ) : confirming === p.id ? (
                       <div className="tag-row">
                         <form autoComplete="off" action={async () => {

@@ -4,6 +4,7 @@ import { SavedNotice } from '@/components/saved-notice';
 import { today } from '@drivegolight/core';
 import { CLAIM_SIDE, isClaimSide } from '@/lib/claims';
 import { ClaimEditor } from '../claim-editor';
+import { canCost } from '@/lib/perms';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ export default async function NewClaimPage({
 }: {
   searchParams: Promise<{ side?: string; saved?: string; savedId?: string }>;
 }) {
-  await requireTab('stock', 'claim');
+  const session = await requireTab('stock', 'claim');
   const sp = await searchParams;
   const side = isClaimSide(sp.side) ? sp.side : 'customer';
   const S = CLAIM_SIDE[side];
@@ -26,7 +27,7 @@ export default async function NewClaimPage({
     >
       {/* บันทึกใบเคลมแล้วกลับมาฟอร์มเปล่าพร้อมการ์ด (ผู้ใช้กำหนด) — key ให้ฟอร์มเริ่มใหม่ทุกใบ */}
       <SavedNotice saved={sp.saved} savedId={sp.savedId} />
-      <ClaimEditor key={`${side}:${sp.savedId ?? ''}`} side={side} today={today()} />
+      <ClaimEditor key={`${side}:${sp.savedId ?? ''}`} side={side} today={today()} showCost={canCost(session)} />
     </Shell>
   );
 }

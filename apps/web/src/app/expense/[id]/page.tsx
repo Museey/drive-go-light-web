@@ -159,7 +159,7 @@ export default async function BuyDocPage({
                 <div className="row grand"><span>ยอดที่ต้องจ่ายจริง</span><span>{baht(doc.payable)}</span></div>
               </>
             ) : null}
-            <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--ink-3)' }}>
+            <div style={{ marginTop: 8, fontSize: '0.875rem', color: 'var(--ink-3)' }}>
               ({bahttext(doc.payable)})
             </div>
           </div>

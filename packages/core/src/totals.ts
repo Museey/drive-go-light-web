@@ -53,9 +53,17 @@ export function totalsOf(doc: TotalsInput, ctx: ShopContext): Totals {
 }
 
 /**
- * ฐานภาษีหัก ณ ที่จ่าย = มูลค่าค่าแรงก่อน VAT หลังเฉลี่ยส่วนลดตามสัดส่วนแล้ว
+ * ฐานภาษีหัก ณ ที่จ่าย — ตามที่ร้านตั้งไว้ (ShopContext.whtBase)
+ *
+ *   labour (ค่าตั้งต้น)  มูลค่าค่าแรงก่อน VAT หลังเฉลี่ยส่วนลดตามสัดส่วนแล้ว
+ *   all                 มูลค่าก่อน VAT ของทั้งใบหลังส่วนลด — เท่ากับ totalsOf().net
+ *
+ * ลูกค้าเป็นผู้หัก และแต่ละรายหักไม่เหมือนกัน: บางรายหักเฉพาะค่าแรง บางรายหักทั้งใบ
+ * ตามแนวที่ถือว่างานซ่อมพร้อมอะไหล่เป็นการรับจ้างทำของทั้งก้อน ร้านจึงเลือกแบบที่ลูกค้าส่วนใหญ่ของตัวเองใช้
  */
 export function whtBaseOf(doc: TotalsInput, ctx: ShopContext): number {
+  if (ctx.whtBase === 'all') return totalsOf(doc, ctx).net;
+
   const sub = doc.items.reduce((s, it) => s + lineAmount(it), 0);
   const svc = doc.items.filter(isServiceItem).reduce((s, it) => s + lineAmount(it), 0);
   if (svc <= 0 || sub <= 0) return 0;

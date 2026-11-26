@@ -1,9 +1,7 @@
 import 'server-only';
 import { query } from './auth';
 import { mutate } from './mutate';
-import {
-  licenseStatusWith, renewalWindow, todayIso, TRIAL_DAYS, type LicenseStatus,
-} from './license-window';
+import { licenseStatusWith, TRIAL_DAYS, type LicenseStatus } from './license-window';
 
 /**
  * สถานะการใช้งาน — ทดลองใช้ ใช้งานอยู่ หรือหมดอายุ
@@ -47,29 +45,70 @@ export async function listRenewals(): Promise<RenewalRow[]> {
   });
 }
 
-/**
- * บันทึกการต่ออายุ
- *
- * ตอนนี้อู่โอนเงินมาแล้วเราบันทึกให้ ยังไม่มีการรับชำระออนไลน์
- * (ต้องมีบัญชีร้านค้ากับผู้ให้บริการรับชำระเงินก่อน ซึ่งเป็นเรื่องนอกโค้ด)
- * ต่ออายุจากวันหมดอายุเดิมถ้ายังไม่หมด ไม่ใช่จากวันนี้ — จะได้ไม่เสียวันที่จ่ายไปแล้ว
- */
-export async function recordRenewal(input: {
+export type RenewalRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface RenewalRequestRow {
+  id: string;
   years: number;
-  amount: number | null;
+  amount: number;
+  paidOn: string;
   note: string;
-}): Promise<{ expiresOn: string }> {
-  return mutate('settings', async (c) => {
-    const status = await licenseStatusWith(c);
-    const { startedOn, expiresOn } = renewalWindow(status, todayIso(), input.years);
+  status: RenewalRequestStatus;
+  createdAt: string;
+  /** เหตุผลจากผู้ให้บริการ — มีเมื่อไม่อนุมัติ */
+  decidedNote: string;
+}
 
-    await c.query(
-      `insert into subscriptions (tenant_id, plan, started_on, expires_on, amount, note)
-       values (current_tenant_id(), $1, $2, $3, $4, $5)`,
-      ['light-yearly', startedOn, expiresOn,
-       input.amount === null ? null : input.amount.toFixed(2), input.note],
+export async function listRenewalRequests(): Promise<RenewalRequestRow[]> {
+  return query(async (c) => {
+    const { rows } = await c.query(
+      `select id, years, amount, paid_on::text as paid_on, note, status,
+              to_char(created_at, 'YYYY-MM-DD') as created_at, decided_note
+       from renewal_requests order by created_at desc limit 20`,
     );
+    return rows.map((r) => ({
+      id: r.id, years: Number(r.years), amount: Number(r.amount), paidOn: r.paid_on,
+      note: r.note ?? '', status: r.status, createdAt: r.created_at,
+      decidedNote: r.decided_note ?? '',
+    }));
+  });
+}
 
-    return { expiresOn };
+/**
+ * แจ้งชำระเงินเพื่อขอต่ออายุ — **ยังไม่ได้ต่ออายุ**
+ *
+ * เดิมฟังก์ชันตรงนี้เพิ่มแถวใน subscriptions ให้ทันที ใครเข้าเมนูตั้งค่าได้ก็ต่ออายุเองได้
+ * 1–10 ปีโดยไม่ต้องจ่ายเงิน ตอนนี้อู่ทำได้แค่ส่งคำขอพร้อมรายละเอียดการโอน
+ * ผู้ให้บริการตรวจยอดกับบัญชีธนาคารแล้วอนุมัติในคอนโซล (ops.approve_renewal_request)
+ * วันใช้งานจึงเพิ่มได้ทางเดียวคือผ่านคนที่เห็นเงินเข้าจริง (db/038_renewal_requests.sql)
+ */
+export async function requestRenewal(input: {
+  years: number;
+  amount: number;
+  paidOn: string;
+  note: string;
+}): Promise<void> {
+  return mutate('settings', async (c, userId) => {
+    const pending = await c.query(
+      `select 1 from renewal_requests where status = 'pending' limit 1`);
+    if (pending.rows[0]) {
+      throw new Error('มีคำขอต่ออายุที่รอตรวจสอบอยู่แล้ว — รอผลก่อน หรือยกเลิกคำขอเดิมแล้วส่งใหม่');
+    }
+    await c.query(
+      `insert into renewal_requests (tenant_id, years, amount, paid_on, note, requested_by)
+       values (current_tenant_id(), $1, $2, $3, $4, $5)`,
+      [input.years, input.amount.toFixed(2), input.paidOn, input.note, userId],
+    );
+  }, { sub: 'shop', allowExpired: true });
+}
+
+/** ยกเลิกคำขอที่ยังรอตรวจ — เช่น กรอกยอดผิด จะได้ส่งใหม่ได้ */
+export async function cancelRenewalRequest(id: string): Promise<void> {
+  return mutate('settings', async (c) => {
+    const { rowCount } = await c.query(
+      `update renewal_requests set status = 'cancelled', decided_at = now()
+       where id = $1 and status = 'pending'`, [id],
+    );
+    if (!rowCount) throw new Error('คำขอนี้ถูกตรวจสอบไปแล้ว ยกเลิกไม่ได้');
   }, { sub: 'shop', allowExpired: true });
 }

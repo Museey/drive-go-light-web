@@ -24,7 +24,7 @@ export function DeleteContactButton({
 
   return (
     <div className="tag-row">
-      <span style={{ fontSize: 13.5 }}>ยืนยันลบ <b>{name}</b>? การลบนี้ย้อนกลับไม่ได้</span>
+      <span style={{ fontSize: '0.875rem' }}>ยืนยันลบ <b>{name}</b>? การลบนี้ย้อนกลับไม่ได้</span>
       <form autoComplete="off" action={deleteContactAction.bind(null, id, kind)}>
         <button className="btn danger" type="submit">ลบเลย</button>
       </form>

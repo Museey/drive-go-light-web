@@ -213,6 +213,21 @@ describe.skipIf(!DB_URL)('ตัวเลขรายงานหน้าแร
       await doc('IV-X', { date: await day(-1), net: 900, tenant: otherTenant });
       expect((await salesByMonthWith(app, 6))[5]!.amount).toBe(0);
     });
+
+    /* กราฟหน้าแรกวางแท่งปีก่อนข้างแท่งปีนี้ — ยอดปีก่อนต้องเป็นของเดือนเดียวกันพอดี */
+    it('12 เดือนเทียบปีก่อน — ยอดปีก่อนเป็นของเดือนเดียวกัน และไม่ปนกับยอดปีนี้', async () => {
+      const lastYear = (await admin.query(`select (current_date - interval '1 year')::date::text as d`)).rows[0].d as string;
+      await doc('IV-NOW-1', { date: await day(0), net: 500 });
+      await doc('IV-NOW-2', { date: await day(0), net: 200 });
+      await doc('IV-PREV', { date: lastYear, net: 300 });
+
+      const bars = await salesByMonthWith(app, 12);
+      expect(bars).toHaveLength(12);
+      expect(bars[11]!.key).toBe(await monthOf(0));
+      expect(bars[11]!.amount, 'สองใบของเดือนนี้').toBe(700);
+      expect(bars[11]!.prev, 'ใบเดียวของเดือนเดียวกันปีก่อน — ไม่ถูกคูณด้วยจำนวนใบของปีนี้').toBe(300);
+      expect(bars[0]!.prev).toBe(0);
+    });
   });
 
   describe('ห้าอันดับที่ค้างมากที่สุด', () => {

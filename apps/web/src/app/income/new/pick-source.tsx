@@ -1,3 +1,4 @@
+import { Plate } from '@/components/plate';
 import Link from 'next/link';
 import { RowLink } from '@/components/row-link';
 import type { OpenDoc } from '@/lib/sales';
@@ -68,7 +69,7 @@ export function PickSource({
                     <td className="wrap">
                       {r.partyName || '-'}
                       {r.vehiclePlate ? (
-                        <div className="mono subtle" style={{ fontSize: 11.5 }}>{r.vehiclePlate}</div>
+                        <div className="plate-line"><Plate value={r.vehiclePlate} /></div>
                       ) : null}
                     </td>
                     <td className="num mono">{baht(r.amount)}</td>

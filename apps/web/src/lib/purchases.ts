@@ -5,6 +5,9 @@ import { query } from './auth';
 import { docVersionWith, lockDocForEditWith } from './doc-version';
 import { mutate } from './mutate';
 import { voidBuyDocWith, unvoidBuyDocWith } from './buy-void';
+import {
+  loadBuyStockDocWith, receiveBuyStockWith, syncBuyStockWith, type BuyStockDoc,
+} from './buy-stock';
 
 const n = (v: unknown): number => Number(v ?? 0);
 const money = (v: number) => (Math.round(v * 100) / 100).toFixed(2);
@@ -113,8 +116,10 @@ export function blankBuyDoc(kind: BuyKind, noteDefault: string, vendor?: PickedV
 
 export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docNo: string }> {
   return mutate('expense', async (c, userId) => {
-    const shop = await c.query(`select vat_rate from tenants where id = current_tenant_id()`);
+    const shop = await c.query(
+      `select vat_rate, vat_registered from tenants where id = current_tenant_id()`);
     const vatRate = n(shop.rows[0].vat_rate);
+    const vatRegistered = shop.rows[0].vat_registered !== false;
 
     const base = {
       items: input.items.map((i) => ({ qty: i.qty, price: i.unitPrice, discPct: clampPct(i.discPct) })),
@@ -135,12 +140,51 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
     const isAsset = input.kind === 'EX' && input.expenseCat === 'asset';
 
     let id = input.id;
-    let docNo: string;
+    let docNo = '';
+
+    /* สิ่งที่ใบนี้ควรมีในคลังหลังบันทึก — ต้นทุนสุทธิหลังส่วนลดและถอด VAT (buy-stock.ts) */
+    const stockAfter: BuyStockDoc = {
+      docDate: input.docDate,
+      goodsReceived: input.kind === 'PO' && input.goodsReceived,
+      discount, vatMode: input.vatMode, vatRate, vatRegistered,
+      items: input.items,
+    };
+    let stockBefore: BuyStockDoc | null = null;
+
+    /* เงินที่จ่าย ณ วันบันทึกรวมกันต้องไม่เกินยอดของใบ — ใบแก้ไขนับเงินที่จ่ายทีหลังด้วย (ด้านล่าง) */
+    const paidNow = r2(input.payments.reduce((s, p) => s + (p.amount > 0.004 ? p.amount : 0), 0));
+    let paidLater = 0;
 
     if (id) {
       /* ล็อกแถวก่อนตรวจ — อีกเครื่องที่ยกเลิก รับชำระ หรือแก้ใบเดียวกันอยู่ต้องรอกันคนละรอบ
          แล้วตรวจกับสถานะหลังรอ ไม่ใช่สถานะตอนเปิดหน้า (doc-version.ts) */
       ({ docNo } = await lockDocForEditWith(c, id, input.baseVersion));
+
+      /* ชนิดของใบมาจากฐาน ไม่ใช่จากฟอร์ม — กัน id ของเอกสารรายรับ (หรือใบคนละชนิด)
+         ถูกส่งมาทางนี้แล้วโดนเขียนทับด้วยยอดของใบซื้อ */
+      const cur = await c.query(`select kind::text as kind from documents where id = $1`, [id]);
+      if (cur.rows[0]?.kind !== input.kind) {
+        throw new Error('เอกสารนี้ไม่ใช่ใบชนิดเดียวกับที่กำลังแก้ — เปิดหน้าแก้ไขจากรายการเอกสารอีกครั้ง');
+      }
+
+      const later = await c.query(
+        `select coalesce(sum(amount), 0) as paid from payments where doc_id = $1 and not at_issue`, [id]);
+      paidLater = n(later.rows[0].paid);
+
+      /* อ่านฉบับเดิมไว้ก่อนเขียนทับ — ใช้เทียบว่าสินค้าตัวไหนเปลี่ยนจริง */
+      stockBefore = await loadBuyStockDocWith(c, id, vatRegistered);
+    }
+
+    if (paidNow + paidLater > t.payable + 0.004) {
+      throw new Error(
+        paidLater > 0.004
+          ? `ใบนี้จ่ายเงินไปแล้ว ${money(paidLater)} บาท ยอดใหม่ (${money(t.payable)} บาท) ต่ำกว่าเงินที่จ่ายแล้ว — `
+            + 'ลบรายการจ่ายเงินที่เกินออกก่อน หรือแก้ยอดให้ไม่ต่ำกว่าที่จ่ายไป'
+          : `ยอดที่จ่าย (${money(paidNow)} บาท) มากกว่ายอดของใบ (${money(t.payable)} บาท)`,
+      );
+    }
+
+    if (id) {
 
       await c.query(
         `update documents set doc_date=$2, ref_doc_no=$3, party_id=$4, party_name=$5,
@@ -167,7 +211,7 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
 
       await c.query(`delete from doc_items where doc_id = $1`, [id]);
       await c.query(`delete from payments where doc_id = $1 and at_issue`, [id]);
-      await c.query(`delete from stock_moves where doc_id = $1`, [id]);
+      /* **ไม่ลบ stock_moves** — บัญชีสต๊อกเพิ่มอย่างเดียว ปรับด้วย syncBuyStockWith ด้านล่าง */
     } else {
       const seq = await c.query(
         `select next_doc_no(current_tenant_id(), $1, $2) as no`,
@@ -225,25 +269,9 @@ export async function saveBuyDoc(input: BuyDocInput): Promise<{ id: string; docN
 
     /* ---------- รับของเข้าสต๊อก ----------
        เข้าเฉพาะบรรทัดที่ผูกกับทะเบียนสินค้า และเฉพาะเมื่อติ๊กว่ารับของแล้ว
-       ทุนล่าสุดอัปเดตตามราคาที่ซื้อจริง เหมือนที่โปรแกรมเดิมทำ */
-    if (input.kind === 'PO' && input.goodsReceived) {
-      for (const it of input.items) {
-        if (!it.productId || it.qty === 0) continue;
-        await c.query(
-          `insert into stock_moves (tenant_id, product_id, moved_on, qty_delta, unit_cost,
-                                    cost_amount, reason, doc_id, created_by, expires_on)
-           values (current_tenant_id(),$1,$2,$3,$4,$5,'purchase',$6,$7,$8)`,
-          [
-            it.productId, input.docDate, it.qty, money(it.unitPrice),
-            money(it.qty * it.unitPrice), id, userId, it.expiresOn || null,
-          ],
-        );
-        if (it.unitPrice > 0) {
-          await c.query(`update products set last_cost = $2 where id = $1`,
-            [it.productId, money(it.unitPrice)]);
-        }
-      }
-    }
+       ต้นทุนและทุนล่าสุดเป็นราคาสุทธิที่จ่ายจริง · ใบที่แก้ไขปรับเฉพาะสินค้าที่เปลี่ยน (buy-stock.ts) */
+    if (stockBefore) await syncBuyStockWith(c, id!, stockBefore, stockAfter, userId);
+    else await receiveBuyStockWith(c, id!, stockAfter, userId);
 
     return { id: id!, docNo };
   }, { sub: 'purchase' });

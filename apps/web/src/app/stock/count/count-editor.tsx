@@ -22,7 +22,7 @@ import { baht } from '@/lib/format';
 
 const fmtQty = (v: number) => String(Math.round(v * 1000) / 1000);
 
-export function CountEditor({ count }: { count: StockCount }) {
+export function CountEditor({ count, showValue }: { count: StockCount; showValue: boolean }) {
   const router = useRouter();
   const [busy, start] = useTransition();
   const [err, setErr] = useState('');
@@ -202,7 +202,7 @@ export function CountEditor({ count }: { count: StockCount }) {
                   <th className="num" style={{ width: 92 }}>ระบบว่ามี</th>
                   <th className="num" style={{ width: 118 }}>นับได้จริง</th>
                   <th className="num" style={{ width: 92 }}>ส่วนต่าง</th>
-                  <th className="num" style={{ width: 108 }}>มูลค่า</th>
+                  {showValue ? <th className="num" style={{ width: 108 }}>มูลค่า</th> : null}
                   {!ro ? <th style={{ width: 40 }} /> : null}
                 </tr>
               </thead>
@@ -241,9 +241,11 @@ export function CountEditor({ count }: { count: StockCount }) {
                           style={{ color, fontWeight: off ? 700 : 400 }}>
                         {it.diff === null ? '—' : (it.diff > 0 ? '+' : '') + fmtQty(it.diff)}
                       </td>
-                      <td className="num mono" style={{ color }}>
-                        {it.diffValue === null || !off ? '—' : baht(it.diffValue)}
-                      </td>
+                      {showValue ? (
+                        <td className="num mono" style={{ color }}>
+                          {it.diffValue === null || !off ? '—' : baht(it.diffValue)}
+                        </td>
+                      ) : null}
                       {!ro ? (
                         <td style={{ textAlign: 'center' }}>
                           <button className="lnk" type="button" title="เอาออก" disabled={busy}
@@ -258,7 +260,7 @@ export function CountEditor({ count }: { count: StockCount }) {
                   );
                 })}
               </tbody>
-              {count.offCount > 0 ? (
+              {showValue && count.offCount > 0 ? (
                 <tfoot>
                   <tr>
                     <td colSpan={6} style={{ textAlign: 'right', fontWeight: 600 }}>
@@ -279,7 +281,7 @@ export function CountEditor({ count }: { count: StockCount }) {
       </div>
 
       {!ro ? (
-        <ApplyBar count={count} onError={setErr} />
+        <ApplyBar count={count} showValue={showValue} onError={setErr} />
       ) : null}
     </>
   );
@@ -290,30 +292,35 @@ export function CountEditor({ count }: { count: StockCount }) {
  * ย้ำว่าย้อนกลับเองไม่ได้ เพราะเป็นความจริงและเป็นสิ่งที่ผู้ใช้ต้องรู้ก่อนกด
  */
 function ApplyBar({
-  count, onError,
+  count, showValue, onError,
 }: {
   count: StockCount;
+  showValue: boolean;
   onError: (m: string) => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, start] = useTransition();
 
-  if (count.offCount === 0) {
+  /* ยังไม่ได้กรอกสักบรรทัด — ไม่มีอะไรให้ปิด */
+  if (count.done === 0) {
     return (
       <div className="note" style={{ marginTop: 14 }}>
         <b>สต๊อกจะยังไม่เปลี่ยนจนกว่าจะกดปุ่มปรับยอด</b> ·
-        ตอนนี้ยังไม่มีรายการที่นับได้ต่างจากระบบ ·
+        ตอนนี้ยังไม่ได้กรอกจำนวนที่นับได้ ·
         ช่อง “ระบบว่ามี” อ่านสดทุกครั้งที่เปิดใบ เผื่อมีการขายหรือรับของระหว่างที่นับค้างไว้
       </div>
     );
   }
 
+  /* นับแล้วตรงทุกรายการ — ปิดใบได้ สต๊อกไม่ขยับ ได้ใบหลักฐานว่าวันนั้นนับแล้วตรง */
+  const allMatch = count.offCount === 0;
+
   if (!open) {
     return (
       <div className="formbar" style={{ marginTop: 14 }}>
         <button className="btn primary" type="button" onClick={() => setOpen(true)}>
-          ปรับยอดตามผลตรวจนับ ({count.offCount})
+          {allMatch ? 'ปิดใบ — นับได้ตรงทุกรายการ' : `ปรับยอดตามผลตรวจนับ (${count.offCount})`}
         </button>
         <span className="subtle">
           รายการที่นับได้ตรงกับระบบจะไม่ถูกแตะต้อง · ที่ยังไม่ได้กรอกก็เช่นกัน
@@ -327,15 +334,24 @@ function ApplyBar({
   return (
     <div className="card" style={{ marginTop: 14 }}>
       <div className="body">
+        {allMatch ? (
+          <div className="note">
+            ปิดใบตรวจนับ {count.no} — นับแล้ว <b>{count.done} รายการ ตรงกับระบบทั้งหมด</b>
+            <br />
+            สต๊อกไม่เปลี่ยน และไม่มีรายการลงประวัติความเคลื่อนไหว
+            ใบจะถูกตรึงเป็นหลักฐานและ<b>แก้ไขไม่ได้อีก</b> — ถ้ายังนับไม่ครบให้กรอกต่อก่อน
+          </div>
+        ) : (
         <div className="err">
           ปรับยอดสินค้า <b>{count.offCount} รายการ</b> ตามใบตรวจนับ {count.no}
           <br />
-          รับเข้าเพิ่ม {up} รายการ · ตัดออก {count.offCount - up} รายการ ·
-          มูลค่าส่วนต่างรวม {baht(count.offValue)} บาท
+          รับเข้าเพิ่ม {up} รายการ · ตัดออก {count.offCount - up} รายการ
+          {showValue ? <> · มูลค่าส่วนต่างรวม {baht(count.offValue)} บาท</> : null}
           <br />
           สต๊อกจะถูกปรับให้ตรงกับจำนวนที่นับได้ ทุกรายการบันทึกลงประวัติความเคลื่อนไหว
           และ<b>ย้อนกลับเองไม่ได้</b> — ถ้านับผิดต้องเปิดใบใหม่นับใหม่
         </div>
+        )}
         <div className="tag-row">
           <button className="btn primary" type="button" disabled={busy}
                   onClick={() => start(async () => {
@@ -343,9 +359,11 @@ function ApplyBar({
                     if (r.error) { onError(r.error); setOpen(false); return; }
                     router.refresh();
                   })}>
-            {busy ? 'กำลังปรับยอด…' : 'ยืนยันปรับยอด'}
+            {busy ? (allMatch ? 'กำลังปิดใบ…' : 'กำลังปรับยอด…') : (allMatch ? 'ยืนยันปิดใบ' : 'ยืนยันปรับยอด')}
           </button>
-          <button className="btn" type="button" onClick={() => setOpen(false)}>ยังไม่ปรับ</button>
+          <button className="btn" type="button" onClick={() => setOpen(false)}>
+            {allMatch ? 'ยังไม่ปิด' : 'ยังไม่ปรับ'}
+          </button>
         </div>
       </div>
     </div>

@@ -31,14 +31,14 @@ export function OpsShell({
         background: '#1E2A33', color: '#E8EEF2', padding: '10px 20px',
         display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap',
       }}>
-        <b style={{ fontSize: 15 }}>คอนโซลผู้ให้บริการ</b>
+        <b style={{ fontSize: '1rem' }}>คอนโซลผู้ให้บริการ</b>
         <nav style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {tabs.map(([href, label]) => (
             <Link
               key={href}
               href={href}
               style={{
-                padding: '4px 10px', borderRadius: 5, fontSize: 13,
+                padding: '4px 10px', borderRadius: 5, fontSize: '0.875rem',
                 color: current === href ? '#1E2A33' : '#B8C6D0',
                 background: current === href ? '#E8EEF2' : 'transparent',
                 textDecoration: 'none',
@@ -47,14 +47,14 @@ export function OpsShell({
           ))}
         </nav>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 12.5, color: '#8FA3B0' }}>{email}</span>
+        <span style={{ fontSize: '0.875rem', color: '#8FA3B0' }}>{email}</span>
         {/* ต้องเป็น form + POST ห้ามเป็น <Link> — ดูคอมเมนต์ใน /ops/logout/route.ts */}
         <form autoComplete="off" action="/ops/logout" method="post">
           <button
             type="submit"
             style={{
               background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              font: 'inherit', fontSize: 12.5, color: '#B8C6D0',
+              font: 'inherit', fontSize: '0.875rem', color: '#B8C6D0',
             }}
           >ออกจากระบบ</button>
         </form>
@@ -63,8 +63,8 @@ export function OpsShell({
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 20 }}>{title}</h1>
-            {sub ? <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>{sub}</div> : null}
+            <h1 style={{ margin: 0, fontSize: '1.25rem' }}>{title}</h1>
+            {sub ? <div style={{ color: 'var(--ink-3)', fontSize: '0.875rem' }}>{sub}</div> : null}
           </div>
           <div style={{ flex: 1 }} />
           {actions}

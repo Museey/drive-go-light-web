@@ -1,6 +1,8 @@
 import { requireCost, requireExport } from '@/lib/auth';
 import { ListPaper } from '@/components/list-paper';
 import { getFinanceCsvRows } from '@/lib/reports';
+import { query } from '@/lib/auth';
+import { salesSplitWith } from '@/lib/sales-split';
 import { baht, thDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +27,10 @@ export default async function FinancePrintPage({
   await requireCost();
 
   const sp = await searchParams;
-  const rows = await getFinanceCsvRows(sp.from || undefined, sp.to || undefined);
+  const [rows, split] = await Promise.all([
+    getFinanceCsvRows(sp.from || undefined, sp.to || undefined),
+    query((c) => salesSplitWith(c, sp.from || undefined, sp.to || undefined)),
+  ]);
 
   const range = sp.from || sp.to
     ? `${sp.from ? thDate(sp.from) : 'เริ่มแรก'} ถึง ${sp.to ? thDate(sp.to) : 'ปัจจุบัน'}`
@@ -43,7 +48,45 @@ export default async function FinancePrintPage({
       filterNote={`ช่วงเวลา ${range} · ${rows.length.toLocaleString()} รายการ`}
       hint="ตัวเลขตามตัวกรองที่เลือก ณ เวลาที่พิมพ์"
     >
-      <table className="doc" style={{ fontSize: 10 }}>
+      {/* สรุปแยกรายได้ — ตัวเลขชุดเดียวกับตารางบนหน้า 06.1 (lib/sales-split.ts) · คิดเฉพาะฝั่งขาย */}
+      {split.total.count > 0 ? (
+        <table className="doc" style={{ fontSize: '0.875rem', marginBottom: 12 }}>
+          <thead>
+            <tr>
+              <th>แยกรายได้ (ก่อนภาษี)</th>
+              <th className="num">เอกสาร</th>
+              <th className="num">ค่าแรง</th>
+              <th className="num">ค่าอะไหล่/สินค้า</th>
+              <th className="num">รวมก่อนภาษี</th>
+              <th className="num">สัดส่วน</th>
+            </tr>
+          </thead>
+          <tbody>
+            {([['งานซ่อม', split.job], ['ขายหน้าร้าน', split.walkin]] as const).map(([name, r]) => (
+              <tr key={name}>
+                <td>{name}</td>
+                <td className="num">{r.count.toLocaleString('en-US')}</td>
+                <td className="num">{baht(r.labour)}</td>
+                <td className="num">{baht(r.parts)}</td>
+                <td className="num">{baht(r.net)}</td>
+                <td className="num">{split.total.net > 0 ? `${Math.round((r.net / split.total.net) * 100)}%` : '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th className="num">รวม</th>
+              <th className="num">{split.total.count.toLocaleString('en-US')}</th>
+              <th className="num">{baht(split.total.labour)}</th>
+              <th className="num">{baht(split.total.parts)}</th>
+              <th className="num">{baht(split.total.net)}</th>
+              <th />
+            </tr>
+          </tfoot>
+        </table>
+      ) : null}
+
+      <table className="doc" style={{ fontSize: '0.875rem' }}>
         <thead>
           <tr>
             <th>ประเภท</th>

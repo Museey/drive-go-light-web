@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { DEBT_PAID_SQL, hasLiveReceiptSql } from './debt-paid';
 import { docNoPeriod, formatDocNo } from './doc-no';
 
 /**
@@ -43,7 +44,10 @@ export interface OpenInvoice {
  */
 const BILLABLE = `
   d.status <> 'void' and d.direction = 'sell' and d.kind <> 'QT'
-  and d.payable - coalesce(p.paid, 0) > 0.004`;
+  and d.payable - coalesce(p.paid, 0) > 0.004
+  /* ใบส่งมอบที่มีใบเสร็จออกต่อแล้ว หนี้ย้ายไปอยู่ที่ใบเสร็จ — วางบิลที่ใบเสร็จใบเดียว
+     ไม่งั้นหนี้ก้อนเดียวถูกวางบิลได้สองใบ (เงื่อนไขเดียวกับหน้าลูกหนี้ · debt-paid.ts) */
+  and not ${hasLiveReceiptSql('d')}`;
 
 /** ใบค้างชำระทั้งหมด แยกตามลูกค้า ใช้ตอนเลือกว่าจะวางบิลใคร */
 export async function openInvoices(
@@ -76,7 +80,7 @@ export async function openInvoices(
                join billnotes b on b.id = bd.billnote_id
               where bd.doc_id = d.id and not bd.voided limit 1) as in_billnote_no
      from documents d
-     left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+     left join ${DEBT_PAID_SQL} p
             on p.doc_id = d.id
      where ((${BILLABLE})${keep})
        and d.status <> 'void' and d.direction = 'sell' and d.kind <> 'QT'
@@ -130,7 +134,7 @@ const ROW = `
     select sum(d.payable - coalesce(p.paid, 0))
     from billnote_docs bd
     join documents d on d.id = bd.doc_id
-    left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+    left join ${DEBT_PAID_SQL} p
            on p.doc_id = d.id
     where bd.billnote_id = b.id and d.status <> 'void'
   ), 0) as total`;
@@ -239,7 +243,7 @@ export async function unbilledSummary(c: Client): Promise<UnbilledSummary> {
     `select count(*)::int as n,
             coalesce(sum(d.payable - coalesce(p.paid, 0)), 0) as owed
      from documents d
-     left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+     left join ${DEBT_PAID_SQL} p
             on p.doc_id = d.id
      where ${BILLABLE}
        /* เงื่อนไข "อยู่บนใบวางบิลที่ยังไม่ยกเลิก" ใช้รูปเดียวกับ billnoteOfDoc()

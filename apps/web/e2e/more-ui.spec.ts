@@ -93,14 +93,16 @@ for (const path of ['/finance/sales', '/finance/ar', '/finance/ap', '/finance/pl
   });
 }
 
-/* ข้อ 5 — แท่งยอดขายแต่ละเดือนสีต่างกัน ไล่อ่อน → เข้ม */
-test('หน้าแรก: แท่งยอดขายหกเดือนสีต่างกัน เดือนปัจจุบันเข้มสุด', async ({ page }) => {
+/* ข้อ 5 — กราฟยอดขาย 12 เดือนเทียบปีก่อน: เดือนละสองแท่ง สองสีสด (เดิมหกเดือนไล่เฉดเขียว · ผู้ใช้ขอ 26 พ.ย. 2569) */
+test('หน้าแรก: กราฟยอดขาย 12 เดือนเทียบปีก่อน — เดือนละสองแท่ง สองสี', async ({ page }) => {
   await page.goto('/');
-  const fills = await page.locator('svg[aria-label="ยอดขายหกเดือนล่าสุด"] rect').evaluateAll((els) => els.map((e) => e.getAttribute('fill') ?? ''));
-  expect(fills.length).toBeGreaterThanOrEqual(2);
-  expect(new Set(fills).size, fills.join(' ')).toBe(fills.length);
-  const lum = (hex: string) => { const n = parseInt(hex.slice(1), 16); return 0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255); };
-  for (let i = 1; i < fills.length; i++) expect(lum(fills[i]!), `แท่งที่ ${i + 1}`).toBeLessThan(lum(fills[i - 1]!));
+  /* หน้าแรกเรนเดอร์ทั้งแบบจอกว้างและจอแคบ — กราฟอยู่ในการ์ดใหญ่ซึ่งซ่อนบนจอแคบ จึงอ่านจาก DOM ไม่ดูว่ามองเห็นไหม */
+  const svg = page.locator('svg[aria-label="ยอดขาย 12 เดือนล่าสุดเทียบกับปีก่อน"]').first();
+  const fills = await svg.locator('rect').evaluateAll((els) => els.map((e) => e.getAttribute('fill') ?? ''));
+  expect(fills.length, 'เดือนละสองแท่ง').toBe(24);
+  expect([...new Set(fills)].sort()).toEqual(['#2563EB', '#F59E0B']);
+  const labels = await svg.locator('g > text').evaluateAll((els) => els.map((e) => e.textContent ?? ''));
+  expect(labels.filter((t) => /\.$/.test(t)).length, 'ชื่อเดือนครบ 12').toBe(12);
 });
 
 /* ข้อ 7 — หน้ารายการเอกสารเมนู 03: ไม่มีปุ่มค้นหาซ้ำซ้อน ไม่มี dropdown เดือน */

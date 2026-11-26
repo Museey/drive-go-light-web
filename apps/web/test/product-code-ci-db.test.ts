@@ -102,6 +102,25 @@ describe.skipIf(!DB_URL)('รหัสสินค้าห้ามซ้ำแ
     expect(all[0]).toMatchObject({ code: 'BRK-101', name: 'ผ้าเบรกหน้า', price_a: '650.00' });
   });
 
+  it('ไฟล์ที่มีแค่บางคอลัมน์ ไม่ล้างช่องที่ไฟล์ไม่ได้ส่งมา', async () => {
+    const id = (await addProduct(shopA, 'BRK-101')).rows[0].id;
+    await admin.query(
+      `update products set oem = 'OEM-9', unit = 'ชุด', last_cost = 400, price_b = 600, qty_min = 2 where id = $1`, [id]);
+    await asShop(shopA);
+
+    /* ไฟล์ปรับราคา: มีแค่ รหัส · ชื่อ · ราคา A — เดิมทุน หน่วย รหัส OEM ราคา B และจุดสั่งซื้อถูกล้างเป็นศูนย์ */
+    const rows = parseCsv(['รหัสสินค้า,ชื่อสินค้า,ราคา A', 'BRK-101,ผ้าเบรกหน้า,700'].join('\r\n'));
+    const result = await importProductsCsvWith(app, userId, rows, mapHeaders(rows[0]!));
+    expect(result).toMatchObject({ created: 0, updated: 1, errors: [] });
+
+    const { rows: got } = await admin.query(
+      `select oem, unit, last_cost, price_a, price_b, qty_min from products where id = $1`, [id]);
+    expect(got[0]).toMatchObject({
+      oem: 'OEM-9', unit: 'ชุด', last_cost: '400.00', price_a: '700.00', price_b: '600.00',
+    });
+    expect(Number(got[0].qty_min)).toBe(2);
+  });
+
   it('ยิงรหัสตัวเล็กยังเจอสินค้าตัวเดียวที่ถูกต้อง', async () => {
     const id = (await addProduct(shopA, 'BRK-101')).rows[0].id;
     await asShop(shopA);

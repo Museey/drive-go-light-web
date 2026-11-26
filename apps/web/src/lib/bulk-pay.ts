@@ -5,6 +5,7 @@
  * ส่วนที่ต้องพิสูจน์คือกฎการปรับยอดกับความเป็นทรานแซกชันเดียว ซึ่งอยู่ในนี้ทั้งหมด
  */
 import type pg from 'pg';
+import { DEBT_PAID_SQL } from './debt-paid';
 import { checkPaymentAmount, EPS } from './payment-rules';
 
 const n = (v: unknown): number => Number(v ?? 0);
@@ -44,10 +45,11 @@ export async function recordPaymentWith(
   await lockDocsForPaymentWith(c, [input.docId]);
 
   const { rows } = await c.query(
+    /* เงินที่รับแล้วนับทั้งคู่ใบส่งมอบ–ใบเสร็จ (debt-paid.ts) — ไม่งั้นรับเงินก้อนเดียวกันซ้ำได้ที่อีกใบ */
     `select d.payable, d.status::text as status, d.direction::text as direction,
-            coalesce(sum(p.amount), 0) as paid
-     from documents d left join payments p on p.doc_id = d.id
-     where d.id = $1 group by d.id`,
+            coalesce(p.paid, 0) as paid
+     from documents d left join ${DEBT_PAID_SQL} p on p.doc_id = d.id
+     where d.id = $1`,
     [input.docId],
   );
   const d = rows[0];
@@ -125,11 +127,10 @@ export async function bulkPay(
   const { rows } = await c.query(
     `select d.id, d.doc_no, d.payable, d.status::text as status,
             d.direction::text as direction,
-            coalesce(sum(p.amount), 0) as paid
+            coalesce(p.paid, 0) as paid
      from documents d
-     left join payments p on p.doc_id = d.id
-     where d.id = any($1::uuid[])
-     group by d.id`,
+     left join ${DEBT_PAID_SQL} p on p.doc_id = d.id
+     where d.id = any($1::uuid[])`,
     [lines.map((l) => l.docId)],
   );
   const byId = new Map(rows.map((r) => [r.id as string, r]));

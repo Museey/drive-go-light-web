@@ -5,6 +5,7 @@ import { query, requireTab } from '@/lib/auth';
 import { Shell } from '@/components/shell';
 import { CLAIM_SIDE, getClaim, kindLabel } from '@/lib/claims';
 import { baht, thDate } from '@/lib/format';
+import { canCost } from '@/lib/perms';
 import { VoidClaim } from '../void-claim';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,8 @@ export default async function ClaimDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ saved?: string }>;
 }) {
-  await requireTab('stock', 'claim');
+  const session = await requireTab('stock', 'claim');
+  const showCost = canCost(session);
   const { id } = await params;
   /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
   if (!isUuid(id)) notFound();
@@ -44,7 +46,7 @@ export default async function ClaimDetailPage({
       {sp.saved ? (
         <div className="ok-msg" style={{ marginBottom: 16 }}>
           บันทึกเรียบร้อย — ตัดสต๊อก {cut} รายการ รวม {claim.qty} ชิ้น
-          มูลค่า {baht(claim.cost)} บาท
+          {showCost ? ` มูลค่า ${baht(claim.cost)} บาท` : ''}
         </div>
       ) : null}
 
@@ -90,7 +92,7 @@ export default async function ClaimDetailPage({
                 <th style={{ width: 34 }}>#</th>
                 <th>รหัสสินค้า</th><th>รายการ</th>
                 <th className="num">จำนวน</th>
-                <th className="num">มูลค่าต้นทุน</th>
+                {showCost ? <th className="num">มูลค่าต้นทุน</th> : null}
                 <th>ตัดสต๊อก</th>
               </tr>
             </thead>
@@ -101,7 +103,7 @@ export default async function ClaimDetailPage({
                   <td className="mono">{it.code || '-'}</td>
                   <td className="wrap">{it.name}</td>
                   <td className="num">{it.qty}</td>
-                  <td className="num">{baht(it.costAmount ?? it.qty * it.unitCost)}</td>
+                  {showCost ? <td className="num">{baht(it.costAmount ?? it.qty * it.unitCost)}</td> : null}
                   <td>
                     {it.productId
                       ? <span className="chip ok">ตัดแล้ว</span>
@@ -114,7 +116,7 @@ export default async function ClaimDetailPage({
               <tr>
                 <td colSpan={3} style={{ textAlign: 'right', fontWeight: 600 }}>รวม</td>
                 <td className="num" style={{ fontWeight: 700 }}>{claim.qty}</td>
-                <td className="num" style={{ fontWeight: 700 }}>{baht(claim.cost)}</td>
+                {showCost ? <td className="num" style={{ fontWeight: 700 }}>{baht(claim.cost)}</td> : null}
                 <td />
               </tr>
             </tfoot>

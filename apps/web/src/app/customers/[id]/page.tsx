@@ -1,3 +1,4 @@
+import { Plate } from '@/components/plate';
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -5,7 +6,8 @@ import { today } from '@drivegolight/core';
 import { isUuid } from '@/lib/ids';
 import { safeBack } from '@/lib/saved-target';
 import { SavedNotice } from '@/components/saved-notice';
-import { requireTab } from '@/lib/auth';
+import { canTab, requireTab } from '@/lib/auth';
+import { getPlus } from '@/lib/plan';
 import { Shell } from '@/components/shell';
 import { addrLineOf, getContact, getContactHistory, nextContactCode } from '@/lib/contacts';
 import { contactDetailRows, contactHistoryCard, plateOf } from '@/lib/contact-card';
@@ -25,7 +27,7 @@ export default async function ContactPage({
     edit?: string;
   }>;
 }) {
-  await requireTab('customer', 'customer');
+  const session = await requireTab('customer', 'customer');
   const { id } = await params;
   /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
   if (id !== 'new' && !isUuid(id)) notFound();
@@ -42,12 +44,19 @@ export default async function ContactPage({
     isNew ? nextContactCode(defaultKind) : Promise.resolve(''),
     contact ? getContactHistory(contact.id) : Promise.resolve(null),
   ]);
+  /* ปุ่ม "+ นัดหมาย" (Light Plus · 02.5) — เฉพาะลูกค้า เฉพาะอู่แพ็กเกจ Plus และผู้ใช้ที่เข้าแท็บนัดหมายได้
+     อู่ Light ไม่เห็นปุ่มนี้: หน้าลูกค้าเป็นหน้าที่ใช้ทุกวัน ไม่ใช่ที่สำหรับปุ่มที่กดแล้วเจอการ์ดชวนอัปเกรด */
+  const canAppoint = Boolean(contact && contact.kind === 'customer' && canTab(session, 'customer', 'appt'))
+    && await getPlus();
 
   return (
     <Shell
       current="/customers"
       title={isNew ? 'เพิ่มผู้ติดต่อใหม่' : contact!.displayName || contact!.code}
       sub={isNew ? undefined : `${contact!.code} · ${contact!.kind === 'vendor' ? 'ผู้ขาย' : 'ลูกค้า'}`}
+      actions={canAppoint
+        ? <Link className="btn" href={`/customers/appointments/new?contact=${contact!.id}`}>+ นัดหมาย</Link>
+        : undefined}
     >
       <SavedNotice saved={sp.saved} savedId={sp.savedId} />
       {sp.error ? <div className="err" style={{ marginBottom: 16 }}>{sp.error}</div> : null}
@@ -144,7 +153,7 @@ export default async function ContactPage({
                         </td>
                         <td>{KIND_SHORT[d.kind] ?? d.kind}</td>
                         <td>{thDate(d.docDate)}</td>
-                        {contact.kind === 'vendor' ? null : <td className="mono">{d.vehiclePlate || '-'}</td>}
+                        {contact.kind === 'vendor' ? null : <td>{d.vehiclePlate ? <Plate value={d.vehiclePlate} /> : '-'}</td>}
                         <td className="num">{baht(d.payable)}</td>
                         <td className="num">{baht(d.paid)}</td>
                         <td className="num" style={{ color: d.outstanding > 0.004 ? 'var(--due)' : undefined }}>

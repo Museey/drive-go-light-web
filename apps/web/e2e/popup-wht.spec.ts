@@ -117,11 +117,11 @@ test('ทะเบียนสินค้า: การ์ดตั้งค่
   }
 });
 
-test('ทะเบียนลูกค้า: ตัวอักษรใหญ่ขึ้น — ชื่อ 16px · ข้อมูล 15px', async ({ page }) => {
+test('ทะเบียนลูกค้า: ตัวอักษรใหญ่ขึ้น — ชื่อ 16px · ข้อมูล 16px', async ({ page }) => {
   await page.goto('/customers?kind=customer');
   const row = page.locator('table.hist tbody tr').first();
   expect(await row.locator('td').nth(1).locator('b').first().evaluate((e) => getComputedStyle(e).fontSize)).toBe('16px');
-  expect(await row.locator('td').nth(2).evaluate((e) => getComputedStyle(e).fontSize)).toBe('15px');
+  expect(await row.locator('td').nth(2).evaluate((e) => getComputedStyle(e).fontSize)).toBe('16px');
 });
 
 /* ---------- ข้อ 1–2 — การ์ดบันทึกแล้ว (ขนาดนามบัตรกลางจอ) ---------- */
@@ -255,6 +255,15 @@ test('ใบเสนอราคาใหม่: บันทึก → กา�
     const print = c.getByRole('link', { name: /พิมพ์เอกสาร/ });
     await expect(print).toHaveAttribute('target', '_blank');
     await expect(print).toHaveAttribute('href', /^\/income\/[0-9a-f-]{36}\/print$/);
+
+    /* ปุ่มออกใบถัดไปต่อจากใบที่เพิ่งบันทึก (26 พ.ย. 2569) — ทุกปุ่มพาไปฟอร์มใบต่อที่อ้างใบนี้ และมีใบเสร็จเสมอ */
+    const savedId = new URL(page.url()).searchParams.get('savedId')!;
+    const next = c.locator('[data-saved-next] a');
+    await expect(next.first()).toBeVisible();
+    for (const href of await next.evaluateAll((els) => els.map((e) => e.getAttribute('href')))) {
+      expect(href).toMatch(new RegExp(`^/income/new\\?kind=(IVT|IV|RC)&from=${savedId}$`));
+    }
+    await expect(c.locator(`[data-saved-next] a[href="/income/new?kind=RC&from=${savedId}"]`)).toHaveText(/ออกใบเสร็จรับเงิน/);
 
     /* แก้ไขของเดิม → การ์ดเดียวกัน แล้วกลับหน้าที่กดแก้ไขมา (ผู้ใช้เลือก) */
     await edit.click();

@@ -1,9 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { isLogoDataUri, LOGO_MAX_BYTES } from '@drivegolight/core';
-import { requirePerm } from '@/lib/auth';
+import { isLogoDataUri, LOGO_MAX_BYTES, parsePromptPayId } from '@drivegolight/core';
+import { assertCanEdit, query, requirePerm } from '@/lib/auth';
 import { issueSetupToken } from '@/lib/auth';
+import { isUuid } from '@/lib/ids';
 import { saveShopSettings, saveStaff, transferOwnership, deleteStaff, setStaffPassword, nextUserCode } from '@/lib/settings';
 import { PERM_KEYS, type Perms } from '@/lib/perms';
 import { SUB_KEYS } from '@/components/menu-map';
@@ -54,6 +55,22 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
       .filter((x) => x.no.trim() || x.bank.trim());
   } catch { banks = []; }
   fd.set('bankName', banks[0]?.bank ?? ''); fd.set('bankAccountNo', banks[0]?.no ?? ''); fd.set('bankAccountName', banks[0]?.name ?? '');
+  /* คิวอาร์รับเงิน (039) — เลขพร้อมเพย์ผิดรูปแบบ = คิวอาร์ที่สแกนแล้วโอนไม่ได้ จึงไม่ยอมให้บันทึก
+     เปิดสวิตช์ทั้งที่ยังไม่มีเลขก็ไม่ยอม ไม่งั้นผู้ใช้เข้าใจว่าเปิดแล้วแต่เอกสารไม่มีคิวอาร์ */
+  const promptpayRaw = str(fd, 'promptpayId');
+  const promptpay = promptpayRaw ? parsePromptPayId(promptpayRaw) : null;
+  if (promptpayRaw && !promptpay) {
+    return {
+      error: 'เลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก เลขประจำตัวผู้เสียภาษี 13 หลัก หรือ e-Wallet 15 หลัก',
+      field: 'promptpayId',
+    };
+  }
+  const qrOnInvoice = fd.get('qrOnInvoice') === 'on';
+  const qrOnReceipt = fd.get('qrOnReceipt') === 'on';
+  if ((qrOnInvoice || qrOnReceipt) && !promptpay) {
+    return { error: 'ต้องกรอกเลขพร้อมเพย์ก่อนจึงจะเปิดคิวอาร์รับเงินบนเอกสารได้', field: 'promptpayId' };
+  }
+
   const logoUrl = str(fd, 'logoUrl');
   const signatureUrl = str(fd, 'signatureUrl');
   if (signatureUrl && (signatureUrl.length > LOGO_MAX_BYTES || !isLogoDataUri(signatureUrl))) {
@@ -89,6 +106,9 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
       ownerName: str(fd, 'ownerName'),
       bankAccounts: banks,
       signatureUrl,
+      promptpayId: promptpay?.digits ?? '',
+      qrOnInvoice, qrOnReceipt,
+      whtBase: fd.get('whtBase') === 'all' ? 'all' : 'labour',
     });
   } catch (err) {
     return { error: describe(err, 'บันทึกไม่สำเร็จ') };
@@ -153,8 +173,24 @@ export async function saveStaffAction(_prev: FormResult, fd: FormData): Promise<
  * คืนลิงก์กลับมาให้เจ้าของกิจการส่งต่อเอง เพราะระบบยังไม่ส่งอีเมล
  */
 export async function issueSetupLinkAction(userId: string, purpose: 'initial' | 'reset'): Promise<FormResult> {
-  await requirePerm('settings');
+  /* ลิงก์นี้ = กุญแจเข้าบัญชีของคนนั้น จึงต้องมีสิทธิ์ "แก้ไข" แท็บพนักงาน ไม่ใช่แค่เปิดเมนูได้ */
+  const session = await requirePerm('settings');
+  if (!isUuid(userId)) return { error: 'ไม่พบผู้ใช้' };
+  if (purpose !== 'initial' && purpose !== 'reset') return { error: 'คำขอไม่ถูกต้อง' };
   try {
+    assertCanEdit(session, 'settings', 'staff');
+    /* ฟังก์ชัน auth.issue_setup_token ข้าม RLS และไม่ตรวจว่าเป้าหมายอยู่อู่ไหน
+       จึงต้องยืนยันที่นี่ก่อนว่า (1) เป็นผู้ใช้ของอู่นี้จริง — อ่านผ่าน RLS
+       (2) ถ้าเป็นเจ้าของกิจการ คนออกลิงก์ต้องเป็นเจ้าของเอง
+       ไม่งั้นพนักงานที่เข้าเมนูตั้งค่าได้จะออกลิงก์รีเซ็ตรหัสของเจ้าของแล้วยึดบัญชีได้ */
+    const target = await query(async (c) => {
+      const { rows } = await c.query(`select role::text as role from users where id = $1`, [userId]);
+      return rows[0] as { role: string } | undefined;
+    });
+    if (!target) return { error: 'ไม่พบผู้ใช้' };
+    if (target.role === 'owner' && session.role !== 'owner') {
+      return { error: 'เฉพาะเจ้าของกิจการเท่านั้นที่ออกลิงก์ตั้งรหัสผ่านของเจ้าของกิจการได้' };
+    }
     const token = await issueSetupToken(userId, purpose);
     revalidatePath('/settings/users');
     return { ok: true, values: { token } };
@@ -240,7 +276,9 @@ export async function restoreBackupAction(
   _prev: FormResult & { result?: RestoreResult },
   fd: FormData,
 ): Promise<FormResult & { result?: RestoreResult }> {
-  await requirePerm('settings');
+  const session = await requirePerm('settings');
+  /* ตรวจซ้ำใน lib/restore.ts พร้อมรหัสผ่าน — ที่นี่แค่ตอบให้เร็วก่อนอ่านไฟล์ 40 MB */
+  if (session.role !== 'owner') return { error: 'กู้คืนทับข้อมูลทั้งอู่ได้เฉพาะเจ้าของกิจการ' };
 
   const file = fd.get('file');
   if (!(file instanceof File) || file.size === 0) return { error: 'เลือกไฟล์สำรองก่อน', field: 'file' };
@@ -250,14 +288,20 @@ export async function restoreBackupAction(
     return { error: 'พิมพ์คำว่า "ทับข้อมูลเดิม" ให้ตรงเพื่อยืนยัน', field: 'confirm' };
   }
 
+  /* ไม่ trim — ช่องว่างหน้าหลังเป็นส่วนของรหัสผ่านได้ */
+  const password = String(fd.get('password') ?? '');
+  if (!password) return { error: 'ใส่รหัสผ่านของเจ้าของกิจการก่อนกู้คืน', field: 'password' };
+
   try {
     const result = await restoreFromBackup(await file.text(), {
       acceptDataLoss: fd.get('acceptDataLoss') === 'on',
+      password,
     });
     revalidatePath('/', 'layout');
     return { ok: true, result };
   } catch (err) {
-    return { error: describe(err, 'กู้คืนข้อมูลไม่สำเร็จ — ข้อมูลเดิมยังอยู่ครบ') };
+    const msg = describe(err, 'กู้คืนข้อมูลไม่สำเร็จ — ข้อมูลเดิมยังอยู่ครบ');
+    return msg.startsWith('รหัสผ่านไม่ถูกต้อง') ? { error: msg, field: 'password' } : { error: msg };
   }
 }
 

@@ -9,6 +9,9 @@ import { getKit } from './kits';
 import { getProduct } from './products';
 import { getDocDetail } from './queries';
 import type { SavedKind } from './saved-target';
+import { getShop } from './queries';
+import { activeChildWith } from './doc-lock';
+import { nextKinds, type SalesKind } from './sales-rules';
 
 const DOC = 'บันทึกเอกสารเรียบร้อย';
 const DATA = 'บันทึกข้อมูลแล้ว';
@@ -26,7 +29,17 @@ export async function loadSavedSummary(kind: SavedKind, id: string): Promise<Sav
       const buy = d.kind === 'PO' || d.kind === 'EX';
       if (buy !== (kind === 'buy')) return null;
       const base = buy ? '/expense' : '/income';
+      /* ปุ่มออกใบถัดไป — เฉพาะเอกสารขายที่ยังใช้งานอยู่และยังไม่มีใบต่อ (กติกาเดียวกับปุ่มบนหน้าเอกสาร) */
+      let next: SavedSummary['next'] = [];
+      if (!buy && d.status !== 'void') {
+        const [shop, child] = await Promise.all([getShop(), query((c) => activeChildWith(c, id))]);
+        if (!child) {
+          next = nextKinds(d.kind as SalesKind, shop.vatRegistered)
+            .map((k) => ({ href: `/income/new?kind=${k}&from=${id}`, label: `ออก${KIND_LABEL[k] ?? k}` }));
+        }
+      }
       return {
+        next,
         title: DOC, label: KIND_LABEL[d.kind] ?? d.kind, no: d.docNo, name: d.partyName,
         amount: baht(d.grandTotal),
         printHref: `${base}/${id}/print`, printLabel: 'พิมพ์เอกสาร',

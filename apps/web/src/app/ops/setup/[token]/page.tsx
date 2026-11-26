@@ -37,7 +37,7 @@ export default async function OpsSetupPage({
           <header><h2>ลิงก์ใช้ไม่ได้</h2></header>
           <div className="body">
             <p>ลิงก์นี้ถูกใช้ไปแล้ว หมดอายุแล้ว หรือบัญชีถูกปิดการใช้งาน</p>
-            <p style={{ color: 'var(--ink-3)', fontSize: 13, marginBottom: 0 }}>
+            <p style={{ color: 'var(--ink-3)', fontSize: '0.875rem', marginBottom: 0 }}>
               ออกลิงก์ใหม่ได้จากคอนโซล หรือด้วยคำสั่ง <code>tools/ops-admin.mjs</code>
             </p>
           </div>
@@ -49,7 +49,7 @@ export default async function OpsSetupPage({
   return (
     <div style={{ maxWidth: 440, margin: '80px auto', padding: '0 20px' }}>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: 22, fontWeight: 700 }}>คอนโซลผู้ให้บริการ</div>
+        <div style={{ fontSize: '1.375rem', fontWeight: 700 }}>คอนโซลผู้ให้บริการ</div>
       </div>
 
       <div className="card">
@@ -68,7 +68,7 @@ export default async function OpsSetupPage({
 
           <form autoComplete="off" action={submit}>
             <label htmlFor="password"
-                   style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+                   style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 4 }}>
               รหัสผ่านใหม่ (อย่างน้อย {OPS_MIN_PASSWORD} ตัวอักษร)
             </label>
             <input className="in" id="password" name="password" type="password"
@@ -76,7 +76,7 @@ export default async function OpsSetupPage({
                    style={{ width: '100%', marginBottom: 12 }} />
 
             <label htmlFor="confirm"
-                   style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+                   style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 4 }}>
               พิมพ์อีกครั้ง
             </label>
             <input className="in" id="confirm" name="confirm" type="password"

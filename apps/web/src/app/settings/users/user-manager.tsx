@@ -53,7 +53,7 @@ function StaffForm({ user, nextCode, onDone }: {
 
       <PermTable user={user} />
 
-      <label className="tag-row" style={{ fontSize: 14 }}>
+      <label className="tag-row" style={{ fontSize: '0.9375rem' }}>
         <input type="checkbox" name="active" defaultChecked={user?.active ?? true} />
         เปิดใช้งาน
       </label>
@@ -94,12 +94,12 @@ function PermTable({ user }: { user: StaffUser | null }) {
       <div className="field">
         <label>สิทธิ์การเห็นข้อมูลสำคัญ</label>
         <div className="note" style={{ marginBottom: 8 }}>
-          <label className="tag-row" style={{ fontSize: 13.5 }}>
+          <label className="tag-row" style={{ fontSize: '0.875rem' }}>
             <input type="checkbox" name="perm_cost"
                    defaultChecked={user ? user.perms.cost !== false : true} />
             <b>เห็นต้นทุนสินค้า / ราคาซื้อ</b>
           </label>
-          <div style={{ fontSize: 12.5, marginTop: 6, lineHeight: 1.7 }}>
+          <div style={{ fontSize: '0.875rem', marginTop: 6, lineHeight: 1.7 }}>
             ไม่ติ๊ก = ซ่อนต้นทุนจากพนักงานคนนี้<b>ทุกหน้าที่แสดงต้นทุน</b> ทั้งทะเบียนสินค้า
             มูลค่าสต๊อก ใบเคลม ใบตรวจนับ เอกสารที่พิมพ์ และไฟล์ที่ส่งออก
             รวมถึง<b>ปิดเมนู 06.4 กำไรขาดทุน</b>ให้อัตโนมัติ เพราะเป็นรายงานต้นทุนโดยตรง
@@ -112,12 +112,12 @@ function PermTable({ user }: { user: StaffUser | null }) {
         </div>
 
         <div className="note">
-          <label className="tag-row" style={{ fontSize: 13.5 }}>
+          <label className="tag-row" style={{ fontSize: '0.875rem' }}>
             <input type="checkbox" name="perm_homeReport"
                    defaultChecked={user ? user.perms.homeReport !== false : true} />
             <b>เห็นรายงานสรุปในหน้าแรก</b>
           </label>
-          <div style={{ fontSize: 12.5, marginTop: 6, lineHeight: 1.7 }}>
+          <div style={{ fontSize: '0.875rem', marginTop: 6, lineHeight: 1.7 }}>
             ไม่ติ๊ก = หน้าแรกของพนักงานคนนี้จะเหลือแค่<b>การ์ดเมนูใช้งาน</b>
             ไม่เห็นยอดขาย ลูกหนี้ เจ้าหนี้ และภาษี
           </div>
@@ -141,7 +141,7 @@ function PermTable({ user }: { user: StaffUser | null }) {
           return (
             <div key={k} className="card" style={{ marginBottom: 10, opacity: menuOn ? 1 : 0.55 }}>
               <div className="toolbar">
-                <label className="tag-row" style={{ fontSize: 13.5 }}>
+                <label className="tag-row" style={{ fontSize: '0.875rem' }}>
                   <input type="checkbox" name={`perm_${k}`} defaultChecked={menuOn}
                          onChange={(e) => setMenus((m) => ({ ...m, [k]: e.target.checked }))} />
                   <b>{PERM_LABEL[k]}</b>
@@ -198,7 +198,7 @@ function SubRow({
   return (
     <tr>
       <td>
-        <span className="mono subtle" style={{ fontSize: 11 }}>{no}</span> {label}
+        <span className="mono subtle" style={{ fontSize: '0.875rem' }}>{no}</span> {label}
       </td>
       <td style={{ textAlign: 'center' }}>
         <input type="checkbox" name={`tab_${key}`} defaultChecked={seen} disabled={disabled}
@@ -386,7 +386,7 @@ export function UserManager({ users, nextCode, currentUserId, isOwner, startNew 
                 </td>
                 <td className="wrap subtle">{u.jobTitle || '-'}</td>
                 <td className="mono">{u.email || <span className="subtle">ยังไม่มี</span>}</td>
-                <td className="wrap subtle" style={{ fontSize: 12.5 }}>
+                <td className="wrap subtle" style={{ fontSize: '0.875rem' }}>
                   {u.role === 'owner' ? 'เจ้าของกิจการ · ทุกเมนู' : <PermSummary user={u} />}
                 </td>
                 <td>

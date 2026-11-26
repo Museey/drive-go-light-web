@@ -300,12 +300,31 @@ describe.skipIf(!DB_URL)('ใบตรวจนับสต๊อก', () => {
     expect(n(rows[0].system_qty)).toBe(14);                 // ตรึงยอดที่ใช้จริง
   });
 
-  it('ไม่มีรายการไหนต่างจากระบบ ปรับยอดไม่ได้', async () => {
+  /* เดิมใบที่นับแล้วตรงทุกรายการปิดไม่ได้ ค้างเป็นร่างตลอดไป ไม่มีหลักฐานว่านับแล้วตรง */
+  it('นับได้ตรงกับระบบทุกรายการ ปิดใบได้ — สต๊อกและบัญชีสต๊อกไม่ขยับ', async () => {
     await twoLots(brake);
     const id = await draft();
     await setCountedQty(app, (await itemOf(id, brake)).id, 20);
+    const moves = async () => n((await admin.query(
+      `select count(*) as c from stock_moves where tenant_id = $1`, [tenantId])).rows[0].c);
+    const before = await moves();
 
-    await expect(applyCount(app, id, null)).rejects.toThrow(/ต่างจากระบบ/);
+    const r = await applyCount(app, id, null);
+    expect(r.adjusted).toBe(0);
+    expect(r.value).toBe(0);
+    expect(await moves(), 'ไม่มีแถวในบัญชีสต๊อกเกิดขึ้น').toBe(before);
+
+    const done = (await getCount(app, id))!;
+    expect(done.status).toBe('applied');
+    expect(done.offCount).toBe(0);
+    expect(done.items.find((i) => i.productId === brake)!.systemQty, 'ตรึงยอดระบบไว้เป็นหลักฐาน').toBe(20);
+  });
+
+  it('ยังไม่ได้กรอกสักรายการ ปิดใบไม่ได้', async () => {
+    await twoLots(brake);
+    const id = await draft();
+
+    await expect(applyCount(app, id, null)).rejects.toThrow(/ยังไม่ได้กรอก/);
     expect((await getCount(app, id))!.status).toBe('draft');
   });
 

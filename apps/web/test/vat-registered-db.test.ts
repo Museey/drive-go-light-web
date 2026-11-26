@@ -186,7 +186,7 @@ describe.skipIf(!DB_URL)('ร้านจด / ไม่จดภาษีมู
     const body = src.slice(src.indexOf('export async function saveSalesDoc'));
     const lock = body.indexOf('lockDocForEditWith(c, id, input.baseVersion)');
     const decide = body.indexOf('vatModeForSaveWith(c, input, await shopVatRegisteredWith(c))');
-    const totals = body.indexOf('recTotals(doc, { vatRate })');
+    const totals = body.indexOf('recTotals(doc, { vatRate, whtBase })');
     expect(lock).toBeGreaterThan(0);
     expect(decide).toBeGreaterThan(lock);
     expect(totals).toBeGreaterThan(decide);

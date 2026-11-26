@@ -4,6 +4,7 @@ import { requireTab } from '@/lib/auth';
 import { getDocDetail, getShop } from '@/lib/queries';
 import { getShopSettings } from '@/lib/settings';
 import { DocPrint } from '@/components/doc-paper';
+import { payQrFor } from '@/lib/pay-qr';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,5 +17,8 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
   const [doc, shop, brand] = await Promise.all([getDocDetail(id), getShop(), getShopSettings()]);
   if (!doc) notFound();
 
-  return <DocPrint doc={doc} shop={shop} brand={brand} />;
+  /* คิวอาร์รับเงิน (039) — เฉพาะใบที่ตั้งค่าไว้และยังมียอดค้าง */
+  const payQr = await payQrFor(shop, doc);
+
+  return <DocPrint doc={doc} shop={shop} brand={brand} payQr={payQr} />;
 }

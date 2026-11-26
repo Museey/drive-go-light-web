@@ -1,3 +1,4 @@
+import { exportPlusWith, type PlusBackup } from './plus-backup';
 import type pg from 'pg';
 
 /**
@@ -11,6 +12,8 @@ import type pg from 'pg';
  *      และทดสอบวนกลับได้ว่าส่งออกแล้วนำเข้าใหม่ยอดยังเท่าเดิม
  */
 export interface BackupFile {
+  /** ข้อมูลของ Light Plus — คีย์ขึ้นต้น _ = ของเว็บนี้เอง รุ่น HTML ข้ามไป */
+  _plus?: PlusBackup;
   schemaVersion: number;
   exportedFrom: string;
   exportedAt: string;
@@ -78,8 +81,13 @@ const SEQ_KEY: Record<string, string> = { QT: 'q', IV: 'iv', IVT: 'ivt', RC: 'r'
  * — ฟีเจอร์นี้เป็นเรื่องความเป็นเจ้าของข้อมูล ดูด้วยตาว่า "หน้าตาถูก" ไม่พอ
  *   ต้องพิสูจน์ได้ว่านำกลับเข้าระบบแล้วยอดยังเท่าเดิม
  */
-export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<BackupFile> {
+export async function exportBackupWith(
+  c: pg.PoolClient | pg.Client,
+  /** payroll: false = ผู้ดาวน์โหลดไม่มีสิทธิ์เห็นเงินเดือน — ไม่ลงทะเบียนพนักงานและงวดเงินเดือน (lib/plus-backup.ts) */
+  opts: { payroll?: boolean } = {},
+): Promise<BackupFile> {
   {
+    const plus = await exportPlusWith(c, opts);
     const shopRes = await c.query(
       `select * from tenants where id = current_tenant_id()`,
     );
@@ -302,6 +310,11 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
         _bankAccounts: Array.isArray(s.bank_accounts) ? s.bank_accounts : [],
         /* จด VAT หรือไม่ (036) — กู้คืนแล้วร้านที่ไม่จดต้องไม่กลับมาออกใบกำกับภาษีได้เอง */
         _vatRegistered: s.vat_registered !== false,
+        /* คิวอาร์รับเงินบนเอกสาร (039) */
+        _whtBase: s.wht_base === 'all' ? 'all' : 'labour',
+        _promptpayId: s.promptpay_id ?? '',
+        _qrOnInvoice: s.qr_on_invoice === true,
+        _qrOnReceipt: s.qr_on_receipt === true,
       },
 
       categories: cats.rows.map((r) => r.name),
@@ -449,6 +462,9 @@ export async function exportBackupWith(c: pg.PoolClient | pg.Client): Promise<Ba
           })),
         })),
       } : {}),
+
+      /* ข้อมูลของ Light Plus — นัดหมาย ทะเบียนพนักงาน งวดเงินเดือน (041) · ดู lib/plus-backup.ts */
+      _plus: plus,
 
       lic: sub.rows[0]
         ? { installedAt: sub.rows[0].started_on, key: '', expires: sub.rows[0].expires_on }

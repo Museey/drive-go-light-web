@@ -87,7 +87,7 @@ export default async function ArPage({
           <form autoComplete="off" action="/finance/ar" method="get" data-enter="own" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
                    placeholder="กรอกคำค้นหา — เลขที่เอกสาร ชื่อลูกค้า หรือทะเบียนรถ" style={{ width: 260 }} />
-            <label className="tag-row" style={{ fontSize: 13 }}>
+            <label className="tag-row" style={{ fontSize: '0.875rem' }}>
               <input type="checkbox" name="overdue" value="1" defaultChecked={onlyOverdue} />
               เฉพาะที่เกินกำหนด
             </label>

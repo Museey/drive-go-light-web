@@ -52,7 +52,7 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
                       </div>
                     ) : confirmDelete === c.id ? (
                       <div className="tag-row">
-                        <span style={{ fontSize: 12.5 }}>
+                        <span style={{ fontSize: '0.875rem' }}>
                           {c.productCount > 0
                             ? `สินค้า ${c.productCount} รายการจะกลายเป็นไม่ระบุหมวด`
                             : 'ยืนยันลบหมวดหมู่นี้?'}

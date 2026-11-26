@@ -16,11 +16,11 @@ const Field = ({
   id, label, hint, ...rest
 }: { id: string; label: string; hint?: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
   <div style={{ marginBottom: 12 }}>
-    <label htmlFor={id} style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+    <label htmlFor={id} style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 4 }}>
       {label}
     </label>
     <input className="in" id={id} name={id} style={{ width: '100%' }} {...rest} />
-    {hint ? <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{hint}</div> : null}
+    {hint ? <div style={{ fontSize: '0.875rem', color: 'var(--ink-3)', marginTop: 3 }}>{hint}</div> : null}
   </div>
 );
 

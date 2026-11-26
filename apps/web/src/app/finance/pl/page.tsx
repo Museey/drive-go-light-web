@@ -96,8 +96,8 @@ export default async function PLPage({
                   ['เบิกใช้ในอู่', pl.writeOff.use],
                 ] as const).filter(([, v]) => Math.abs(v) > 0.004).map(([label, v]) => (
                   <div className="row" key={label}>
-                    <span className="lbl subtle" style={{ paddingLeft: 24, fontSize: 12.5 }}>{label}</span>
-                    <span className="subtle" style={{ fontSize: 12.5 }}>−{baht(v)}</span>
+                    <span className="lbl subtle" style={{ paddingLeft: 24, fontSize: '0.875rem' }}>{label}</span>
+                    <span className="subtle" style={{ fontSize: '0.875rem' }}>−{baht(v)}</span>
                   </div>
                 ))}
               </>
@@ -108,7 +108,7 @@ export default async function PLPage({
               <span>−{baht(pl.opsTotal + pl.writeOff.total)}</span>
             </div>
 
-            <div className="row grand" style={{ fontSize: 17 }}>
+            <div className="row grand" style={{ fontSize: '1.0625rem' }}>
               <span>กำไรสุทธิ <span className="subtle" style={{ fontWeight: 400 }}>{pct(pl.netProfit)}</span></span>
               <span style={{ color: profitColor }}>{baht(pl.netProfit)}</span>
             </div>

@@ -62,9 +62,14 @@ export async function markParentBilledWith(c: Client, parentId: string): Promise
 }
 
 /**
- * แก้ในใบเดิมได้ไหม — ตามต้นแบบ `editDoc`
+ * แก้ในใบเดิมได้ไหม
  *
- * ออกใบต่อไปแล้วก็ยังแก้ได้ (ใบต่อไม่เปลี่ยนตาม) · ใบเสร็จตัดสต๊อกแล้ว และใบที่รับเงินแล้ว แก้ไม่ได้
+ * ใบเสร็จตัดสต๊อกแล้ว · ใบที่รับเงินแล้ว · **ใบที่ออกใบต่อไปแล้ว** แก้ไม่ได้
+ *
+ * ข้อสุดท้ายเปลี่ยนเมื่อ 26 พ.ย. 2569 (ผู้ใช้เลือก — เดิมตามต้นแบบ `editDoc` คือออกใบต่อแล้วก็ยังแก้ได้):
+ * ใบต่อคัดลอกรายการไปเป็นของตัวเอง แก้ใบต้นทางแล้วใบต่อไม่เปลี่ยนตาม ชุดเอกสารเดียวกันจึงบอกยอดไม่ตรงกัน
+ * — ใบเสนอราคาที่ลูกค้าอนุมัติไม่ตรงกับใบส่งมอบ ใบส่งมอบไม่ตรงกับใบเสร็จที่เก็บเงินไปแล้ว
+ * กติกาใหม่: แก้ที่ใบปลายสาย หรือยกเลิกใบต่อก่อน (ทิศเดียวกับการยกเลิก — ไล่จากปลายสายขึ้นมา)
  */
 export async function editRuleWith(c: Client, id: string): Promise<{ ok: boolean; reason?: string }> {
   const { rows } = await c.query(
@@ -78,8 +83,15 @@ export async function editRuleWith(c: Client, id: string): Promise<{ ok: boolean
   if (d.status === 'void') return { ok: false, reason: 'เอกสารนี้ถูกยกเลิกแล้ว' };
   if (d.kind === 'RC') return { ok: false, reason: 'ใบเสร็จตัดสต๊อกแล้ว แก้ไม่ได้ — ให้ยกเลิกใบนี้แล้วออกใบใหม่' };
   if (Number(d.paid) > 0.004) return { ok: false, reason: 'ใบนี้รับเงินแล้ว แก้ไม่ได้ — ให้ยกเลิกใบนี้แล้วออกใบใหม่' };
+  const child = await activeChildWith(c, id);
+  if (child) return { ok: false, reason: childLockedReason(child) };
   return { ok: true };
 }
+
+/** เหตุผลที่ใบซึ่งออกใบต่อแล้วแก้ไม่ได้ — ใช้ข้อความเดียวกันทั้งเซิร์ฟเวอร์และปุ่มแก้ไขในหน้ารายการ */
+export const childLockedReason = (child: { docNo: string; kind?: string }) =>
+  `ใบนี้ออก${child.kind ? KIND_LABEL[child.kind] ?? child.kind : 'ใบต่อ'} ${child.docNo} ต่อไปแล้ว แก้ไม่ได้ — ` +
+  `ให้แก้ที่ ${child.docNo} หรือยกเลิก ${child.docNo} ก่อนจึงจะแก้ใบนี้ได้`;
 
 export const childTakenMessage = (parentNo: string, child: ChildRef) =>
   `${parentNo} ออก${KIND_LABEL[child.kind] ?? child.kind} ${child.docNo} ต่อไปแล้ว`;

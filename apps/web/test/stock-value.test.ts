@@ -56,7 +56,7 @@ describe('การตีมูลค่าสต๊อก', () => {
   it('ทุกที่ที่ต้องการมูลค่าสต๊อก ใช้ BOOK_VALUE_SQL ตัวเดียวกัน', () => {
     const users = sources(SRC)
       .filter((f) => readFileSync(f, 'utf8').includes('BOOK_VALUE_SQL'))
-      .map((f) => f.slice(SRC.length + 1));
+      .map((f) => f.slice(SRC.length + 1).split('\\').join('/'));   /* Windows คั่นด้วย backslash */
 
     expect(users).toContain('lib/stock-cost.ts');       /* ที่นิยามสูตร */
     expect(users).toContain('lib/products.ts');         /* ทะเบียนสินค้า + หน้าพิมพ์ */

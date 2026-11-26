@@ -55,7 +55,13 @@ export function DeleteTenantForm({ shopName }: { shopName: string }) {
         <input className="in" id="confirmName" name="confirmName" autoComplete="off" required />
       </div>
 
-      <label className="tag-row" style={{ fontSize: 14 }}>
+      <div className={state.field === 'password' ? 'field bad' : 'field'}>
+        <label htmlFor="deletePassword">รหัสผ่านของเจ้าของกิจการ</label>
+        <input className="in" id="deletePassword" name="password" type="password"
+          autoComplete="current-password" required />
+      </div>
+
+      <label className="tag-row" style={{ fontSize: '0.9375rem' }}>
         <input type="checkbox" name="understood" />
         เข้าใจแล้วว่าการลบนี้ย้อนกลับไม่ได้
       </label>

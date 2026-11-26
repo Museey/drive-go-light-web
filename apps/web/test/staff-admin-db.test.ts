@@ -9,7 +9,9 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
-import { deleteStaffWith, setStaffPasswordWith, transferOwnershipWith } from '../src/lib/staff-admin';
+import {
+  assertStaffSeatFreeWith, deleteStaffWith, setStaffPasswordWith, transferOwnershipWith,
+} from '../src/lib/staff-admin';
 import { verifyPassword } from '../src/lib/password';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
@@ -100,6 +102,43 @@ describe.skipIf(!DB_URL)('ตั้งค่าพนักงาน', () => {
       const { rows } = await admin.query(
         `select count(*)::int as n from users where tenant_id = $1 and role = 'owner'`, [tenantId]);
       expect(rows[0].n).toBe(1);
+    });
+  });
+
+  describe('ที่นั่งพนักงานตามแพ็กเกจ', () => {
+    const seats = async (max: number | null) => {
+      await admin.query(`delete from subscriptions where tenant_id = $1`, [tenantId]);
+      await admin.query(
+        `insert into subscriptions (tenant_id, plan, started_on, expires_on, max_users)
+         values ($1, 'light-yearly', current_date, current_date + 365, $2)`, [tenantId, max]);
+    };
+    /* ตัวตรวจล็อกแถวอู่ จึงต้องอยู่ในทรานแซกชันเหมือนตอนถูกเรียกจาก mutate() */
+    const check = async () => {
+      await app.query('begin');
+      try { await assertStaffSeatFreeWith(app); } finally { await app.query('rollback'); }
+    };
+
+    it('ที่นั่งเต็มแล้วผ่านไม่ได้ — ใช้ทั้งตอนสร้างบัญชีใหม่และตอนเปิดบัญชีเก่ากลับมา', async () => {
+      await seats(1);                       /* ช่างเอที่ beforeEach สร้างไว้กินที่นั่งเดียวไปแล้ว */
+      await expect(check()).rejects.toThrow(/เปิดบัญชีพนักงานได้ 1 คน/);
+    });
+
+    it('ปิดการใช้งานคนเดิมแล้วมีที่ว่าง — บัญชีที่ปิดอยู่ไม่กินที่นั่ง', async () => {
+      await seats(1);
+      await admin.query(`update users set active = false where id = $1`, [staffId]);
+      await expect(check()).resolves.toBeUndefined();
+    });
+
+    it('เจ้าของกิจการไม่ถูกนับเป็นที่นั่งพนักงาน', async () => {
+      await seats(2);
+      await expect(check(), 'เจ้าของ 1 + พนักงาน 1 ยังเหลืออีกหนึ่งที่').resolves.toBeUndefined();
+    });
+
+    it('แพ็กเกจไม่จำกัดที่นั่ง และอู่ที่ยังไม่มีการสมัครใช้ ผ่านเสมอ', async () => {
+      await seats(null);
+      await expect(check()).resolves.toBeUndefined();
+      await admin.query(`delete from subscriptions where tenant_id = $1`, [tenantId]);
+      await expect(check()).resolves.toBeUndefined();
     });
   });
 

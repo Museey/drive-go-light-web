@@ -97,7 +97,7 @@ export default async function WalkinPage({
 
         {form ? (
           <div id="new-doc" style={{ marginBottom: 14 }}>
-            <DocEditor initial={form.initial} vatRate={form.shop.vatRate} shopWhtRate={form.shop.whtRate} mode="new"
+            <DocEditor initial={form.initial} vatRate={form.shop.vatRate} shopWhtRate={form.shop.whtRate} whtBase={form.shop.whtBase} mode="new"
                        vatRegistered={form.shop.vatRegistered}
                        docNoPreview={{ seq: form.seq, month: form.initial.docDate.slice(0, 7) }}
                        lotExpiry={form.lotExpiry} expiryWarnDays={form.shop.expiryWarnDays} today={todayIso}

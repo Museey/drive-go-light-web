@@ -5,7 +5,8 @@ import { DocEditor } from './doc-editor';
 import { SavedNotice } from '@/components/saved-notice';
 import { blankSalesDoc, getDefaultNote, getDefaultWarranty, lotExpiryOf, peekDocSeq } from '@/lib/sales';
 import { today } from '@drivegolight/core';
-import { requireTab } from '@/lib/auth';
+import { query, requireTab } from '@/lib/auth';
+import { docsIssuedWith } from '@/lib/docs-issued';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { listIncomeDocs, getShop } from '@/lib/queries';
@@ -61,7 +62,7 @@ export default async function IncomePage({
   searchParams: Promise<{
     q?: string; kind?: string; page?: string; size?: string;
     from?: string; to?: string; month?: string; year?: string; voided?: string; open?: string; vat?: string; hist?: string; saved?: string; savedId?: string;
-    norc?: string;
+    norc?: string; pay?: string;
   }>;
 }) {
   const session = await requireTab('income', 'receipt');
@@ -89,9 +90,16 @@ export default async function IncomePage({
   /* หลังบันทึกกลับมาหน้านี้ตามเดิม (คงชนิด/ตัวกรอง) */
   const returnTo = `/income?kind=${kind}${sp.hist === '1' ? '&hist=1' : ''}${sp.vat ? `&vat=${sp.vat}` : ''}`;
   const vat = sp.vat === 'yes' || sp.vat === 'no' ? sp.vat : undefined;
+  const pay = (['paid', 'open', 'late', 'billed'] as const).find((p) => p === sp.pay);
   const { rows, total } = await listIncomeDocs({
-    search, kind, page, from, to, pageSize, includeVoid, openOnly, vat, awaitingReceipt,
+    search, kind, page, from, to, pageSize, includeVoid, openOnly, vat, awaitingReceipt, pay,
   });
+  /* แถบสรุปของแท็บ — เฉพาะหน้าประวัติของชนิดเดียว ("ประวัติทั้งหมด" รวมใบส่งมอบกับใบเสร็จของงานเดียวกัน
+     บวกกันแล้วนับซ้ำ จึงไม่แสดง) · ตัวเลขตามช่วงวันที่ที่เลือก ไม่ตามคำค้น */
+  const kpiGroup = kind === 'QT' ? 'QT' : kind === 'RC' ? 'RC' : kind === 'IV' || kind === 'IVT' ? 'IV' : null;
+  const kpi = histFirst && kpiGroup && !awaitingReceipt
+    ? await query((c) => docsIssuedWith(c, kpiGroup, from, to, { kinds: [kind], vat }))
+    : null;
   const shopBanks = shop.bankAccounts ?? [];
 
   /* ข้อมูลสำหรับฟอร์มสร้างใหม่ (ชุดเดียวกับ /income/new) */
@@ -134,6 +142,7 @@ export default async function IncomePage({
     ...(openOnly ? { open: '1' } : {}),
     ...(awaitingReceipt ? { norc: '1' } : {}),
     ...(vat ? { vat } : {}),
+    ...(pay ? { pay } : {}),
   };
   /* เหมือน keep แต่ไม่มี size — ปุ่มเลือกจำนวนแถวใส่ค่าของตัวเอง */
   const { size: _size, ...filters } = keep;
@@ -207,6 +216,34 @@ export default async function IncomePage({
         </div>
       </div>
       {form && !histFirst ? <FormBlock form={form} kind={formKind!} returnTo={returnTo} /> : null}
+      {kpi ? (() => {
+        const row = (k: string) => kpi.rows.find((r) => r.key === k);
+        const base = { hist: '1', kind, ...(from ? { from } : {}), ...(to ? { to } : {}), ...(vat ? { vat } : {}) };
+        const cards = kpi.group === 'QT'
+          ? [
+            { k: 'all', tone: 'blue', label: 'ออกทั้งหมด', n: kpi.total.count, amt: kpi.total.amount, q: {}, on: !pay && !openOnly },
+            { k: 'wait', tone: 'amber', label: 'รอลูกค้าตอบรับ', n: row('wait')?.count ?? 0, amt: row('wait')?.amount ?? 0, q: { open: '1' }, on: openOnly },
+            { k: 'next', tone: 'green', label: 'ออกใบต่อแล้ว', n: row('next')?.count ?? 0, amt: row('next')?.amount ?? 0, q: { pay: 'billed' }, on: pay === 'billed' },
+          ]
+          : [
+            { k: 'all', tone: 'blue', label: 'ออกทั้งหมด', n: kpi.total.count, amt: kpi.total.amount, q: {}, on: !pay },
+            { k: 'paid', tone: 'green', label: 'รับชำระครบ', n: row('paid')?.count ?? 0, amt: row('paid')?.amount ?? 0, q: { pay: 'paid' }, on: pay === 'paid' },
+            { k: 'open', tone: 'amber', label: 'รอรับชำระ (ยอดค้าง)', n: row('open')?.count ?? 0, amt: row('open')?.amount ?? 0, q: { pay: 'open' }, on: pay === 'open' },
+            { k: 'late', tone: 'red', label: 'เกินกำหนด (ยอดค้าง)', n: row('late')?.count ?? 0, amt: row('late')?.amount ?? 0, q: { pay: 'late' }, on: pay === 'late' },
+          ];
+        return (
+          <nav className="kpi-strip" aria-label="สรุปตามสถานะ">
+            {cards.map((x) => (
+              <Link key={x.k} className="kpi" data-tone={x.tone} data-k={x.k} aria-current={x.on ? 'true' : undefined}
+                    href={{ pathname: '/income', query: { ...base, ...x.q } }}>
+                <span className="lbl">{x.label}</span>
+                <b>{x.n.toLocaleString('en-US')} <small>ใบ</small></b>
+                <span className="amt">{baht(x.amt)} บาท</span>
+              </Link>
+            ))}
+          </nav>
+        );
+      })() : null}
       {histFirst ? (<div className="card">
         {/* hist=1 ต้องติดไปกับตัวกรองวันที่ด้วย — ไม่งั้นกรองจากหน้าประวัติแล้วเด้งไปฟอร์มสร้างใหม่
                            (เทสต์ doc-cards จับได้ตอนทำ dropdown ของจอแคบ · ชิปบนเดสก์ท็อปก็เป็นมาก่อนหน้านี้) */}
@@ -215,6 +252,7 @@ export default async function IncomePage({
                          hist: '1', ...(search ? { q: search } : {}), ...(kind ? { kind } : {}),
                          /* ตัวกรองที่ติ๊กไว้ต้องไม่หลุดตอนเปลี่ยนช่วงวันที่ */
                          ...(openOnly ? { open: '1' } : {}), ...(awaitingReceipt ? { norc: '1' } : {}),
+                         ...(pay ? { pay } : {}),
                        }} />
 
         {rows.length === 0 ? (
@@ -247,14 +285,14 @@ export default async function IncomePage({
 /** ฟอร์มสร้างเอกสารใหม่ที่ฝังในหน้ารายการ — ตัวเดียวกับ /income/new */
 function FormBlock({ form, kind, returnTo }: {
   returnTo: string;
-  form: { shop: { vatRate: number; vatRegistered: boolean; whtRate: number; expiryWarnDays: number; bankAccounts: { bank: string; no: string; name: string }[] }; initial: Parameters<typeof DocEditor>[0]['initial']; lotExpiry: Record<string, string>; seq: number };
+  form: { shop: { vatRate: number; vatRegistered: boolean; whtRate: number; whtBase: 'labour' | 'all'; expiryWarnDays: number; bankAccounts: { bank: string; no: string; name: string }[] }; initial: Parameters<typeof DocEditor>[0]['initial']; lotExpiry: Record<string, string>; seq: number };
   kind: 'QT' | 'IVT' | 'IV' | 'RC';
 }) {
   return (
     <div id="new-doc" style={{ marginBottom: 14 }}>
       {/* key = ชนิดเอกสาร — กดแท็บ 03.1 → 03.2 → 03.4 เป็นหน้าเดียวกันแค่ ?kind= เปลี่ยน
           ไม่มี key React ใช้ฟอร์มตัวเดิม (ค่าตั้งต้นอยู่ใน useState ครั้งแรก) ฟอร์มค้างเป็นใบเสนอราคาจนกว่าจะรีเฟรช */}
-      <DocEditor key={kind} initial={form.initial} vatRate={form.shop.vatRate} shopWhtRate={form.shop.whtRate} mode="new"
+      <DocEditor key={kind} initial={form.initial} vatRate={form.shop.vatRate} shopWhtRate={form.shop.whtRate} whtBase={form.shop.whtBase} mode="new"
                  vatRegistered={form.shop.vatRegistered}
                  docNoPreview={{ seq: form.seq, month: form.initial.docDate.slice(0, 7) }}
                  lotExpiry={form.lotExpiry} expiryWarnDays={form.shop.expiryWarnDays} today={today()}

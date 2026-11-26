@@ -116,12 +116,12 @@ test('ปุ่มเครื่องมือของหน้า — ต่
   }
 });
 
-test('หัวหน้าจอบนจอแคบ — ชื่อ 18px คำบรรยาย 12.5px', async ({ page }) => {
+test('หัวหน้าจอบนจอแคบ — ชื่อ 18px คำบรรยาย 14px', async ({ page }) => {
   test.skip(isDesktop(page), 'เดสก์ท็อปใช้ขนาดเดิม');
   await page.goto('/finance/ar');
   const size = (loc: ReturnType<Page['locator']>) =>
     loc.evaluate((el) => getComputedStyle(el).fontSize);
   expect(await size(page.locator('.topbar h1'))).toBe('18px');
   const sub = page.locator('.topbar .sub');
-  if (await sub.count()) expect(await size(sub)).toBe('12.5px');
+  if (await sub.count()) expect(await size(sub)).toBe('14px');
 });

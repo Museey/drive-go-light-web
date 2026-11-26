@@ -1,4 +1,5 @@
 import { requireTab } from '@/lib/auth';
+import { canEdit } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
@@ -17,14 +18,16 @@ const KIND_NAME: Record<string, string> = {
  * 07.4 เอกสารที่ลบ/ยกเลิก — ตามต้นแบบ (pageTrash)
  *
  * ค้นได้เฉพาะช่วงเวลาที่ยกเลิก · กู้คืนได้ทุกชนิด · ลบถาวรเฉพาะเจ้าของ + รหัสผ่าน แล้วกู้ไม่ได้
- * สิทธิ์ตรงกับที่ lib/trash.ts ตรวจตอนเขียน (ตั้งค่าร้าน · ข้อมูลร้าน)
+ * สิทธิ์ตรงกับที่ lib/trash.ts ตรวจตอนเขียน (ตั้งค่าร้าน · แท็บ 07.4 ของตัวเอง)
+ * คนที่เปิดแท็บได้แต่ไม่มีสิทธิ์แก้ไข เห็นรายการแต่ไม่มีปุ่มกู้คืน/ลบถาวร
  */
 export default async function TrashPage({
   searchParams,
 }: {
   searchParams: Promise<{ from?: string; to?: string; month?: string; year?: string }>;
 }) {
-  const session = await requireTab('settings', 'shop');
+  const session = await requireTab('settings', 'trash');
+  const mayEdit = canEdit(session, 'settings', 'trash');
   const mayPurge = session.role === 'owner';
   const sp = await searchParams;
   const { from, to } = rangeFromParams(sp);
@@ -69,12 +72,14 @@ export default async function TrashPage({
                       <td className="num mono">{baht(r.amount)}</td>
                       <td>
                         {thDate(r.voidedAt.slice(0, 10))}
-                        {r.reason ? <div className="subtle" style={{ fontSize: 12 }}>{r.reason}</div> : null}
+                        {r.reason ? <div className="subtle" style={{ fontSize: '0.875rem' }}>{r.reason}</div> : null}
                       </td>
                       <td>
-                        <TrashActions source={r.source} id={r.id} docNo={r.docNo}
-                                      kindName={KIND_NAME[r.kind] ?? r.kind}
-                                      mayPurge={mayPurge} />
+                        {mayEdit ? (
+                          <TrashActions source={r.source} id={r.id} docNo={r.docNo}
+                                        kindName={KIND_NAME[r.kind] ?? r.kind}
+                                        mayPurge={mayPurge} />
+                        ) : null}
                       </td>
                     </tr>
                   ))}

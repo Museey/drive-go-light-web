@@ -67,6 +67,11 @@ export interface ImportResult {
   counts: Record<string, number>;
   /** เรื่องที่ต้องบอกผู้ใช้ — ไม่ถึงกับ error แต่ห้ามเงียบ */
   warnings: string[];
+  /**
+   * รหัสในไฟล์ → รหัสแถวที่สร้างใหม่ ของลูกค้า/ผู้ขายและรถ
+   * ผู้เรียกใช้ผูกข้อมูลที่อ้างถึงสองตารางนี้แต่ตัวนำเข้าไม่รู้จัก (นัดหมายของ Light Plus) กลับเข้าที่เดิม
+   */
+  idMap: { contacts: Map<string, string>; vehicles: Map<string, string> };
 }
 
 const COST_METHODS = new Set(['FIFO', 'AVG', 'FEFO']);
@@ -265,6 +270,13 @@ export async function importBackup(
     if ('_noteDefault' in shop) extraShop.push(['note_default', text(shop._noteDefault)]);
     /* จด VAT หรือไม่ (036) — รับเฉพาะ true/false จริง ไฟล์ที่ไม่มีคีย์นี้ (รวมไฟล์รุ่น 6.4) ไม่แตะค่าเดิม */
     if (typeof shop._vatRegistered === 'boolean') extraShop.push(['vat_registered', shop._vatRegistered]);
+    /* คิวอาร์รับเงินบนเอกสาร (039) — ไฟล์ที่ไม่มีคีย์ (รวมไฟล์รุ่น 6.4) ไม่แตะค่าเดิม */
+    if (typeof shop._promptpayId === 'string') {
+      extraShop.push(['promptpay_id', text(shop._promptpayId).replace(/\D/g, '')]);
+    }
+    if (shop._whtBase === 'all' || shop._whtBase === 'labour') extraShop.push(['wht_base', shop._whtBase]);
+    if (typeof shop._qrOnInvoice === 'boolean') extraShop.push(['qr_on_invoice', shop._qrOnInvoice]);
+    if (typeof shop._qrOnReceipt === 'boolean') extraShop.push(['qr_on_receipt', shop._qrOnReceipt]);
     if (Array.isArray(shop._bankAccounts)) {
       const banks = shop._bankAccounts
         .filter((b: any) => b && typeof b === 'object')
@@ -1280,6 +1292,7 @@ export async function importBackup(
         counts: countRows.length,
       },
       warnings,
+      idMap: { contacts: contactId, vehicles: vehicleId },
     };
   } catch (err) {
     if (owned) await client.query('rollback');

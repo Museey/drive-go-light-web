@@ -10,7 +10,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
-import { docChainWith, voidSalesChainWith } from '../src/lib/sales-void';
+import { docChainWith, voidSalesChainWith, voidSalesDocWith } from '../src/lib/sales-void';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
 pg.types.setTypeParser(1082, (v) => v);
@@ -115,6 +115,34 @@ describe.skipIf(!DB_URL)('ยกเลิกทั้งสายเอกสา
     expect(await statusOf(ivt)).toBe('issued');
     /* ใบเสนอราคากลับเป็นค้างส่งมอบเมื่อไม่เหลือใบต่อ — ที่นี่ยังมีใบส่งมอบอยู่ จึงยังเป็น billed */
     expect(await statusOf(qt)).toBe('billed');
+  });
+
+  /* ยอดขายนับที่ใบส่งมอบ และใบส่งมอบเป็นใบที่ตัดสต๊อก — ยกเลิกใบส่งมอบใบเดียวทั้งที่ใบเสร็จยังอยู่
+     เงินที่รับไว้ยังอยู่ แต่ยอดขายหายจากรายงานและของกลับเข้าสต๊อก (24 พ.ย. 2569) */
+  it('ใบส่งมอบที่ยังมีใบเสร็จ ยกเลิกใบเดียวไม่ได้ — บอกเลขใบเสร็จ และไม่แตะอะไร', async () => {
+    const { qt, ivt, rc } = await chain();
+    await expect(voidSalesDocWith(app, ivt, 'ออกผิดใบ', null)).rejects.toThrow(/RC-CHAIN-1/);
+    expect(await statusOf(ivt)).toBe('issued');
+    expect(await statusOf(rc)).toBe('issued');
+
+    /* ใบเสนอราคาไม่มีผลกับเงินหรือสต๊อก — ยกเลิกได้แม้มีใบต่อ ตามกติกา 17 ก.ย. 2569 */
+    await voidSalesDocWith(app, qt, 'ลูกค้าเปลี่ยนใจ', null);
+    expect(await statusOf(qt)).toBe('void');
+
+    /* ยกเลิกใบเสร็จก่อนแล้ว ใบส่งมอบยกเลิกได้ */
+    await voidSalesDocWith(app, rc, 'ออกผิดใบ', null);
+    await voidSalesDocWith(app, ivt, 'ออกผิดใบ', null);
+    expect(await statusOf(ivt)).toBe('void');
+  });
+
+  it('ยกเลิกทั้งสาย — ใบเสร็จถูกยกเลิกก่อนใบส่งมอบเสมอ แม้ใบเสร็จลงวันที่ก่อน', async () => {
+    const { qt, ivt, rc } = await chain();
+    await admin.query(`update documents set doc_date = current_date - 3 where id = $1`, [rc]);
+    await voidSalesChainWith(app, [qt, ivt, rc], 'ลูกค้ายกเลิกงาน', null);
+
+    expect(await statusOf(rc)).toBe('void');
+    expect(await statusOf(ivt)).toBe('void');
+    expect(await statusOf(qt)).toBe('void');
   });
 
   /* ยกเลิกเฉพาะใบเสร็จกับใบส่งมอบ ใบเสนอราคาต้องกลับขึ้นกระดานงานค้างส่งมอบ

@@ -31,10 +31,10 @@ export default async function LoginPage({
   return (
     <div style={{ maxWidth: 400, margin: '80px auto', padding: '0 20px' }}>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: 24, fontWeight: 700 }}>
+        <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>
           DriveGo<span style={{ color: 'var(--accent)' }}>Light!</span>
         </div>
-        <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>ระบบบริหารงานอู่ซ่อมรถยนต์</div>
+        <div style={{ color: 'var(--ink-3)', fontSize: '0.875rem' }}>ระบบบริหารงานอู่ซ่อมรถยนต์</div>
       </div>
 
       <div className="card">
@@ -47,13 +47,13 @@ export default async function LoginPage({
           ) : null}
 
           <form autoComplete="off" action={submit}>
-            <label className="in-label" htmlFor="email" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+            <label className="in-label" htmlFor="email" style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 4 }}>
               อีเมล
             </label>
             <input className="in" id="email" name="email" type="email" autoComplete="username"
                    required autoFocus style={{ width: '100%', marginBottom: 12 }} />
 
-            <label htmlFor="password" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+            <label htmlFor="password" style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 4 }}>
               รหัสผ่าน
             </label>
             <input className="in" id="password" name="password" type="password"
@@ -62,13 +62,13 @@ export default async function LoginPage({
             <button className="btn primary" type="submit" style={{ width: '100%' }}>เข้าสู่ระบบ</button>
           </form>
 
-          <p style={{ color: 'var(--ink-3)', fontSize: 12, marginTop: 16, marginBottom: 0 }}>
+          <p style={{ color: 'var(--ink-3)', fontSize: '0.875rem', marginTop: 16, marginBottom: 0 }}>
             ยังไม่ได้ตั้งรหัสผ่าน? ใช้ลิงก์ตั้งรหัสผ่านที่ได้รับจากเจ้าของกิจการ
           </p>
         </div>
       </div>
 
-      <p style={{ textAlign: 'center', fontSize: 12, marginTop: 18 }}>
+      <p style={{ textAlign: 'center', fontSize: '0.875rem', marginTop: 18 }}>
         <a href="/privacy" style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}>
           นโยบายข้อมูลส่วนบุคคล
         </a>

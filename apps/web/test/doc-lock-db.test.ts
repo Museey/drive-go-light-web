@@ -125,12 +125,29 @@ describe.skipIf(!DB_URL)('ล็อกเอกสารที่บันทึ
 
   /* ---------------- แก้ไข ---------------- */
 
-  it('แก้ในใบเดิมได้แม้ออกใบต่อแล้ว (ใบเสนอราคา ใบส่งมอบ ใบกำกับภาษี)', async () => {
+  /* กติกาเปลี่ยน 26 พ.ย. 2569 (ผู้ใช้เลือก) — เดิมออกใบต่อแล้วก็ยังแก้ได้ ชุดเอกสารเดียวกันจึงบอกยอดไม่ตรงกัน */
+  it('ใบที่ออกใบต่อไปแล้ว แก้ไม่ได้ — บอกว่าต้องแก้หรือยกเลิกใบไหน', async () => {
     const qt = await addDoc('QT', 'QT-2');
     const iv = await addDoc('IVT', 'IVT-2', qt);
-    await addDoc('RC', 'RC-2', iv);
-    expect(await editRuleWith(app, qt)).toEqual({ ok: true });
+    const rc = await addDoc('RC', 'RC-2', iv);
+    const qtRule = await editRuleWith(app, qt);
+    expect(qtRule.ok).toBe(false);
+    expect(qtRule.reason).toMatch(/^ใบนี้ออก.+ IVT-2 ต่อไปแล้ว แก้ไม่ได้ — ให้แก้ที่ IVT-2 หรือยกเลิก IVT-2 ก่อนจึงจะแก้ใบนี้ได้$/);
+    const ivRule = await editRuleWith(app, iv);
+    expect(ivRule.ok).toBe(false);
+    expect(ivRule.reason).toContain('RC-2');
+
+    /* ยกเลิกจากปลายสายขึ้นมา — ใบที่ไม่เหลือใบต่อกลับมาแก้ได้ทีละชั้น */
+    await voidDoc(rc);
     expect(await editRuleWith(app, iv)).toEqual({ ok: true });
+    expect((await editRuleWith(app, qt)).ok).toBe(false);
+    await voidDoc(iv);
+    expect(await editRuleWith(app, qt)).toEqual({ ok: true });
+  });
+
+  it('ใบที่ยังไม่มีใบต่อ แก้ได้', async () => {
+    const qt = await addDoc('QT', 'QT-2B');
+    expect(await editRuleWith(app, qt)).toEqual({ ok: true });
   });
 
   it('ใบเสร็จ · ใบที่รับเงินแล้ว · ใบที่ยกเลิก แก้ไม่ได้ พร้อมเหตุผล', async () => {

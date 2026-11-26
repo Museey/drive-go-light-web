@@ -1,3 +1,4 @@
+import { Plate } from '@/components/plate';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isUuid } from '@/lib/ids';
@@ -143,7 +144,7 @@ export default async function DocPage({
           <div className="body">
             {doc.vehicle ? (
               <dl className="kv">
-                <dt>ทะเบียน</dt><dd className="mono">{doc.vehiclePlate || '-'} {doc.vehicle.plateProv ?? ''}</dd>
+                <dt>ทะเบียน</dt><dd>{doc.vehiclePlate ? <Plate value={`${doc.vehiclePlate} ${doc.vehicle.plateProv ?? ''}`} size="lg" /> : '-'}</dd>
                 <dt>ยี่ห้อ / รุ่น</dt><dd>{[doc.vehicle.brand, doc.vehicle.model].filter(Boolean).join(' ') || '-'}</dd>
                 <dt>ปี / สี</dt><dd>{[doc.vehicle.year, doc.vehicle.color].filter(Boolean).join(' · ') || '-'}</dd>
                 <dt>เลขไมล์</dt><dd className="mono">{doc.vehicle.mileage || '-'}</dd>
@@ -225,7 +226,7 @@ export default async function DocPage({
             ) : null}
 
             {/* จำนวนเงินเป็นตัวหนังสือ — ใช้ bahttext() ตัวเดียวกับโปรแกรมเดิม */}
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)', color: 'var(--ink-2)', fontSize: 12.5 }}>
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)', color: 'var(--ink-2)', fontSize: '0.875rem' }}>
               ({bahttext(doc.payable)})
             </div>
           </div>

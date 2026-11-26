@@ -3,6 +3,7 @@ import {
   hasDataLoss, importBackup, unsupportedCollections, validateBackup,
   type BackupFile, type UnsupportedGroup,
 } from '@drivegolight/importer';
+import { plusCounts, restorePlusWith } from './plus-backup';
 
 /**
  * แกนกลางของการกู้คืนข้อมูล — รับ client ที่เปิดทรานแซกชันและตั้งอู่ไว้แล้ว
@@ -117,6 +118,8 @@ export function previewBackup(text: string): BackupPreview {
     const v = backup[k];
     if (Array.isArray(v) && v.length) counts[k] = v.length;
   }
+  /* ข้อมูล Light Plus ในไฟล์ — บอกก่อนกู้คืนว่ากลุ่มไหนจะถูกแทนที่ */
+  Object.assign(counts, plusCounts(backup._plus));
 
   return { counts, dropped, needsAcknowledgement: hasDataLoss(dropped), productLimit: productLimitOf(backup) };
 }
@@ -144,5 +147,12 @@ export async function restoreIntoTenant(
     intoTenantId: tenantId,
     externalTransaction: true,
   });
-  return { counts: result.counts, warnings: result.warnings, removed, dropped };
+  /* ข้อมูล Light Plus — แทนที่เฉพาะกลุ่มที่ไฟล์มี กลุ่มที่ไม่มีคงของเดิมไว้ (lib/plus-backup.ts)
+     อยู่ในทรานแซกชันเดียวกัน · นัดที่ผูกลูกค้า/รถ ผูกกลับตามรหัสใหม่ที่ตัวนำเข้าเพิ่งสร้าง */
+  const plus = await restorePlusWith(c, (backup as unknown as Record<string, unknown>)._plus, result.idMap);
+  return {
+    counts: { ...result.counts, ...plus.counts },
+    warnings: [...result.warnings, ...plus.warnings],
+    removed, dropped,
+  };
 }

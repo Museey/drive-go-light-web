@@ -12,6 +12,9 @@ import { listPendingItems } from '@/lib/pending';
 import { baht, KIND_SHORT, monthLabel } from '@/lib/format';
 import { OwingList, SalesBars } from '@/components/sales-bars';
 import { partyKey } from '@/lib/party-groups';
+import { query } from '@/lib/auth';
+import { DOC_GROUPS, docsIssuedWith, isDocGroup } from '@/lib/docs-issued';
+import { DocsIssuedCard } from '@/components/docs-issued-card';
 
 /**
  * การ์ดตัวเลขเล็กของจอแคบ (ต้นแบบ `a.mstat`) — ไม่มีสิทธิ์ไปหน้านั้นก็เป็นการ์ดเฉย ๆ ไม่ใช่ลิงก์
@@ -62,7 +65,7 @@ export const metadata = landingMetadata;
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ denied?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ denied?: string; from?: string; to?: string; dk?: string }>;
 }) {
   if (!(await hasSessionCookie())) return <Landing />;
 
@@ -73,12 +76,19 @@ export default async function HomePage({
   const seesStock = can(session, 'stock');
   const seesReport = canHomeReport(session);
 
-  const [shop, summary, tax, pendingNames] = await Promise.all([
+  /* การ์ด "เอกสารที่ออก" — ชนิดที่เลือกอยู่ใน ?dk= ค่าเริ่มต้นคือใบเสนอราคา
+     เห็นเฉพาะชนิดของเมนูที่มีสิทธิ์เข้า · ชนิดที่ไม่มีสิทธิ์พิมพ์ใส่ URL เองก็ถอยไปตัวแรกที่มีสิทธิ์ */
+  const docGroups = DOC_GROUPS.filter((g) => can(session, g.perm));
+  const docGroup = docGroups.find((g) => g.key === sp.dk && isDocGroup(sp.dk)) ?? docGroups[0] ?? null;
+
+  const [shop, summary, tax, pendingNames, issued] = await Promise.all([
     getShop(),
     getHomeSummary(sp.from, sp.to),
     seesFinance ? getTaxSummary() : Promise.resolve(null),
     /* รายการค้างทำ = ชื่อที่ขายไปแล้วแต่ยังไม่มีรหัสในทะเบียน (05.2) */
     seesStock ? listPendingItems() : Promise.resolve([]),
+    seesReport && docGroup
+      ? query((c) => docsIssuedWith(c, docGroup.key, sp.from, sp.to)) : Promise.resolve(null),
   ]);
   const pendingLines = pendingNames.reduce((n, p) => n + p.lineCount, 0);
 
@@ -120,6 +130,15 @@ export default async function HomePage({
                      tone={summary.apOutstanding > 0.004 ? 'due' : ''} />
             </div>
           </section>
+
+          {/* การ์ดเดียวกับจอกว้าง — จอแคบก็ต้องเลือกชนิดเอกสารดูได้ */}
+          {issued ? (
+            <section className="m-sec">
+              <DocsIssuedCard report={issued} from={sp.from} to={sp.to}
+                              options={docGroups.map((g) => ({ key: g.key, label: g.label }))}
+                              canOpen />
+            </section>
+          ) : null}
 
           {([
             { title: 'ลูกหนี้จากการขาย', side: summary.ar, base: '/finance/ar', empty: 'ไม่มีลูกหนี้คงค้าง' },
@@ -217,7 +236,7 @@ export default async function HomePage({
       {seesReport ? (
       <div className="hgrid" style={{ marginBottom: 16 }}>
 
-        <div className="hcard">
+        <div className="hcard" data-tone="blue">
           <header>
             <Icon name="sales" size={22} color="#1F5FBF" />
             <h2>สรุปยอดขาย{ranged ? ' (ช่วงที่เลือก)' : ''}</h2>
@@ -231,12 +250,18 @@ export default async function HomePage({
             <div className="row"><span>จำนวนใบ</span><b>{summary.salesDocCount.toLocaleString('en-US')}</b></div>
             <div className="row"><span>เฉลี่ยต่อใบ</span><b>{baht(summary.salesAvg)}</b></div>
             <div className="row"><span>รับชำระแล้ว</span><b style={{ color: 'var(--ok)' }}>{baht(summary.salesPaid)}</b></div>
-            {/* แท่งหกเดือนไม่ขยับตามช่วงวันที่ที่เลือก — "หกเดือนล่าสุด" ต้องแปลว่าหกเดือนล่าสุดเสมอ */}
+            {/* กราฟไม่ขยับตามช่วงวันที่ที่เลือก — "12 เดือนล่าสุด" ต้องแปลว่า 12 เดือนล่าสุดเสมอ */}
             <SalesBars months={summary.salesBars} />
           </div>
         </div>
 
-        <div className="hcard">
+        {issued ? (
+          <DocsIssuedCard report={issued} from={sp.from} to={sp.to}
+                          options={docGroups.map((g) => ({ key: g.key, label: g.label }))}
+                          canOpen />
+        ) : null}
+
+        <div className="hcard" data-tone="orange">
           <header>
             <Icon name="cart" size={22} color="#C25A18" />
             <h2>รายจ่ายในช่วงเดียวกัน</h2>
@@ -251,7 +276,7 @@ export default async function HomePage({
           </div>
         </div>
 
-        <div className="hcard">
+        <div className="hcard" data-tone="green">
           <header>
             <Icon name="ar" size={22} color="#1D7A5F" />
             <h2>สรุปลูกหนี้จากการขาย</h2>
@@ -275,7 +300,7 @@ export default async function HomePage({
           </div>
         </div>
 
-        <div className="hcard">
+        <div className="hcard" data-tone="red">
           <header>
             <Icon name="ap" size={22} color="#C25A18" />
             <h2>สรุปเจ้าหนี้การค้า</h2>
@@ -299,7 +324,7 @@ export default async function HomePage({
           </div>
         </div>
 
-        <div className="hcard">
+        <div className="hcard" data-tone="amber">
           <header>
             <Icon name="box" size={22} color="#2E8B3D" />
             <h2>สินค้าที่ต้องสั่งซื้อ</h2>
@@ -321,7 +346,7 @@ export default async function HomePage({
         {/* งานค้างส่งมอบ — ใบเสนอราคาที่ออกแล้วแต่ยังไม่มีใบส่งมอบ/ใบเสร็จออกต่อ
             = รถที่ยังซ่อมไม่เสร็จ (อาจข้ามวัน) กดแล้วไปหน้ารายการที่กรองไว้ให้ */}
         {seesIncome ? (
-        <div className="hcard">
+        <div className="hcard" data-tone="teal">
           <header>
             <Icon name="truck" size={22} color="#0F5C3E" />
             <h2>งานค้างส่งมอบ</h2>
@@ -345,7 +370,7 @@ export default async function HomePage({
         {/* ใบส่งมอบรอออกใบเสร็จ — ใบส่งมอบตัดสต๊อกตั้งแต่บันทึก (ของออกจากร้านแล้ว) แต่ยังไม่ได้ออกใบเสร็จ
             เตือนให้ตามเก็บเงินและออกใบเสร็จ กดแล้วไปรายการที่กรองไว้ให้ (ผู้ใช้เลือก 4 ต.ค. 2569) */}
         {seesIncome ? (
-        <div className="hcard">
+        <div className="hcard" data-tone="violet">
           <header>
             <Icon name="receipt" size={22} color="#C25A18" />
             <h2>ใบส่งมอบรอออกใบเสร็จ</h2>
@@ -369,7 +394,7 @@ export default async function HomePage({
         {/* รายการค้างทำ — ชื่อสินค้าที่พิมพ์เองบนเอกสารแล้วยังไม่ผูกทะเบียน
             ค้างไว้ = ไม่ตัดสต๊อก ไม่คิดต้นทุน จึงต้องเห็นตั้งแต่หน้าแรกและกดไปเคลียร์ได้เลย */}
         {seesStock ? (
-        <div className="hcard">
+        <div className="hcard" data-tone="amber">
           <header>
             <Icon name="pending" size={22} color="#B4720B" />
             <h2>รายการค้างทำ</h2>
@@ -389,7 +414,7 @@ export default async function HomePage({
             อู่ที่ขายแต่อะไหล่ซึ่งไม่มีวันหมดอายุจะไม่มีการ์ดศูนย์ค้างอยู่ตลอดกาล
             ส่วนอู่ที่กรอกวันหมดอายุไว้ พอมีของใกล้หมดการ์ดจะโผล่ขึ้นมาเอง */}
         {summary.expiringCount > 0 ? (
-        <div className="hcard">
+        <div className="hcard" data-tone="red">
           <header>
             <Icon name="pending" size={22} color={summary.expiredCount > 0 ? '#B3382C' : '#B4720B'} />
             <h2>ของใกล้หมดอายุ</h2>
@@ -412,7 +437,7 @@ export default async function HomePage({
         </div>
         ) : null}
 
-        <div className="hcard">
+        <div className="hcard" data-tone="slate">
           <header>
             <Icon name="pending" size={22} color="#B4720B" />
             <h2>สินค้าค้างสต๊อก ≥ 6 เดือน</h2>
@@ -484,17 +509,17 @@ export default async function HomePage({
               <>
               <div className="stat">
                 <div className="label">ภาษีขาย</div>
-                <div className="value" style={{ fontSize: 20 }}>{baht(tax.latest.out)}</div>
+                <div className="value" style={{ fontSize: '1.25rem' }}>{baht(tax.latest.out)}</div>
               </div>
               <div className="stat">
                 <div className="label">ภาษีซื้อ</div>
-                <div className="value" style={{ fontSize: 20 }}>{baht(tax.latest.in)}</div>
+                <div className="value" style={{ fontSize: '1.25rem' }}>{baht(tax.latest.in)}</div>
               </div>
               <div className="stat">
                 <div className="label">
                   {tax.latest.payable > 0.004 ? 'ภาษีที่ต้องนำส่ง' : 'เครดิตยกไปงวดหน้า'}
                 </div>
-                <div className={`value${tax.latest.payable > 0.004 ? ' due' : ''}`} style={{ fontSize: 20 }}>
+                <div className={`value${tax.latest.payable > 0.004 ? ' due' : ''}`} style={{ fontSize: '1.25rem' }}>
                   {baht(tax.latest.payable > 0.004 ? tax.latest.payable : tax.carryForward)}
                 </div>
               </div>
@@ -502,7 +527,7 @@ export default async function HomePage({
               ) : null}
               <div className="stat">
                 <div className="label">หัก ณ ที่จ่ายที่ต้องนำส่ง</div>
-                <div className="value" style={{ fontSize: 20 }}>{baht(tax.whtToRemit)}</div>
+                <div className="value" style={{ fontSize: '1.25rem' }}>{baht(tax.whtToRemit)}</div>
                 <span className="n">ลูกค้าหักจากอู่ไว้ {baht(tax.whtWithheld)}</span>
               </div>
             </div>
@@ -517,14 +542,14 @@ export default async function HomePage({
                   <div key={w.rate} className="row">
                     <span>
                       อัตรา {w.rate}%
-                      <span className="subtle" style={{ fontSize: 11.5 }}>
+                      <span className="subtle" style={{ fontSize: '0.875rem' }}>
                         {' '}· {w.count} ใบ · ฐาน {baht(w.base)}
                       </span>
                     </span>
                     <b>{baht(w.amount)}</b>
                   </div>
                 ))}
-                <div className="subtle" style={{ marginTop: 8, fontSize: 12 }}>
+                <div className="subtle" style={{ marginTop: 8, fontSize: '0.875rem' }}>
                   ยอดนี้คือภาษีที่ลูกค้านิติบุคคลหักไว้จากอู่ ใช้เป็นเครดิตภาษีตอนยื่นแบบประจำปี
                   — อย่าลืมขอหนังสือรับรองการหักภาษี ณ ที่จ่ายจากลูกค้าทุกครั้ง
                 </div>

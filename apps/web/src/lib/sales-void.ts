@@ -17,7 +17,32 @@ export async function voidSalesDocWith(
   c: pg.PoolClient | pg.Client, id: string, reason: string, userId: string | null,
 ): Promise<void> {
   {
-    /* ยกเลิกได้แม้มีใบต่อ — ใบต่อยังอยู่และนับยอดตามเดิม (ต้นแบบ voidDoc · ผู้ใช้เลือก 17 ก.ย. 2569) */
+    /* ล็อกแถวเอกสารก่อนอ่านสต๊อก — การแก้ไขใบ (lockDocForEditWith) ล็อกแถวเดียวกัน
+       ไม่งั้นแก้กับยกเลิกใบเดียวกันพร้อมกัน ต่างคนต่างคืนของ สต๊อกงอกสองเท่า
+       และตรวจว่าเป็นเอกสารรายรับจริง — ใบซื้อที่หลุดมาทางนี้จะถูกยกเลิกโดยของไม่ถูกตัดออก */
+    const doc = await c.query(
+      `select direction::text as direction, kind::text as kind, doc_no
+         from documents where id = $1 for update`, [id]);
+    if (!doc.rows[0]) throw new Error('ไม่พบเอกสาร');
+    if (doc.rows[0].direction !== 'sell') throw new Error('เอกสารนี้ไม่ใช่เอกสารรายรับ');
+
+    /* ยกเลิกได้แม้มีใบต่อ — ใบต่อยังอยู่และนับยอดตามเดิม (ต้นแบบ voidDoc · ผู้ใช้เลือก 17 ก.ย. 2569)
+       **ยกเว้นใบส่งมอบที่ยังมีใบเสร็จ** (24 พ.ย. 2569) — ยอดขายนับที่ใบส่งมอบ ใบเสร็จที่ออกต่อไม่ถูกนับซ้ำ
+       และตั้งแต่ 4 ต.ค. 2569 ใบส่งมอบเป็นใบที่ตัดสต๊อก ยกเลิกใบส่งมอบใบเดียวจึงได้:
+       เงินที่รับไว้ยังอยู่ในใบเสร็จ แต่ยอดขายหายจากทุกรายงาน และของที่ลูกค้าเอาไปแล้วกลับเข้าสต๊อก
+       "ใบต่อนับยอดตามเดิม" จึงไม่จริงกับคู่นี้ ต้องยกเลิกใบเสร็จก่อน หรือยกเลิกทั้งสายพร้อมกัน */
+    if (doc.rows[0].kind === 'IV' || doc.rows[0].kind === 'IVT') {
+      const rc = await c.query(
+        `select doc_no from documents
+          where parent_doc_id = $1 and kind = 'RC' and status <> 'void' and purged_at is null
+          order by doc_no limit 1`, [id]);
+      if (rc.rows[0]) {
+        throw new Error(
+          `${doc.rows[0].doc_no} มีใบเสร็จ ${rc.rows[0].doc_no} ที่ยังไม่ได้ยกเลิก — ` +
+          'ยกเลิกใบเสร็จก่อน หรือเลือกยกเลิกทั้งสายเอกสารพร้อมกัน',
+        );
+      }
+    }
 
     /* ใบที่ถูกวางบิลไปแล้วยกเลิกไม่ได้ — ลูกค้าถือใบวางบิลที่มีเลขใบนี้อยู่ในมือ
        ถ้าหายไปเฉย ๆ ยอดบนกระดาษกับในระบบจะไม่ตรงกันโดยไม่มีใครอธิบายได้ */
@@ -137,10 +162,20 @@ export async function voidSalesChainWith(
     throw new Error(`ยกเลิกทั้งสายไม่ได้ — มีใบที่ถูกรวมในใบวางบิลแล้ว: ${list} · เอาออกจากใบวางบิลก่อน`);
   }
 
-  /* ไล่จากปลายสายขึ้นต้นสาย — ผลลัพธ์เท่ากันไม่ว่าจะเรียงทางไหน (ตรวจแล้ว)
-     แต่ลำดับที่แน่นอนทำให้รายการเคลื่อนไหวสต๊อกและประวัติอ่านเรียงตามความเป็นจริง */
+  /* ไล่จากปลายสายขึ้นต้นสาย — **ใบต่อต้องถูกยกเลิกก่อนใบต้นทางเสมอ** เพราะใบส่งมอบที่ยังมีใบเสร็จ
+     ยกเลิกไม่ได้ (voidSalesDocWith) เรียงตามวันที่อย่างเดียวไม่พอ: ใบเสร็จลงวันที่ก่อนใบส่งมอบได้
+     จึงเรียงตามความเป็นแม่ลูกจริง แล้วค่อยใช้วันที่กับเลขที่ตัดสินในชั้นเดียวกัน */
   const { rows } = await c.query(
-    `select id from documents where id = any($1::uuid[]) order by doc_date desc, doc_no desc`, [ids]);
+    `select id, parent_doc_id from documents
+      where id = any($1::uuid[]) order by doc_date desc, doc_no desc`, [ids]);
 
-  for (const r of rows) await voidSalesDocWith(c, r.id, reason, userId);
+  const left = new Map(rows.map((r: any) => [r.id as string, (r.parent_doc_id as string | null) ?? null]));
+  while (left.size) {
+    /* ใบที่ไม่มีใบไหนในชุดที่เหลืออ้างเป็นต้นทาง = ปลายสายของรอบนี้ */
+    const parents = new Set([...left.values()].filter((p): p is string => p !== null && left.has(p)));
+    const leaf = [...left.keys()].find((id) => !parents.has(id));
+    if (!leaf) throw new Error('สายเอกสารอ้างถึงกันเป็นวง — ยกเลิกทั้งสายไม่ได้');
+    left.delete(leaf);
+    await voidSalesDocWith(c, leaf, reason, userId);
+  }
 }

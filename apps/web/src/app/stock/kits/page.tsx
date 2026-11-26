@@ -74,7 +74,7 @@ export default async function KitsPage({
                       <td className="mono docno">{k.code}</td>
                       <td className="wrap party">
                         <b>{k.name}</b>
-                        <div className="subtle" style={{ fontSize: 12 }}>
+                        <div className="subtle" style={{ fontSize: '0.875rem' }}>
                           {k.items.map((i) => i.name).join(', ')}
                         </div>
                       </td>

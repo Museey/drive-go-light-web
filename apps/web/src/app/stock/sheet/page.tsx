@@ -68,7 +68,7 @@ export default async function CountSheetPage({
         <a className="btn" href={`/stock/sheet/csv?${csvQs.toString()}`}>ส่งออกเป็น Excel</a>
 
         <div className="spacer" />
-        <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>{rows.length} รายการ</span>
+        <span style={{ color: 'var(--ink-3)', fontSize: '0.875rem' }}>{rows.length} รายการ</span>
         <PrintButton />
       </div>
 
@@ -82,7 +82,7 @@ export default async function CountSheetPage({
             </div>
             <div className="doc-meta">
               <h1>ใบตรวจนับสต๊อก</h1>
-              <div style={{ fontSize: 11, letterSpacing: '.08em' }}>STOCK COUNT SHEET</div>
+              <div style={{ fontSize: '0.875rem', letterSpacing: '.08em' }}>STOCK COUNT SHEET</div>
               <table style={{ marginTop: 4 }}>
                 <tbody>
                   <tr><td>ขอบเขต</td><td style={{ textAlign: 'right' }}>{scope}</td></tr>
@@ -93,7 +93,7 @@ export default async function CountSheetPage({
             </div>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, marginTop: 6 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', marginTop: 6 }}>
             <tbody>
               <tr>
                 <td style={{ padding: '4px 0' }}>ผู้นับ ......................................................</td>
@@ -126,7 +126,7 @@ export default async function CountSheetPage({
                     <td style={{ textAlign: 'center' }}>{i + 1}</td>
                     <td>{p.code}</td>
                     <td>{p.name}</td>
-                    <td style={{ fontSize: 10 }}>{p.categoryName ?? ''}</td>
+                    <td style={{ fontSize: '0.875rem' }}>{p.categoryName ?? ''}</td>
                     <td style={{ textAlign: 'center' }}>{p.unit}</td>
                     {showSys ? (
                       <td style={{ textAlign: 'right' }}>{fmtQty(p.qtyOnHand)}</td>
@@ -138,7 +138,7 @@ export default async function CountSheetPage({
             </table>
           )}
 
-          <div style={{ fontSize: 10.5, color: '#555', marginTop: 8, lineHeight: 1.6 }}>
+          <div style={{ fontSize: '0.875rem', color: '#555', marginTop: 8, lineHeight: 1.6 }}>
             นับของจริงในชั้นวางแล้วเขียนจำนวนลงช่อง “นับได้จริง”
             จากนั้นนำตัวเลขไปกรอกที่เมนู 05.5 ตรวจนับสต๊อก
             เพื่อให้ระบบปรับยอดและบันทึกส่วนต่างไว้เป็นหลักฐาน

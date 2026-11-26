@@ -266,6 +266,36 @@ describe.skipIf(!DB_URL)('งบกำไรขาดทุนกับต้น
     expect(pl.writeOff.claim).toBe(900);      // ใช้ต้นทุนที่ติดมา ไม่ใช่ 2 × 500
   });
 
+  /**
+   * กำไรสุทธิรายเดือนบวกกันต้องเท่ายอดรวมหัวงบ — เดิมแถวรายเดือนไม่หักของที่เคลม
+   * (ทั้งที่ตัดสต๊อกจริงและที่ย้ายเข้ามา) บวกทุกเดือนแล้วจึงได้กำไรมากกว่ายอดรวม
+   */
+  it('กำไรสุทธิรายเดือนรวมกันเท่ากับยอดรวม แม้มีใบเคลมและใบเคลมที่ย้ายเข้ามา', async () => {
+    await receiveStock(app, {
+      productId, qty: 10, costAmount: 5000, movedOn: '2026-01-15', reason: 'set',
+    });
+    await sell('RC-020', '2026-03-10', 4, 900);
+    await saveClaim(app, claim(), null);                       // ตัดสต๊อกจริง 2 × 500
+
+    const old = await admin.query(
+      `insert into claims (tenant_id, no, side, kind, claim_date, party_name, reason)
+       values ($1,'CL-เก่า-002','customer','warranty','2026-02-20','ลูกค้าเก่า','รับประกัน')
+       returning id`, [tenantId]);
+    await admin.query(
+      `insert into claim_items (tenant_id, claim_id, line_no, product_id, name,
+                                qty, unit_cost, cost_amount)
+       values ($1,$2,1,$3,'น้ำมันเครื่อง',2,500,900)`,
+      [tenantId, old.rows[0].id, productId]);
+
+    const pl = await profitAndLossWith(app);
+    expect(pl.writeOff.claim).toBe(1900);
+    const byMonth = pl.months.reduce((s, m) => s + m.netProfit, 0);
+    expect(Math.round(byMonth * 100) / 100).toBe(pl.netProfit);
+
+    const feb = pl.months.find((m) => m.key === '2026-02');
+    expect(feb?.ops, 'ใบเคลมที่ย้ายเข้ามาลงเดือนตามวันที่บนใบ').toBe(900);
+  });
+
   it('ใบเคลมที่ตัดสต๊อกแล้วไม่ถูกนับซ้ำจากทางลัดของใบที่ย้ายเข้ามา', async () => {
     await receiveStock(app, {
       productId, qty: 10, costAmount: 5000, movedOn: '2026-01-15', reason: 'set',
