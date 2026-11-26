@@ -17,6 +17,7 @@ import { receivablesWith } from '../src/lib/ar-ap';
 import { openInvoices, unbilledSummary } from '../src/lib/billnotes';
 import { recordPaymentWith } from '../src/lib/bulk-pay';
 import { contactTotalsWith } from '../src/lib/contact-totals';
+import { DEBT_PAID_SQL, RECEIPT_MIRROR_PREFIX } from '../src/lib/debt-paid';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
 pg.types.setTypeParser(1082, (v) => v);
@@ -132,6 +133,76 @@ describe.skipIf(!DB_URL)('ยอดค้างชำระของคู่ใ
       docId: rc, paidOn: '2026-03-03', amount: 700, method: 'เงินสด', ref: '',
     });
     expect((await receivablesWith(app)).total).toBe(0);
+  });
+
+  /* ---------- ข้อมูลที่นำเข้าจากรุ่น 6.4 — เงินตามใบเสร็จถูกคัดลอกไว้ที่ใบส่งมอบด้วย ---------- */
+
+  const mirror = (ivId: string, rcNo: string, amount: number) => admin.query(
+    `insert into payments (tenant_id, doc_id, paid_on, amount, method, ref)
+     values ($1,$2,'2026-03-02',$3,'เงินโอน',$4)`, [tenantId, ivId, amount, `${RECEIPT_MIRROR_PREFIX}${rcNo}`]);
+
+  const paidOf = async (docId: string): Promise<number> => {
+    const { rows } = await app.query(
+      `select coalesce((select dp.paid from ${DEBT_PAID_SQL} dp where dp.doc_id = $1), 0)::float8 as paid`, [docId]);
+    return rows[0].paid;
+  };
+
+  it('ข้อมูลจาก 6.4: จ่ายครบตามใบเสร็จ มีสำเนาที่ใบส่งมอบ — ยอดชำระไม่เป็นสองเท่า', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    const rc = await sellDoc('RC', 'RC-001', 1000, iv);
+    await pay(rc, 1000);
+    await mirror(iv, 'RC-001', 1000);
+
+    expect(await paidOf(iv)).toBe(1000);
+    expect(await paidOf(rc)).toBe(1000);
+    expect((await receivablesWith(app)).total).toBe(0);
+    expect((await contactTotalsWith(app)).get(custId)).toEqual({ spent: 1000, owe: 0 });
+  });
+
+  it('ข้อมูลจาก 6.4: รับมาครึ่งเดียว — ยังค้างอีกครึ่ง ไม่ใช่ดูเหมือนจ่ายครบ', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    const rc = await sellDoc('RC', 'RC-001', 1000, iv);
+    await pay(rc, 500);
+    await mirror(iv, 'RC-001', 500);
+
+    expect(await paidOf(iv)).toBe(500);
+    expect(await paidOf(rc)).toBe(500);
+    const ar = await receivablesWith(app);
+    expect(ar.rows.map((r) => [r.docNo, r.paid, r.outstanding])).toEqual([['RC-001', 500, 500]]);
+    expect(ar.total).toBe(500);
+    const open = await openInvoices(app, { partyId: custId });
+    expect(open.map((o) => [o.docNo, o.outstanding])).toEqual([['RC-001', 500]]);
+    expect((await contactTotalsWith(app)).get(custId)).toEqual({ spent: 1000, owe: 500 });
+  });
+
+  it('ข้อมูลจาก 6.4: เงินที่รับที่ใบส่งมอบเองก่อนออกใบเสร็จ ยังนับ — ตัดเฉพาะแถวสำเนา', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    await pay(iv, 300);                       // รับจริงที่ใบส่งมอบ
+    const rc = await sellDoc('RC', 'RC-001', 1000, iv);
+    await pay(rc, 200);                       // รับจริงที่ใบเสร็จ
+    await mirror(iv, 'RC-001', 200);          // สำเนาของ 200 ข้างบน
+
+    expect(await paidOf(iv)).toBe(500);
+    expect(await paidOf(rc)).toBe(500);
+    expect((await receivablesWith(app)).total).toBe(500);
+  });
+
+  it('อ้างอิงหน้าตาคล้ายสำเนาแต่ไม่ตรงกับใบเสร็จของใบนั้น — เป็นเงินจริง ต้องนับ', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    await mirror(iv, 'RC-999', 400);          // ไม่มีใบเสร็จเลขนี้ต่อจากใบนี้
+    expect(await paidOf(iv)).toBe(400);
+    expect((await receivablesWith(app)).total).toBe(600);
+  });
+
+  it('ข้อมูลจาก 6.4: ใบเสร็จถูกยกเลิก — สำเนาที่ค้างอยู่ที่ใบส่งมอบไม่ทำให้หนี้หาย', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    const rc = await sellDoc('RC', 'RC-001', 1000, iv);
+    await pay(rc, 1000);
+    await mirror(iv, 'RC-001', 1000);
+    await admin.query(`update documents set status = 'void', voided_at = now() where id = $1`, [rc]);
+
+    expect(await paidOf(iv)).toBe(0);
+    expect((await receivablesWith(app)).total).toBe(1000);
   });
 
   it('ใบส่งมอบเดี่ยวและใบเสร็จขายหน้าร้าน — ได้ยอดเท่าเดิมทุกประการ', async () => {
