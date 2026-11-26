@@ -17,3 +17,15 @@ export function taxIdBoxes(value: unknown): string[] {
   const d = taxIdDigits(value);
   return Array.from({ length: TAX_ID_LEN }, (_, i) => d[i] ?? '');
 }
+
+/**
+ * หลักที่ 13 ตรงกับสูตรของกรมการปกครอง / สรรพากรไหม — ใช้ได้ทั้งเลขบัตรประชาชนและเลขนิติบุคคล
+ * ไม่ได้บอกว่าเลขนี้มีอยู่จริง แค่จับเลขที่พิมพ์ผิดหนึ่งหลักหรือสลับหลักได้เกือบทั้งหมด
+ */
+export function taxIdChecksumOk(value: unknown): boolean {
+  const d = taxIdDigits(value);
+  if (d.length !== TAX_ID_LEN) return false;
+  let s = 0;
+  for (let i = 0; i < 12; i++) s += Number(d[i]) * (13 - i);
+  return (11 - (s % 11)) % 10 === Number(d[12]);
+}

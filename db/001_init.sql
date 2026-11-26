@@ -54,7 +54,7 @@ create table tenants (
   -- จดภาษีมูลค่าเพิ่มหรือไม่ (036) — false = เอกสารรายรับไม่คิด VAT และออกใบกำกับภาษีไม่ได้
   vat_registered  boolean      not null default true,
   wht_rate        numeric(6,3) not null default 3,         -- % ค่าตั้งต้นของเอกสารขาย
-  wht_base        text        not null default 'labour' check (wht_base in ('labour', 'all')),  -- ฐานหัก ณ ที่จ่าย (040)
+  wht_base        text        not null default 'labour' check (wht_base in ('labour', 'all')),  -- ฐานหัก ณ ที่จ่าย (041)
   price_tier      char(1)      not null default 'A' check (price_tier in ('A','B','C')),
   logo_url        text,                                    -- ย้ายจาก base64 ไป object storage
   owner_name      text        not null default '',           -- ชื่อเจ้าของกิจการ (023)
@@ -65,7 +65,7 @@ create table tenants (
   bank_name         text        not null default '',
   bank_account_no   text        not null default '',
   bank_account_name text        not null default '',
-  -- คิวอาร์รับเงินพร้อมเพย์บนเอกสาร (039) — เลขว่าง = ไม่มีคิวอาร์ · สวิตช์แยกตามชนิดเอกสาร
+  -- คิวอาร์รับเงินพร้อมเพย์บนเอกสาร (040) — เลขว่าง = ไม่มีคิวอาร์ · สวิตช์แยกตามชนิดเอกสาร
   promptpay_id      text        not null default '',
   qr_on_invoice     boolean     not null default false,
   qr_on_receipt     boolean     not null default false,
@@ -86,13 +86,13 @@ comment on column tenants.ui_prefs is
   'ค่าปรับแต่งหน้าจอระดับร้าน เช่น {"stockHide":["oem","max"]} — ไม่ใช่ข้อมูลธุรกิจ ไม่ต้อง migrate เข้มงวด';
 
 comment on column tenants.wht_base is
-  'ฐานหัก ณ ที่จ่ายของเอกสารขาย — labour = เฉพาะค่าแรง (ค่าตั้งต้น) · all = มูลค่าก่อน VAT ทั้งใบ (040)';
+  'ฐานหัก ณ ที่จ่ายของเอกสารขาย — labour = เฉพาะค่าแรง (ค่าตั้งต้น) · all = มูลค่าก่อน VAT ทั้งใบ (041)';
 comment on column tenants.promptpay_id is
-  'เลขพร้อมเพย์ของอู่ — เบอร์มือถือ 10 หลัก เลขประจำตัวผู้เสียภาษี 13 หลัก หรือ e-Wallet 15 หลัก · ว่าง = ไม่มีคิวอาร์ (039)';
+  'เลขพร้อมเพย์ของอู่ — เบอร์มือถือ 10 หลัก เลขประจำตัวผู้เสียภาษี 13 หลัก หรือ e-Wallet 15 หลัก · ว่าง = ไม่มีคิวอาร์ (040)';
 comment on column tenants.qr_on_invoice is
-  'พิมพ์คิวอาร์รับเงินบนใบส่งมอบ/ใบแจ้งหนี้/ใบกำกับภาษี (IV, IVT) (039)';
+  'พิมพ์คิวอาร์รับเงินบนใบส่งมอบ/ใบแจ้งหนี้/ใบกำกับภาษี (IV, IVT) (040)';
 comment on column tenants.qr_on_receipt is
-  'พิมพ์คิวอาร์รับเงินบนใบเสร็จรับเงิน (RC) เมื่อยังมียอดค้าง (039)';
+  'พิมพ์คิวอาร์รับเงินบนใบเสร็จรับเงิน (RC) เมื่อยังมียอดค้าง (040)';
 
 comment on column tenants.vat_registered is
   'จดภาษีมูลค่าเพิ่มหรือไม่ — false = เอกสารรายรับใบใหม่ไม่คิด VAT และออกใบกำกับภาษี (IVT) ไม่ได้ · ใบเก่าคงตามเดิม (036)';
@@ -153,8 +153,8 @@ create table subscriptions (
 create index on subscriptions (tenant_id, expires_on desc);
 
 -- ---------------------------------------------------------------------
--- คำขอต่ออายุที่รอผู้ให้บริการตรวจการชำระเงิน (038)
--- นโยบาย ops_read กับฟังก์ชันอนุมัติอยู่ใน 038 เพราะอ้างสคีมา ops ที่ยังไม่มีตอนรันไฟล์นี้
+-- คำขอต่ออายุที่รอผู้ให้บริการตรวจการชำระเงิน (039)
+-- นโยบาย ops_read กับฟังก์ชันอนุมัติอยู่ใน 039 เพราะอ้างสคีมา ops ที่ยังไม่มีตอนรันไฟล์นี้
 -- ---------------------------------------------------------------------
 create table renewal_requests (
   id              uuid primary key default gen_random_uuid(),
@@ -182,7 +182,7 @@ create table renewal_requests (
 );
 
 comment on table renewal_requests is
-  'คำขอต่ออายุที่อู่แจ้งชำระเงินมา — ผู้ให้บริการอนุมัติในคอนโซลแล้วจึงเกิดแถวใน subscriptions (038)';
+  'คำขอต่ออายุที่อู่แจ้งชำระเงินมา — ผู้ให้บริการอนุมัติในคอนโซลแล้วจึงเกิดแถวใน subscriptions (039)';
 
 create index renewal_requests_tenant_idx
   on renewal_requests (tenant_id, created_at desc);
@@ -1200,8 +1200,8 @@ create policy product_suppliers_tenant on product_suppliers
 create index documents_purged_idx on documents (tenant_id, purged_at) where purged_at is not null;
 
 -- =====================================================================
--- DriveGo Light Plus (041) — พนักงาน งวดเงินเดือน นัดหมาย
--- เนื้อหาเดียวกับ db/041_plus.sql ทุกบรรทัด (migrations.test.ts เทียบสองทาง)
+-- DriveGo Light Plus (042) — พนักงาน งวดเงินเดือน นัดหมาย
+-- เนื้อหาเดียวกับ db/042_plus.sql ทุกบรรทัด (migrations.test.ts เทียบสองทาง)
 -- แพ็กเกจดูจาก subscriptions.plan — ดู apps/web/src/lib/plan-core.ts
 -- =====================================================================
 -- ---------------------------------------------------------------------
@@ -1236,7 +1236,7 @@ create table employees (
 );
 
 comment on table employees is
-  'ทะเบียนพนักงานของอู่ (Light Plus · 041) — ไม่ลบ มีแต่ปิดใช้งาน เพราะงวดเงินเดือนเก่าอ้างถึง';
+  'ทะเบียนพนักงานของอู่ (Light Plus · 042) — ไม่ลบ มีแต่ปิดใช้งาน เพราะงวดเงินเดือนเก่าอ้างถึง';
 
 -- ---------------------------------------------------------------------
 -- งวดเงินเดือน — เดือนละหนึ่งงวดต่ออู่
@@ -1256,7 +1256,7 @@ create table payroll_runs (
 );
 
 comment on table payroll_runs is
-  'งวดเงินเดือน เดือนละหนึ่งงวดต่ออู่ (Light Plus · 041)';
+  'งวดเงินเดือน เดือนละหนึ่งงวดต่ออู่ (Light Plus · 042)';
 
 -- บรรทัดของงวด — ชื่อ ตำแหน่ง เลขผู้เสียภาษี ตรึงไว้ ณ วันจ่าย
 -- สลิปและ ภ.ง.ด.1 ของงวดเก่าต้องไม่เปลี่ยนตามทะเบียนพนักงานที่แก้ทีหลัง
@@ -1320,7 +1320,7 @@ create index on appointments (tenant_id, appt_date);
 create index appointments_open_idx on appointments (tenant_id, appt_date) where status = 'open';
 
 comment on table appointments is
-  'นัดเข้าซ่อมและรายการเตือนลูกค้า (Light Plus · 041) — ชื่อ/เบอร์/ทะเบียนตรึงเป็นข้อความ รอดจากการกู้คืนไฟล์สำรอง';
+  'นัดเข้าซ่อมและรายการเตือนลูกค้า (Light Plus · 042) — ชื่อ/เบอร์/ทะเบียนตรึงเป็นข้อความ รอดจากการกู้คืนไฟล์สำรอง';
 
 -- updated_at อัตโนมัติ — ฟังก์ชันเดียวกับตารางหลัก (001)
 create trigger employees_touch before update on employees

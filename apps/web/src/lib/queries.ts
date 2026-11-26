@@ -33,8 +33,8 @@ export interface ShopInfo {
   bankAccounts: { bank: string; no: string; name: string }[];
   /** เตือนล่วงหน้ากี่วันก่อนของหมดอายุ ตั้งได้ที่หน้าตั้งค่าร้าน */
   expiryWarnDays: number;
-  /** คิวอาร์รับเงินพร้อมเพย์บนเอกสาร (039) — ดู lib/pay-qr.ts */
-  /** ฐานหัก ณ ที่จ่ายของเอกสารขาย (040) */
+  /** คิวอาร์รับเงินพร้อมเพย์บนเอกสาร (040) — ดู lib/pay-qr.ts */
+  /** ฐานหัก ณ ที่จ่ายของเอกสารขาย (041) */
   whtBase: 'labour' | 'all';
   promptpayId: string;
   qrOnInvoice: boolean;

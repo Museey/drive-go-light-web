@@ -63,7 +63,7 @@ export const lineIncome = (l: PayLine): number =>
 export const lineDeduct = (l: PayLine): number =>
   round2(nonNeg(l.sso) + nonNeg(l.wht) + nonNeg(l.otherDeduct));
 
-/** ยอดจ่ายสุทธิ — สูตรเดียวกับคอลัมน์ net ที่ฐานข้อมูลคิดเอง (db/041_plus.sql) */
+/** ยอดจ่ายสุทธิ — สูตรเดียวกับคอลัมน์ net ที่ฐานข้อมูลคิดเอง (db/042_plus.sql) */
 export const lineNet = (l: PayLine): number => round2(lineIncome(l) - lineDeduct(l));
 
 /** ค่าเสนอของบรรทัดใหม่จากทะเบียนพนักงาน */

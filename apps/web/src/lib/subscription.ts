@@ -80,7 +80,7 @@ export async function listRenewalRequests(): Promise<RenewalRequestRow[]> {
  * เดิมฟังก์ชันตรงนี้เพิ่มแถวใน subscriptions ให้ทันที ใครเข้าเมนูตั้งค่าได้ก็ต่ออายุเองได้
  * 1–10 ปีโดยไม่ต้องจ่ายเงิน ตอนนี้อู่ทำได้แค่ส่งคำขอพร้อมรายละเอียดการโอน
  * ผู้ให้บริการตรวจยอดกับบัญชีธนาคารแล้วอนุมัติในคอนโซล (ops.approve_renewal_request)
- * วันใช้งานจึงเพิ่มได้ทางเดียวคือผ่านคนที่เห็นเงินเข้าจริง (db/038_renewal_requests.sql)
+ * วันใช้งานจึงเพิ่มได้ทางเดียวคือผ่านคนที่เห็นเงินเข้าจริง (db/039_renewal_requests.sql)
  */
 export async function requestRenewal(input: {
   years: number;

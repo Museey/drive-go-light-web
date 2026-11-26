@@ -55,7 +55,7 @@ export async function saveShopAction(_prev: FormResult, fd: FormData): Promise<F
       .filter((x) => x.no.trim() || x.bank.trim());
   } catch { banks = []; }
   fd.set('bankName', banks[0]?.bank ?? ''); fd.set('bankAccountNo', banks[0]?.no ?? ''); fd.set('bankAccountName', banks[0]?.name ?? '');
-  /* คิวอาร์รับเงิน (039) — เลขพร้อมเพย์ผิดรูปแบบ = คิวอาร์ที่สแกนแล้วโอนไม่ได้ จึงไม่ยอมให้บันทึก
+  /* คิวอาร์รับเงิน (040) — เลขพร้อมเพย์ผิดรูปแบบ = คิวอาร์ที่สแกนแล้วโอนไม่ได้ จึงไม่ยอมให้บันทึก
      เปิดสวิตช์ทั้งที่ยังไม่มีเลขก็ไม่ยอม ไม่งั้นผู้ใช้เข้าใจว่าเปิดแล้วแต่เอกสารไม่มีคิวอาร์ */
   const promptpayRaw = str(fd, 'promptpayId');
   const promptpay = promptpayRaw ? parsePromptPayId(promptpayRaw) : null;

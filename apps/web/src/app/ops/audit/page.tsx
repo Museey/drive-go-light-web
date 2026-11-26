@@ -13,6 +13,10 @@ function detailOf(action: string, d: Record<string, unknown>): string {
   if (d.email) parts.push(String(d.email));
   if (action === 'record_renewal' && d.to) parts.push(`ถึง ${String(d.to).slice(0, 10)}`);
   if (action === 'record_renewal' && d.amount) parts.push(`${d.amount} บาท`);
+  if ((action === 'approve_request' || action === 'reject_request') && d.shop) parts.push(String(d.shop));
+  if (action === 'approve_request' && d.amount) parts.push(`รับ ${d.amount} บาท`);
+  if (action === 'approve_request' && d.to) parts.push(`ใช้ได้ถึง ${String(d.to).slice(0, 10)}`);
+  if (action === 'reject_request' && d.reason) parts.push(String(d.reason));
   if (action === 'set_max_users') {
     parts.push(d.max_users === null ? 'ไม่จำกัด' : `${d.max_users} ที่นั่ง`);
   }

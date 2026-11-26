@@ -310,7 +310,7 @@ export async function exportBackupWith(
         _bankAccounts: Array.isArray(s.bank_accounts) ? s.bank_accounts : [],
         /* จด VAT หรือไม่ (036) — กู้คืนแล้วร้านที่ไม่จดต้องไม่กลับมาออกใบกำกับภาษีได้เอง */
         _vatRegistered: s.vat_registered !== false,
-        /* คิวอาร์รับเงินบนเอกสาร (039) */
+        /* คิวอาร์รับเงินบนเอกสาร (040) */
         _whtBase: s.wht_base === 'all' ? 'all' : 'labour',
         _promptpayId: s.promptpay_id ?? '',
         _qrOnInvoice: s.qr_on_invoice === true,
@@ -463,7 +463,7 @@ export async function exportBackupWith(
         })),
       } : {}),
 
-      /* ข้อมูลของ Light Plus — นัดหมาย ทะเบียนพนักงาน งวดเงินเดือน (041) · ดู lib/plus-backup.ts */
+      /* ข้อมูลของ Light Plus — นัดหมาย ทะเบียนพนักงาน งวดเงินเดือน (042) · ดู lib/plus-backup.ts */
       _plus: plus,
 
       lic: sub.rows[0]

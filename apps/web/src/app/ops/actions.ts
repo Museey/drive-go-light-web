@@ -5,7 +5,7 @@ import {
   appUrl, newSetupToken, opsSetupUrl, requireOperator, shopSetupUrl,
 } from '@/lib/ops-auth';
 import {
-  addOperator, approveRenewalRequest, issueOwnerReset, openShop, recordRenewal,
+  addOperator, approveRenewalRequest, decideRequest, issueOwnerReset, openShop, recordRenewal,
   rejectRenewalRequest, setMaxUsers, setOperatorActive,
 } from '@/lib/ops-console';
 import type { FormResult } from '@/lib/mutate';
@@ -156,4 +156,40 @@ export async function toggleOperatorAction(operatorId: string, active: boolean):
   const s = await requireOperator();
   await setOperatorActive(s, operatorId, active);
   revalidatePath('/ops/operators');
+}
+
+/**
+ * อนุมัติหรือปฏิเสธคำขอที่แนบสลิป — ฐานข้อมูลล็อกแถวและตรวจสถานะเอง กดซ้ำสองคนพร้อมกันได้อู่เดียว
+ * อนุมัติต้องติ๊กว่าตรวจยอดในบัญชีธนาคารแล้ว · ลิงก์ตั้งรหัสผ่านแสดงครั้งเดียวแบบเดียวกับเปิดอู่ใหม่
+ */
+export async function decideRequestAction(_prev: LinkResult, fd: FormData): Promise<LinkResult> {
+  const s = await requireOperator();
+  const id = str(fd, 'id');
+  const approve = str(fd, 'decision') === 'approve';
+  if (!id) return { error: 'ไม่รู้ว่าเป็นคำขอไหน' };
+
+  if (!approve) {
+    const reason = str(fd, 'reason') === 'other' ? str(fd, 'reasonText') : str(fd, 'reason');
+    if (!reason) return { error: 'เลือกหรือพิมพ์เหตุผลที่ปฏิเสธ', field: 'reason' };
+    try {
+      await decideRequest(s, id, { approve: false, reason });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'ปฏิเสธไม่สำเร็จ' };
+    }
+    revalidatePath('/ops/requests');
+    return { ok: true };
+  }
+
+  if (fd.get('checked') !== 'on') {
+    return { error: 'ติ๊กยืนยันว่าตรวจยอดเข้าบัญชีธนาคารแล้วก่อน — สลิปอย่างเดียวปลอมได้', field: 'checked' };
+  }
+  const t = newSetupToken();
+  try {
+    const r = await decideRequest(s, id, { approve: true, tokenHash: t.hash, expiresAt: t.expiresAt });
+    revalidatePath('/ops/requests');
+    revalidatePath('/ops');
+    return { ok: true, link: shopSetupUrl(appUrl(), t.token), email: r?.ownerEmail };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'อนุมัติไม่สำเร็จ' };
+  }
 }

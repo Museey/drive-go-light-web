@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { Icon, type IconName } from './icon';
 import { VENDOR } from '@/lib/vendor';
-import { TRIAL_DAYS } from '@/lib/license-window';
 import { PRODUCT_LIMIT } from '@drivegolight/core';
 
 /**
@@ -12,7 +11,8 @@ import { PRODUCT_LIMIT } from '@drivegolight/core';
  *
  * **ห้ามเรียกฐานข้อมูลจากหน้านี้** — คนที่เปิดเข้ามายังไม่มีสิทธิ์อะไรทั้งนั้น
  * และหน้าแนะนำระบบไม่ควรล่มตามฐานข้อมูล ทุกอย่างในนี้จึงเป็นข้อความคงที่
- * เลขที่อ้างถึง (วันทดลองใช้ · จำนวนสินค้าสูงสุด) อ่านจากตัวจริงที่ระบบใช้บังคับ ไม่ได้พิมพ์ซ้ำ
+ * เลขที่อ้างถึง (จำนวนสินค้าสูงสุด) อ่านจากตัวจริงที่ระบบใช้บังคับ ไม่ได้พิมพ์ซ้ำ
+ * ไม่พูดถึงการทดลองใช้ฟรีแล้ว — สมัครผ่าน /signup ต้องโอนเงินก่อน (ผู้ใช้กำหนด 25 พ.ย. 2569)
  *
  * ฟอนต์ไทยโหลดจาก Google Fonts เฉพาะหน้านี้ (โยงไว้ใน app/welcome/font.tsx)
  * ถ้าโหลดไม่ได้ก็ตกไปใช้ฟอนต์ชุดเดียวกับทั้งระบบตามปกติ
@@ -231,11 +231,11 @@ export function Landing() {
             </p>
             <div className="lp-cta">
               <Link className="btn primary lp-btn-lg" href="/login">เข้าสู่ระบบ</Link>
+              <Link className="btn lp-btn-lg" href="/signup">สมัครใช้บริการ</Link>
               <a className="btn lp-btn-lg" href="#features">ดูว่าทำอะไรได้บ้าง</a>
             </div>
             <p className="lp-micro">
-              ทดลองใช้ฟรี {TRIAL_DAYS} วัน นับจากวันเปิดบัญชี · ข้อมูลเป็นของอู่
-              ส่งออกเก็บไว้เองได้ทุกเมื่อ
+              ข้อมูลเป็นของอู่ ส่งออกเก็บไว้เองได้ทุกเมื่อ
             </p>
           </div>
 
@@ -380,10 +380,11 @@ export function Landing() {
           <div className="lp-in lp-narrow">
             <h2>ให้เราช่วยจัดการงานเอกสารของอู่คุณไหม</h2>
             <p className="lp-sub">
-              ใช้อยู่แล้วกดเข้าสู่ระบบได้เลย ยังไม่มีบัญชีอู่ ติดต่อเราเพื่อเปิดให้และทดลองใช้ฟรี {TRIAL_DAYS} วัน
+              ใช้อยู่แล้วกดเข้าสู่ระบบได้เลย ยังไม่มีบัญชีอู่ สมัครใช้บริการออนไลน์ หรือติดต่อเราให้ช่วยเปิดให้
             </p>
             <div className="lp-cta">
               <Link className="btn primary lp-btn-lg" href="/login">เข้าสู่ระบบ</Link>
+              <Link className="btn lp-btn-lg" href="/signup">สมัครใช้บริการ</Link>
               <a className="btn lp-btn-lg" href={VENDOR.telHref}>โทร {VENDOR.tel}</a>
               <a className="btn lp-btn-lg" href={VENDOR.line} target="_blank" rel="noreferrer noopener">
                 ทักทาง LINE
@@ -419,6 +420,7 @@ export function Landing() {
               <b>ลิงก์</b>
               <p>
                 <Link href="/login">เข้าสู่ระบบ</Link><br />
+                <Link href="/signup">สมัครใช้บริการ</Link><br />
                 <Link href="/privacy">นโยบายข้อมูลส่วนบุคคล</Link>
               </p>
             </div>

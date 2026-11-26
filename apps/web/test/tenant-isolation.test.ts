@@ -68,7 +68,7 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
         `insert into subscriptions (tenant_id, plan, started_on, expires_on)
          values ($1, 'light-yearly', current_date, current_date + 365)`, [t],
       );
-      /* คำขอต่ออายุที่รอตรวจการชำระเงิน (ไมเกรชัน 038) */
+      /* คำขอต่ออายุที่รอตรวจการชำระเงิน (ไมเกรชัน 039) */
       await admin.query(
         `insert into renewal_requests (tenant_id, years, amount, paid_on, note)
          values ($1, 1, 3600, current_date, 'โอนทดสอบ')`, [t],
@@ -147,7 +147,7 @@ describe.skipIf(!DB_URL)('การแยกข้อมูลระหว่า
         [t, kit.rows[0].id, someProduct.rows[0].id],
       );
 
-      /* DriveGo Light Plus (ไมเกรชัน 041) — พนักงาน งวดเงินเดือน นัดหมาย · ไฟล์ชุดทดสอบของรุ่น 6.4 ไม่มีข้อมูลนี้
+      /* DriveGo Light Plus (ไมเกรชัน 042) — พนักงาน งวดเงินเดือน นัดหมาย · ไฟล์ชุดทดสอบของรุ่น 6.4 ไม่มีข้อมูลนี้
          เงินเดือนเป็นข้อมูลที่รั่วข้ามอู่แล้วเสียหายที่สุด ตารางว่างพิสูจน์อะไรไม่ได้ */
       const emp = await admin.query(
         `insert into employees (tenant_id, code, name, base_salary)

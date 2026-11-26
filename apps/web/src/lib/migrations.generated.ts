@@ -40,8 +40,9 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '035_error_dedup.sql',
   '036_vat_registered.sql',
   '037_usage_activity.sql',
-  '038_renewal_requests.sql',
-  '039_promptpay_qr.sql',
-  '040_wht_base.sql',
-  '041_plus.sql',
+  '038_payment_requests.sql',
+  '039_renewal_requests.sql',
+  '040_promptpay_qr.sql',
+  '041_wht_base.sql',
+  '042_plus.sql',
 ];

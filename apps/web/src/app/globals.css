@@ -1574,7 +1574,7 @@ table.hist.fit.cust td, table.hist.fit.cust th { vertical-align: middle; }
 .paper.doc2 table.totals2 { width: 17.5rem; max-width: 100%; font-size: .875rem; }
 .paper.doc2 table.totals2 td + td { text-align: right; }
 .paper.doc2 .bankline2 { margin-top: .5rem; font-size: .8125rem; }
-/* คิวอาร์รับเงินพร้อมเพย์ (039) — รูปซ้าย ข้อความขวา แทนที่บรรทัดบัญชีธนาคารเมื่อเปิดใช้ */
+/* คิวอาร์รับเงินพร้อมเพย์ (040) — รูปซ้าย ข้อความขวา แทนที่บรรทัดบัญชีธนาคารเมื่อเปิดใช้ */
 .paper.doc2 .payqr { display: flex; align-items: center; gap: .75rem; margin-top: .5rem; font-size: .8125rem; line-height: 1.5; }
 .paper.doc2 .payqr img { width: 5.75rem; height: 5.75rem; flex: none; border: 1px solid #000; }
 .paper.doc2 .payqr .payqr-bank { font-size: .75rem; }
@@ -2377,3 +2377,91 @@ table.hist.fit .row-acts.line { flex-wrap: nowrap; }
 .saved-card .next { border-top: 1px dashed var(--line); padding-top: .5rem; display: grid; gap: .375rem; }
 .saved-card .next-h { font-size: .875rem; color: var(--ink-3); }
 .saved-card .next .acts { margin-top: 0; }
+
+/* =====================================================================
+   หน้าสมัครใช้บริการ /signup — ย้ายจากฟอร์มที่ทีมทำ (25 พ.ย. 2569)
+   เปิดได้โดยไม่ต้องเข้าสู่ระบบ ไม่มีแถบเมนู · จอแคบเป็นคอลัมน์เดียว จอกว้างเป็นกริด 6 ช่อง
+   ===================================================================== */
+.su { min-height: 100vh; background: var(--bg); }
+.su-wrap { max-width: 54rem; margin: 0 auto; padding: 0 16px; }
+.su-head { background: var(--card); border-bottom: 1px solid var(--line-2); padding: 22px 0 24px; }
+.su-logo { font-weight: 700; font-size: 1.5rem; color: var(--ink); text-decoration: none; }
+.su-logo em { color: var(--accent); font-style: italic; }
+.su-head h1 { margin: 8px 0 4px; font-size: 1.3rem; font-weight: 600; }
+.su-head p { margin: 0; color: var(--ink-2); font-size: .95rem; }
+.su-main { padding-top: 18px; padding-bottom: 18px; }
+.su-req::after { content: ' *'; color: var(--due); }
+
+.su-card { padding: 20px 18px 14px; margin-bottom: 16px; }
+.su-card h2 { margin: 0 0 4px; font-size: 1.08rem; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.su-num {
+  display: inline-flex; width: 28px; height: 28px; border-radius: 50%; flex: none;
+  background: var(--brand); color: #fff; align-items: center; justify-content: center; font-size: .9rem; font-weight: 700;
+}
+.su-sub { color: var(--ink-3); font-size: .88rem; margin: 0 0 14px; }
+
+.su-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.su-f { min-width: 0; }
+.su-lbl { display: block; font-size: .9rem; font-weight: 500; margin-bottom: 5px; }
+.su-f .in, .su-f select { width: 100%; }
+.su-hint { font-size: .8rem; color: var(--ink-3); margin-top: 4px; }
+.su-msg { font-size: .82rem; color: var(--due); margin-top: 4px; }
+.su-f.bad .in, .su-f.bad select { border-color: var(--due); background: #FCF1F1; }
+
+.su-opts { display: flex; flex-wrap: wrap; gap: 10px; }
+.su-opt {
+  flex: 1 1 13rem; display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--card);
+}
+.su-opt input { margin-top: 5px; accent-color: var(--brand); flex: none; }
+.su-opt b { font-weight: 500; display: block; }
+.su-opt small { color: var(--ink-3); font-size: .8rem; display: block; line-height: 1.45; }
+.su-opt.on { border-color: var(--steel); background: var(--steel-soft); }
+.su-f.bad .su-opt { border-color: var(--due); }
+.su-brno { margin-top: 10px; }
+
+.su-tip {
+  background: var(--steel-soft); border: 1px solid #BFE6D2; border-left: 4px solid var(--accent);
+  border-radius: 8px; padding: 10px 14px; font-size: .86rem; color: var(--steel-dk); margin-bottom: 14px;
+}
+.su-tip ul { margin: 4px 0 0; padding-left: 20px; }
+
+.su-pay { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
+.su-quote { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.su-quote th { text-align: left; font-weight: 400; color: var(--ink-2); padding: 6px 0; border-bottom: 1px solid var(--line-2); }
+.su-quote td { text-align: right; padding: 6px 0; border-bottom: 1px solid var(--line-2); font-variant-numeric: tabular-nums; }
+.su-quote tr.tot th, .su-quote tr.tot td { font-weight: 700; color: var(--ink); border-bottom: 0; font-size: 1.05rem; }
+.su-bank { border: 1px dashed var(--steel); border-radius: 8px; padding: 12px 14px; background: var(--bg); line-height: 1.7; }
+.su-bank .t { font-size: .78rem; color: var(--ink-3); }
+.su-bank .no { font-size: 1.2rem; font-weight: 700; letter-spacing: .03em; }
+.su-when { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.su-when > .in { width: 96px; }
+
+.su-attach { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.su-attach img { max-height: 160px; max-width: 120px; border: 1px solid var(--line); border-radius: 6px; object-fit: contain; background: #fff; }
+.su-attach label.btn { cursor: pointer; }
+.su-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.su-f.bad .su-attach label.btn { border-color: var(--due); }
+
+.su-chk { display: flex; gap: 10px; align-items: flex-start; font-size: .92rem; margin: 6px 0; }
+.su-chk input { margin-top: 5px; accent-color: var(--brand); flex: none; width: 17px; height: 17px; }
+.su-alert { margin-bottom: 14px; }
+.su-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.su-actions .btn { padding: 10px 26px; font-size: 1rem; font-weight: 600; }
+.su-steps { font-size: .95rem; padding-left: 22px; margin: 10px 0 14px; line-height: 1.8; }
+.su-done h2 { color: var(--steel-dk); }
+.su-foot { background: var(--ink); color: #A9B7C1; font-size: .82rem; padding: 22px 0 30px; line-height: 1.8; }
+.su-foot b { color: #fff; font-weight: 500; }
+.su-foot a { color: #fff; }
+/* ช่องกับดักบอต — ซ่อนจากคนแต่ยังอยู่ในฟอร์ม (display:none บอตบางตัวข้าม) */
+.su-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+@media (min-width: 768px) {
+  .su-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px 16px; }
+  .su-f.c2 { grid-column: span 2; }
+  .su-f.c3 { grid-column: span 3; }
+  .su-f.c4 { grid-column: span 4; }
+  .su-f.c6 { grid-column: span 6; }
+  .su-pay { grid-template-columns: 1.3fr 1fr; align-items: start; }
+  .su-card { padding: 22px 22px 16px; }
+}

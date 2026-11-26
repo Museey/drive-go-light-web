@@ -1,5 +1,5 @@
 -- =====================================================================
--- 041 — DriveGo Light Plus (24 พ.ย. 2569)
+-- 042 — DriveGo Light Plus (24 พ.ย. 2569)
 --
 -- ผู้ใช้ขอ: เพิ่มฟีเจอร์เป็นแพ็กเกจ "Light Plus" ในระบบเดียวกับ Light แยกตามแพ็กเกจ
 --   1. เงินเดือนและพนักงาน      employees · payroll_runs · payroll_items
@@ -48,7 +48,7 @@ create table employees (
 );
 
 comment on table employees is
-  'ทะเบียนพนักงานของอู่ (Light Plus · 041) — ไม่ลบ มีแต่ปิดใช้งาน เพราะงวดเงินเดือนเก่าอ้างถึง';
+  'ทะเบียนพนักงานของอู่ (Light Plus · 042) — ไม่ลบ มีแต่ปิดใช้งาน เพราะงวดเงินเดือนเก่าอ้างถึง';
 
 -- ---------------------------------------------------------------------
 -- งวดเงินเดือน — เดือนละหนึ่งงวดต่ออู่
@@ -68,7 +68,7 @@ create table payroll_runs (
 );
 
 comment on table payroll_runs is
-  'งวดเงินเดือน เดือนละหนึ่งงวดต่ออู่ (Light Plus · 041)';
+  'งวดเงินเดือน เดือนละหนึ่งงวดต่ออู่ (Light Plus · 042)';
 
 -- บรรทัดของงวด — ชื่อ ตำแหน่ง เลขผู้เสียภาษี ตรึงไว้ ณ วันจ่าย
 -- สลิปและ ภ.ง.ด.1 ของงวดเก่าต้องไม่เปลี่ยนตามทะเบียนพนักงานที่แก้ทีหลัง
@@ -132,7 +132,7 @@ create index on appointments (tenant_id, appt_date);
 create index appointments_open_idx on appointments (tenant_id, appt_date) where status = 'open';
 
 comment on table appointments is
-  'นัดเข้าซ่อมและรายการเตือนลูกค้า (Light Plus · 041) — ชื่อ/เบอร์/ทะเบียนตรึงเป็นข้อความ รอดจากการกู้คืนไฟล์สำรอง';
+  'นัดเข้าซ่อมและรายการเตือนลูกค้า (Light Plus · 042) — ชื่อ/เบอร์/ทะเบียนตรึงเป็นข้อความ รอดจากการกู้คืนไฟล์สำรอง';
 
 -- updated_at อัตโนมัติ — ฟังก์ชันเดียวกับตารางหลัก (001)
 create trigger employees_touch before update on employees

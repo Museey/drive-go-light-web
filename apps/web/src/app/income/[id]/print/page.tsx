@@ -17,7 +17,7 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
   const [doc, shop, brand] = await Promise.all([getDocDetail(id), getShop(), getShopSettings()]);
   if (!doc) notFound();
 
-  /* คิวอาร์รับเงิน (039) — เฉพาะใบที่ตั้งค่าไว้และยังมียอดค้าง */
+  /* คิวอาร์รับเงิน (040) — เฉพาะใบที่ตั้งค่าไว้และยังมียอดค้าง */
   const payQr = await payQrFor(shop, doc);
 
   return <DocPrint doc={doc} shop={shop} brand={brand} payQr={payQr} />;

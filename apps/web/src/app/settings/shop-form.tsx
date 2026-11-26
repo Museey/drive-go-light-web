@@ -183,7 +183,7 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
         <button className="btn" type="button" onClick={() => setBanks([...banks, { bank: '', no: '', name: '' }])}>+ เพิ่มบัญชีธนาคาร</button>
       </div>
 
-      {/* ---------- คิวอาร์รับเงินบนเอกสาร (039) ---------- */}
+      {/* ---------- คิวอาร์รับเงินบนเอกสาร (040) ---------- */}
       <div className={bad('promptpayId')} style={{ marginTop: 4 }}>
         <label htmlFor="promptpayId">
           คิวอาร์รับเงิน (พร้อมเพย์) บนเอกสาร{' '}

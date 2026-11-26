@@ -160,7 +160,7 @@ export async function saveSalesDoc(raw: SalesDocInput): Promise<{ id: string; do
       `select vat_rate, warranty_text, wht_base from tenants where id = current_tenant_id()`,
     );
     const vatRate = n(shop.rows[0].vat_rate);
-    /* ฐานหัก ณ ที่จ่ายอ่านจากค่าของร้านในฐานเสมอ ไม่เชื่อค่าที่หน้าเว็บส่งมา (040) */
+    /* ฐานหัก ณ ที่จ่ายอ่านจากค่าของร้านในฐานเสมอ ไม่เชื่อค่าที่หน้าเว็บส่งมา (041) */
     const whtBase = shop.rows[0].wht_base === 'all' ? 'all' as const : 'labour' as const;
     /* ร้านจด / ไม่จด VAT — ตัดสินจากค่าในฐานใต้ล็อก (sales-vat.ts · กติกาอยู่ที่ vatChoices) */
     const vatMode = await vatModeForSaveWith(c, input, await shopVatRegisteredWith(c));

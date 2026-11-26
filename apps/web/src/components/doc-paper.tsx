@@ -25,7 +25,7 @@ export const PRINT_TITLE: Record<string, string> = {
 
 type Brand = { logoUrl: string; ownerName: string; signatureUrl: string; warrantyText: string };
 
-/** คิวอาร์รับเงินของใบนี้ — สร้างที่หน้าพิมพ์ด้วย lib/pay-qr.ts (039) */
+/** คิวอาร์รับเงินของใบนี้ — สร้างที่หน้าพิมพ์ด้วย lib/pay-qr.ts (040) */
 type PayQrView = { dataUri: string; amount: number; promptpayId: string };
 
 const CAPN = 26;
