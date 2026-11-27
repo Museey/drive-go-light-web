@@ -205,6 +205,56 @@ describe.skipIf(!DB_URL)('ยอดค้างชำระของคู่ใ
     expect((await receivablesWith(app)).total).toBe(1000);
   });
 
+  /* ---------- เงินก้อนเดียวที่ผู้ใช้บันทึกรับสองครั้งในเว็บ — ไม่มีอ้างอิงให้แยก ใช้เพดานของคู่ ---------- */
+
+  it('บันทึกรับเต็มจำนวนทั้งที่ใบส่งมอบและใบเสร็จ — ยอดชำระไม่เกินยอดใบ', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    const rc = await sellDoc('RC', 'RC-001', 1000, iv);
+    await pay(rc, 1000);
+    await pay(iv, 1000);
+
+    expect(await paidOf(iv)).toBe(1000);
+    expect(await paidOf(rc)).toBe(1000);
+    expect((await receivablesWith(app)).total).toBe(0);
+    expect((await contactTotalsWith(app)).get(custId)).toEqual({ spent: 1000, owe: 0 });
+  });
+
+  it('แบ่งจ่ายจริงสองที่ รวมไม่เกินยอดใบ — เพดานไม่ตัดอะไร', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    await pay(iv, 300);
+    const rc = await sellDoc('RC', 'RC-001', 1000, iv);
+    await pay(rc, 500);
+
+    expect(await paidOf(iv)).toBe(800);
+    expect(await paidOf(rc)).toBe(800);
+    expect((await receivablesWith(app)).total).toBe(200);
+  });
+
+  it('ข้อจำกัดที่รู้: รับบางส่วนแล้วบันทึกซ้ำ (600 + 600 ของใบ 1,000) — เห็นเป็นจ่ายครบ ไม่เกินยอดใบ', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    const rc = await sellDoc('RC', 'RC-001', 1000, iv);
+    await pay(rc, 600);
+    await pay(iv, 600);
+
+    expect(await paidOf(iv)).toBe(1000);
+    expect(await paidOf(rc)).toBe(1000);
+  });
+
+  it('ใบเดี่ยวที่รับเกินยอด — ไม่อยู่ในคู่ ได้ค่าเท่าเดิม ไม่ถูกตัด', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    await pay(iv, 1200);
+    expect(await paidOf(iv)).toBe(1200);
+  });
+
+  it('ใบส่งมอบที่รับเงินไว้ ใบเสร็จยังไม่มีเงิน — ใบส่งมอบได้ค่าเท่าเดิม ใบเสร็จได้เท่ากันแต่ไม่เกินยอด', async () => {
+    const iv = await sellDoc('IV', 'IV-001', 1000);
+    await pay(iv, 400);
+    const rc = await sellDoc('RC', 'RC-001', 1000, iv);
+
+    expect(await paidOf(iv)).toBe(400);
+    expect(await paidOf(rc)).toBe(400);
+  });
+
   it('ใบส่งมอบเดี่ยวและใบเสร็จขายหน้าร้าน — ได้ยอดเท่าเดิมทุกประการ', async () => {
     const iv = await sellDoc('IV', 'IV-001', 1000);
     await pay(iv, 400);

@@ -45,20 +45,33 @@ const REAL_PAYMENTS_SQL = `
        where miv.id = p.doc_id and miv.kind in ('IV', 'IVT')
          and p.ref = '${RECEIPT_MIRROR_PREFIX}' || mrc.doc_no))`;
 
+/**
+ * **เพดานของคู่ใบส่งมอบ–ใบเสร็จ (27 พ.ย. 2569)** — เมื่อเงินของทั้งสองใบถูกนำมารวมกัน ยอดชำระไม่เกินยอดของใบ
+ *
+ * ข้อมูลจริงมีเงินก้อนเดียวที่ผู้ใช้บันทึกรับสองครั้ง ครั้งหนึ่งที่ใบส่งมอบ อีกครั้งที่ใบเสร็จ
+ * (ตอนแต่ละหน้ายังนับเฉพาะใบของตัวเอง ใบส่งมอบยังขึ้นว่าค้างหลังออกใบเสร็จ จึงถูกกดรับอีกรอบ)
+ * แถวพวกนี้ไม่มีอ้างอิงให้แยกออกแบบสำเนาของ 6.4 แต่หนี้ก้อนเดียวรับชำระเกินยอดหนี้ไม่ได้
+ * ส่วนที่เกินจึงเป็นรายการซ้ำแน่นอน — ตัดที่ตรงนี้ ไม่แตะข้อมูล
+ *
+ * ใช้เพดานเฉพาะใบที่ได้เงินจากอีกใบในคู่มารวมด้วย ใบเดี่ยวและเอกสารฝั่งซื้อได้ค่าเท่าเดิมทุกประการ
+ * ข้อจำกัดที่รู้: เงินที่รับบางส่วนแล้วถูกบันทึกซ้ำ (600 + 600 ของใบ 1,000) จะเห็นเป็นจ่ายครบ
+ * — แยกจากการแบ่งจ่ายจริงไม่ได้ด้วยสูตร ต้องแก้ที่ข้อมูล
+ */
 export const DEBT_PAID_SQL = `
-  (select t.doc_id, sum(t.amount) as paid
+  (select t.doc_id,
+          case when bool_or(t.paired) then least(sum(t.amount), max(t.cap)) else sum(t.amount) end as paid
      from (
-       select p.doc_id, p.amount from ${REAL_PAYMENTS_SQL} p
+       select p.doc_id, p.amount, false as paired, null::numeric as cap from ${REAL_PAYMENTS_SQL} p
        union all
        /* เงินที่รับที่ใบเสร็จ นับให้ใบส่งมอบต้นทางด้วย */
-       select r.parent_doc_id, p.amount
+       select r.parent_doc_id, p.amount, true, iv.payable
          from payments p
          join documents r on r.id = p.doc_id
          join documents iv on iv.id = r.parent_doc_id
         where r.kind = 'RC' and r.status <> 'void' and iv.kind in ('IV', 'IVT')
        union all
        /* เงินที่รับที่ใบส่งมอบ นับให้ใบเสร็จที่ออกต่อจากมันด้วย */
-       select r.id, p.amount
+       select r.id, p.amount, true, r.payable
          from ${REAL_PAYMENTS_SQL} p
          join documents iv on iv.id = p.doc_id
          join documents r on r.parent_doc_id = iv.id
