@@ -48,6 +48,72 @@ test('ใบเสร็จ: พิมพ์ออกมาสองชุด �
   expect(pos.sameCol, 'ป้ายอยู่คอลัมน์เดียวกับเลขที่').toBe(true);
 });
 
+test('ตอนพิมพ์: ต้นฉบับกับสำเนาเริ่มที่ตำแหน่งเดียวกัน · ขอบกระดาษ 10 มม. เท่ากันทุกแผ่น', async ({ page }) => {
+  const id = await db((c) => c.query(
+    `select id from documents where kind = 'RC' and status = 'issued' and purged_at is null
+      order by created_at desc limit 1`)).then((r) => r.rows[0].id);
+
+  /* กระดาษ A4 กว้าง 794px ที่ 96dpi — กฎตามความกว้างจอที่มีผลตอนพิมพ์จริงขึ้นกับความกว้างนี้
+     วัดที่ 1280 จะได้กฎของเดสก์ท็อปมาแทน ซึ่งไม่ใช่สิ่งที่ออกจากเครื่องพิมพ์ */
+  await page.setViewportSize({ width: 794, height: 1123 });
+  await page.goto(`/income/${id}/print`);
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.paper')).toHaveCount(2);
+
+  const sheets = await page.locator('.paper').evaluateAll((els) => els.map((el) => {
+    const s = getComputedStyle(el);
+    const mm = (px: string) => Math.round(parseFloat(px) * 25.4 / 96 * 10) / 10;
+    const top = el.getBoundingClientRect().top;
+    return {
+      marginTop: mm(s.marginTop), padTop: mm(s.paddingTop), padLeft: mm(s.paddingLeft), padRight: mm(s.paddingRight),
+      padBottom: mm(s.paddingBottom),
+      /* ระยะจากขอบบนของแผ่น (รวมระยะเว้นก่อนแผ่น) ถึงเนื้อหาชิ้นแรก = ที่ที่หมึกเริ่มบนกระดาษ */
+      firstInk: mm(String((el.firstElementChild as HTMLElement).getBoundingClientRect().top - top + parseFloat(s.marginTop))),
+    };
+  }));
+
+  for (const s of sheets) {
+    expect(s.marginTop, 'ไม่มีระยะเว้นก่อนแผ่นตอนพิมพ์').toBe(0);
+    expect([s.padTop, s.padLeft, s.padRight, s.padBottom], 'ขอบ 10 มม. ทุกด้าน เท่าที่พิมพ์ออกมาจริง').toEqual([10, 10, 10, 10]);
+  }
+  expect(sheets[1].firstInk, 'สำเนาเริ่มที่เดียวกับต้นฉบับ').toBe(sheets[0].firstInk);
+});
+
+test('ตอนพิมพ์: ฟอร์มเปล่าไม่มีระยะเว้นก่อนแผ่น และขอบบนไม่เกิน 10 มม. — ต้องพอดีแผ่น A4', async ({ page }) => {
+  await page.setViewportSize({ width: 794, height: 1123 });
+  await page.goto('/forms');
+  await page.emulateMedia({ media: 'print' });
+  const pads = await page.locator('.blank-forms .paper').evaluateAll((els) => els.map((el) => {
+    const s = getComputedStyle(el);
+    return { top: Math.round(parseFloat(s.paddingTop) * 25.4 / 96), marginTop: parseFloat(s.marginTop) };
+  }));
+  expect(pads.length).toBeGreaterThan(0);
+  for (const p of pads) {
+    expect(p.top, 'ขอบบนของฟอร์มเปล่าไม่เกิน 10 มม.').toBeLessThanOrEqual(10);
+    expect(p.marginTop).toBe(0);
+  }
+});
+
+test('ตอนพิมพ์: สำเนาใช้จำนวนหน้าเท่าต้นฉบับ — ไม่มีใบที่สำเนาล้นไปอีกหน้าเพราะเริ่มต่ำกว่า', async ({ page }) => {
+  /* ใบเสนอราคาสั้น ๆ อยู่ใกล้ขอบหนึ่งหน้าที่สุด เดิมแผ่นสำเนาเริ่มต่ำกว่าต้นฉบับ 5.3 มม.
+     ใบที่ต้นฉบับพอดีหนึ่งหน้า สำเนาจึงล้นเป็นสองหน้า รวมออกมาเป็นจำนวนหน้าคี่
+     สองแผ่นเนื้อหาเดียวกัน เริ่มที่เดียวกัน จำนวนหน้ารวมต้องเป็นเลขคู่เสมอ */
+  const ids = await db((c) => c.query(
+    `select d.id from documents d
+      where d.kind = 'QT' and d.status <> 'void' and d.purged_at is null
+        and (select count(*) from doc_items i where i.doc_id = d.id) between 2 and 3
+      order by d.doc_no limit 12`)).then((r) => r.rows.map((x) => x.id as string));
+  test.skip(ids.length === 0, 'ไม่มีใบเสนอราคา 2–3 รายการในฐานทดสอบ');
+
+  for (const id of ids) {
+    await page.goto(`/income/${id}/print`);
+    await expect(page.locator('.paper')).toHaveCount(2);
+    const pdf = await page.pdf({ format: 'A4', preferCSSPageSize: true });
+    const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+    expect(pages % 2, `ใบ ${id}: ${pages} หน้า — ต้นฉบับกับสำเนาต้องใช้จำนวนหน้าเท่ากัน`).toBe(0);
+  }
+});
+
 test('ใบซื้อ: พิมพ์ออกมาสองชุดเหมือนกัน', async ({ page }) => {
   const id = await db((c) => c.query(
     `select id from documents where kind = 'PO' and status = 'issued' and purged_at is null
