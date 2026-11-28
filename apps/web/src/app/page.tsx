@@ -81,15 +81,17 @@ export default async function HomePage({
   const docGroups = DOC_GROUPS.filter((g) => can(session, g.perm));
   const docGroup = docGroups.find((g) => g.key === sp.dk && isDocGroup(sp.dk)) ?? docGroups[0] ?? null;
 
-  const [shop, summary, tax, pendingNames, issued] = await Promise.all([
-    getShop(),
-    getHomeSummary(sp.from, sp.to),
-    seesFinance ? getTaxSummary() : Promise.resolve(null),
-    /* รายการค้างทำ = ชื่อที่ขายไปแล้วแต่ยังไม่มีรหัสในทะเบียน (05.2) */
-    seesStock ? listPendingItems() : Promise.resolve([]),
-    seesReport && docGroup
-      ? query((c) => docsIssuedWith(c, docGroup.key, sp.from, sp.to)) : Promise.resolve(null),
-  ]);
+  /* **ทีละตัว ไม่ใช่ Promise.all** — แต่ละตัวยืมสายเชื่อมต่อของตัวเอง ยิงพร้อมกันห้าตัว = หน้าแรกครั้งเดียว
+     ใช้สายครบทั้ง DB_POOL_MAX (5) คนที่สองที่เปิดหน้าไหนก็ตามต้องรอ และรอเกิน 10 วินาทีก็ล้ม
+     (เครื่องจริง 28 พ.ย. 2569 — หน้าแรกเปิดซ้อนกันสองสามครั้งแล้วทั้งระบบขึ้น 502)
+     ไม่ได้ช้าลงจริง: ฐานข้อมูลมี CPU ไม่ถึงหนึ่งแกน คิวรีที่ยิงพร้อมกันแค่แย่งเวลากันเอง */
+  const shop = await getShop();
+  const summary = await getHomeSummary(sp.from, sp.to);
+  const tax = seesFinance ? await getTaxSummary() : null;
+  /* รายการค้างทำ = ชื่อที่ขายไปแล้วแต่ยังไม่มีรหัสในทะเบียน (05.2) — หน้าแรกบอกแค่จำนวน */
+  const pendingNames = seesStock ? await listPendingItems() : [];
+  const issued = seesReport && docGroup
+    ? await query((c) => docsIssuedWith(c, docGroup.key, sp.from, sp.to)) : null;
   const pendingLines = pendingNames.reduce((n, p) => n + p.lineCount, 0);
 
   const ranged = Boolean(sp.from || sp.to);

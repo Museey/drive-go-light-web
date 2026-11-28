@@ -13,7 +13,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { payablesWith, receivablesWith } from '../src/lib/ar-ap';
 import {
-  owingSidesWith, salesByMonthWith, salesDocsWith, salesSummaryWith, topOwing, whtByRateWith,
+  owingSidesWith, SALES_BY_MONTH_SQL, salesByMonthWith, salesDocsWith, salesSummaryWith, topOwing, whtByRateWith,
 } from '../src/lib/home-report';
 import { freshSchema } from '../../../tools/test-schema.mjs';
 
@@ -227,6 +227,23 @@ describe.skipIf(!DB_URL)('ตัวเลขรายงานหน้าแร
       expect(bars[11]!.amount, 'สองใบของเดือนนี้').toBe(700);
       expect(bars[11]!.prev, 'ใบเดียวของเดือนเดียวกันปีก่อน — ไม่ถูกคูณด้วยจำนวนใบของปีนี้').toBe(300);
       expect(bars[0]!.prev).toBe(0);
+    });
+    /* 28 พ.ย. 2569 — คิวรีนี้เคยอ่านเอกสารของอู่ทั้งตารางเดือนละสองรอบ (12 เดือน = 24 รอบ)
+       บนเครื่องจริงใช้ 5–31 วินาที สายเชื่อมต่อค้างครบทุกเส้น ทั้งระบบขึ้น 502
+       ผลลัพธ์ถูกทุกตัวเลข เทสต์ข้างบนจึงจับไม่ได้ — ต้องดูที่แผนการทำงาน:
+       ตาราง documents ถูกอ่านได้สองจุดเท่านั้น คือเอกสารขาย (d) กับใบต้นทางของใบเสร็จ (p) */
+    it('อ่านตารางเอกสารรอบเดียว ไม่ใช่เดือนละรอบ', async () => {
+      const { rows } = await app.query(`explain (format json) ${SALES_BY_MONTH_SQL}`, [12]);
+      const scans: { alias: string; loops: boolean }[] = [];
+      const walk = (node: Record<string, unknown>, inSubPlan: boolean) => {
+        const sub = inSubPlan || node['Parent Relationship'] === 'SubPlan';
+        if (node['Relation Name'] === 'documents') scans.push({ alias: String(node['Alias']), loops: sub });
+        for (const child of (node['Plans'] as Record<string, unknown>[] | undefined) ?? []) walk(child, sub);
+      };
+      walk(rows[0]['QUERY PLAN'][0].Plan, false);
+      expect(scans.map((s) => s.alias).sort()).toEqual(['d', 'p']);
+      /* ตัวที่อ่านเอกสารขายต้องไม่อยู่ใต้ซับคิวรีที่รันซ้ำทีละเดือน */
+      expect(scans.find((s) => s.alias === 'd')!.loops).toBe(false);
     });
   });
 
