@@ -36,7 +36,7 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
     <>
       <div className="printbar">
         <div className="spacer" />
-        <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>
+        <span style={{ color: 'var(--ink-3)', fontSize: '0.875rem' }}>
           เอกสารแจ้งเก็บเงิน ไม่ใช่ใบกำกับภาษี — ยอดคิดจากที่ค้างอยู่ ณ วันที่พิมพ์
         </span>
         <PrintButton />
@@ -60,7 +60,7 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
             </div>
             <div className="doc-meta">
               <h1>ใบวางบิล</h1>
-              <div style={{ fontSize: 11, letterSpacing: '.08em' }}>BILLING NOTE</div>
+              <div style={{ fontSize: '0.875rem', letterSpacing: '.08em' }}>BILLING NOTE</div>
               <div className="copy-tag">{copy}</div>
               <table style={{ marginTop: 4 }}>
                 <tbody>
@@ -133,7 +133,7 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
           </table>
           {pi === pages.length - 1 ? (<>
 
-          <div style={{ fontSize: 11.5, marginTop: 6 }}>
+          <div style={{ fontSize: '0.875rem', marginTop: 6 }}>
             จำนวนเงิน (ตัวอักษร) <b>{bahttext(note.total)}</b>
           </div>
 
@@ -144,12 +144,12 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
           {note.note ? (
             <div className="box">
               <h4>หมายเหตุ</h4>
-              <div style={{ fontSize: 11.5, whiteSpace: 'pre-wrap' }}>{note.note}</div>
+              <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>{note.note}</div>
             </div>
           ) : null}
 
           <div className="box">
-            <div style={{ fontSize: 10.5, color: '#555', lineHeight: 1.7 }}>
+            <div style={{ fontSize: '0.875rem', color: '#555', lineHeight: 1.7 }}>
               เอกสารนี้เป็นใบวางบิลสำหรับแจ้งเก็บเงินเท่านั้น ไม่ใช่ใบกำกับภาษีและไม่ใช่ใบเสร็จรับเงิน
               เมื่อชำระเงินแล้วทางร้านจะออกใบเสร็จรับเงินให้ตามปกติ
             </div>
@@ -158,11 +158,11 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
           <div className="sign">
             <div>
               <div className="line" />ผู้วางบิล
-              <br /><span style={{ fontSize: 11 }}>( {note.byWhom || '................................................'} )</span>
+              <br /><span style={{ fontSize: '0.875rem' }}>( {note.byWhom || '................................................'} )</span>
             </div>
             <div>
               <div className="line" />ผู้รับวางบิล
-              <br /><span style={{ fontSize: 11 }}>( ................................................ )</span>
+              <br /><span style={{ fontSize: '0.875rem' }}>( ................................................ )</span>
             </div>
           </div>
 
@@ -171,7 +171,7 @@ export default async function BillnotePrintPage({ params }: { params: Promise<{ 
             <span>www.drivebizbegin.com</span>
           </div>
           </>) : (
-            <div style={{ fontSize: 10.5, marginTop: 10, color: '#555', textAlign: 'right' }}>ต่อหน้าถัดไป → (หน้า {pi + 1}/{pages.length})</div>
+            <div style={{ fontSize: '0.875rem', marginTop: 10, color: '#555', textAlign: 'right' }}>ต่อหน้าถัดไป → (หน้า {pi + 1}/{pages.length})</div>
           )}
         </div>
         ); }); })}

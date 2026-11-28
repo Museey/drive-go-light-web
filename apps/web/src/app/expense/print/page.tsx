@@ -65,10 +65,10 @@ export default async function ExpensePrintPage({
               <td style={{ textAlign: 'center' }}>{i + 1}</td>
               <td>{r.docNo}</td>
               <td>{thDate(r.docDate)}</td>
-              <td style={{ fontSize: 11 }}>{KIND_LABEL[r.kind] ?? r.kind}</td>
+              <td style={{ fontSize: '0.875rem' }}>{KIND_LABEL[r.kind] ?? r.kind}</td>
               <td>{r.partyName || '-'}</td>
-              <td style={{ fontSize: 11 }}>{r.expenseCat ? CAT_LABEL[r.expenseCat] ?? '' : ''}</td>
-              <td style={{ fontSize: 11 }}>{r.refDocNo || ''}</td>
+              <td style={{ fontSize: '0.875rem' }}>{r.expenseCat ? CAT_LABEL[r.expenseCat] ?? '' : ''}</td>
+              <td style={{ fontSize: '0.875rem' }}>{r.refDocNo || ''}</td>
               <td style={{ textAlign: 'right' }}>{baht(r.payable)}</td>
               <td style={{ textAlign: 'right' }}>{baht(r.paid)}</td>
               <td style={{ textAlign: 'right' }}>{r.outstanding > 0.004 ? baht(r.outstanding) : ''}</td>

@@ -1,3 +1,4 @@
+import { Plate } from '@/components/plate';
 import { addrLineOf } from '@/lib/contacts';
 import Link from 'next/link';
 import { PrintReport } from '@/components/print-report';
@@ -6,7 +7,7 @@ import { query, requireTab } from '@/lib/auth';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
-import { listContacts } from '@/lib/contacts';
+import { contactSummary, listContacts } from '@/lib/contacts';
 import { searchVehiclesWith } from '@/lib/vehicles';
 import { baht } from '@/lib/format';
 import { ColPicker } from '@/components/col-picker';
@@ -16,6 +17,25 @@ import { contactCard } from '@/lib/contact-card';
 import { SavedNotice } from '@/components/saved-notice';
 
 export const dynamic = 'force-dynamic';
+
+/** ความกว้างคอลัมน์ปุ่ม — วัดจากปุ่มจริงที่ตัวอักษร 14px บวกระยะขอบในช่อง (e2e/cust-table-fit คุมว่าพอดีและไม่ถูกตัด) */
+const ACT_W = { customer: 210, vendor: 165 };
+
+const TONES = ['blue', 'green', 'orange', 'violet', 'teal', 'amber'] as const;
+/** สีวงกลมของแถว — คิดจากรหัสลูกค้า รายเดิมจึงได้สีเดิมทุกครั้งที่เปิดหน้า */
+function toneOf(code: string): string {
+  let h = 0;
+  for (const ch of code) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return TONES[h % TONES.length]!;
+}
+/** ตัวย่อในวงกลม — ตัวแรกของสองคำแรก ข้ามคำนำหน้าชื่อและคำว่า บริษัท/ห้าง/ร้าน */
+function initialsOf(name: string): string {
+  const words = (name || '').trim().split(/\s+/)
+    .filter((w) => !/^(นาย|นาง|นางสาว|น\.ส\.|คุณ|บริษัท|บจก\.?|หจก\.?|ห้างหุ้นส่วนจำกัด|ร้าน|ว่าที่|ร\.ต\.)$/.test(w));
+  const first = (w: string) => [...w.replace(/^[^\p{L}\p{N}]+/u, '')].find((ch) => /[\p{L}\p{N}]/u.test(ch)) ?? '';
+  const out = words.slice(0, 2).map(first).join('');
+  return out || '?';
+}
 
 const KIND_TABS = [
   { key: '', label: 'ทั้งหมด' },
@@ -31,19 +51,22 @@ const TYPE_TABS = [
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; kind?: string; type?: string; page?: string; size?: string; saved?: string; savedId?: string }>;
+  searchParams: Promise<{ q?: string; kind?: string; type?: string; page?: string; size?: string; saved?: string; savedId?: string; owe?: string }>;
 }) {
   await requireTab('customer', 'customer');
   const sp = await searchParams;
   const page = Number(sp.page ?? '1') || 1;
 
   const pageSize = pageSizeOf(sp.size);
-  const [hidden, { rows, total }, plateHits] = await Promise.all([
+  const oweOnly = sp.owe === '1';
+  const kpiKind = sp.kind === 'vendor' ? 'vendor' : sp.kind === 'customer' ? 'customer' : null;
+  const [hidden, { rows, total }, plateHits, kpi] = await Promise.all([
     getCustHiddenCols(),
-    listContacts({ search: sp.q, kind: sp.kind, type: sp.type, page, pageSize }),
+    listContacts({ search: sp.q, kind: sp.kind, type: sp.type, page, pageSize, oweOnly }),
     /* ค้นด้วยทะเบียนรถ (4 ตัวท้ายเป็นท่าที่ใช้บ่อยที่สุดหน้าเคาน์เตอร์ · ผู้ใช้กำหนด 19 ก.ย. 2569)
        ลูกค้าคันเดียวกันกลับมาซ่อมซ้ำ สิ่งที่อยากเห็นคือประวัติของรถคันนั้น ไม่ใช่รายชื่อลูกค้า */
     sp.q ? query((c) => searchVehiclesWith(c, sp.q!)) : Promise.resolve([]),
+    kpiKind ? contactSummary(kpiKind) : Promise.resolve(null),
   ]);
   const show = (k: CustCol) => !hidden.includes(k);
   /* คอลัมน์ที่ได้พื้นที่ที่เหลือ: ที่อยู่ถ้าเปิด · ไม่งั้นทะเบียนรถ · ปิดทั้งคู่ให้ชื่อ
@@ -60,6 +83,7 @@ export default async function CustomersPage({
       ...(sp.kind ? { kind: sp.kind } : {}),
       ...(sp.type ? { type: sp.type } : {}),
       ...(sp.size ? { size: sp.size } : {}),
+      ...(oweOnly ? { owe: '1' } : {}),
       ...patch,
     },
   });
@@ -69,6 +93,7 @@ export default async function CustomersPage({
     ...(sp.q ? { q: sp.q } : {}),
     ...(sp.kind ? { kind: sp.kind } : {}),
     ...(sp.type ? { type: sp.type } : {}),
+    ...(oweOnly ? { owe: '1' } : {}),
   };
   const printQuery = new URLSearchParams(filters).toString();
 
@@ -113,7 +138,7 @@ export default async function CustomersPage({
           <div className="body vcards">
             {plateHits.map((v) => (
               <Link key={v.id} className="vcard" href={`/vehicles/${v.id}`}>
-                <span className="plate mono">{v.plate}</span>
+                <Plate value={v.plate} size="lg" />
                 <span className="spec">{[v.brand, v.model, v.color].filter(Boolean).join(' · ') || 'ไม่ระบุรุ่น'}</span>
                 <span className="owner">{v.ownerName}</span>
                 <span className="foot">
@@ -126,6 +151,33 @@ export default async function CustomersPage({
         </div>
       ) : null}
 
+      {/* แถบสรุปของทะเบียน (26 พ.ย. 2569) — ตัวเลขทั้งทะเบียนของชนิดนั้น ไม่ขึ้นกับคำค้น
+          สองใบแรกกดกรองได้ · สองใบหลังเป็นตัวเลขให้ดูอย่างเดียว · จอแคบซ่อน (ผู้ใช้เลือกให้จอแคบเหลือช่องค้นหากับปุ่มเพิ่ม) */}
+      {kpi && kpiKind ? (
+        <nav className="kpi-strip desk-only-grid" aria-label="สรุปทะเบียน">
+          <Link className="kpi" data-tone="blue" data-k="all" aria-current={!oweOnly ? 'true' : undefined}
+                href={{ pathname: '/customers', query: { kind: kpiKind } }}>
+            <span className="lbl">{kpiKind === 'vendor' ? 'ผู้ขายทั้งหมด' : 'ลูกค้าทั้งหมด'}</span>
+            <b>{kpi.total.toLocaleString('en-US')} <small>ราย</small></b>
+          </Link>
+          <Link className="kpi" data-tone="amber" data-k="owing" aria-current={oweOnly ? 'true' : undefined}
+                href={{ pathname: '/customers', query: { kind: kpiKind, owe: '1' } }}>
+            <span className="lbl">{kpiKind === 'vendor' ? 'มียอดค้างจ่าย' : 'มียอดค้างชำระ'}</span>
+            <b>{kpi.owing.toLocaleString('en-US')} <small>ราย</small></b>
+          </Link>
+          <div className="kpi" data-tone="red" data-k="owe">
+            <span className="lbl">ยอดค้างรวม</span>
+            <b>{baht(kpi.oweTotal)} <small>บาท</small></b>
+          </div>
+          {kpiKind === 'customer' ? (
+            <div className="kpi" data-tone="teal" data-k="vehicles">
+              <span className="lbl">รถในทะเบียน</span>
+              <b>{kpi.vehicles.toLocaleString('en-US')} <small>คัน</small></b>
+            </div>
+          ) : null}
+        </nav>
+      ) : null}
+
       <div className="card cust-list">
         <div className="toolbar cust-toolbar">
           {/* ชิปกลุ่มเดียวกันต้องอยู่ใน .tag-row — ลูกตรงของ .toolbar บนมือถือยืดเต็มจอเรียงลงทีละปุ่ม */}
@@ -133,7 +185,7 @@ export default async function CustomersPage({
             <span style={{ color: 'var(--line)' }}>|</span>
             {TYPE_TABS.map((t) => (
               <Link key={t.key || 'all'} className="chip"
-                    href={{ pathname: '/customers', query: { ...(sp.q ? { q: sp.q } : {}), ...(sp.kind ? { kind: sp.kind } : {}), ...(t.key ? { type: t.key } : {}) } }}
+                    href={{ pathname: '/customers', query: { ...(sp.q ? { q: sp.q } : {}), ...(sp.kind ? { kind: sp.kind } : {}), ...(oweOnly ? { owe: '1' } : {}), ...(t.key ? { type: t.key } : {}) } }}
                     style={chipStyle((sp.type ?? '') === t.key)}>
                 {t.label}
               </Link>
@@ -147,6 +199,7 @@ export default async function CustomersPage({
           <form autoComplete="off" action="/customers" method="get" className="desk-only" data-enter="own" style={{ gap: 6 }}>
             {sp.kind ? <input type="hidden" name="kind" value={sp.kind} /> : null}
             {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
+            {oweOnly ? <input type="hidden" name="owe" value="1" /> : null}
             <input className="in search" type="search" name="q" defaultValue={sp.q ?? ''}
                    placeholder="กรอกคำค้นหา — ชื่อ รหัส เบอร์โทร หรือทะเบียนรถ" style={{ width: 250 }} />
             <button className="btn" type="submit">ค้นหา</button>
@@ -195,7 +248,7 @@ export default async function CustomersPage({
                 <col style={{ width: 92 }} />
                 <col style={w('name', 260)} />
                 {show('tel') ? <col style={{ width: 128 }} /> : null}
-                {show('plate') ? <col style={w('plate', 180)} /> : null}
+                {show('plate') ? <col style={w('plate', 230)} /> : null}
                 {show('addr') ? <col /> : null}
                 {show('credit') ? <col style={{ width: 64 }} /> : null}
                 {show('spent') ? <col className="opt" style={{ width: 104 }} /> : null}
@@ -203,7 +256,9 @@ export default async function CustomersPage({
                 {/* คอลัมน์ปุ่มกว้างเท่าปุ่มจริง (2×2 ชิดขวา) — ปุ่มแรกคนละคำระหว่างลูกค้ากับผู้ขาย
                     ลูกค้า "ใบเสนอราคา" 81 + ช่องไฟ 4 + "แก้ไข" 43 = 128 · ผู้ขาย "ใบซื้อ" 43 + 4 + 43 = 90
                     บวกระยะขอบในช่อง 12 แล้วเผื่ออีกเล็กน้อยกันฟอนต์เรนเดอร์ต่างเครื่องแล้วปุ่มโดนตัด */}
-                <col style={{ width: sp.kind === 'vendor' ? 106 : 144 }} />
+                {/* 26 พ.ย. 2569: ปุ่มเรียงแถวเดียว สามปุ่ม (ตัด "เปิด" ซึ่งไปหน้าเดียวกับ "แก้ไข" และกดทั้งแถวก็เปิดได้อยู่แล้ว)
+                    ลูกค้า "ใบเสนอราคา" + "แก้ไข" + "พิมพ์" · ผู้ขาย "ใบซื้อ" + "แก้ไข" + "พิมพ์" */}
+                <col style={{ width: sp.kind === 'vendor' ? ACT_W.vendor : ACT_W.customer }} />
               </colgroup>
               <thead>
                 <tr>
@@ -222,10 +277,15 @@ export default async function CustomersPage({
                   <RowLink key={c.id} href={`/customers/${c.id}`}>
                     <td className="mono"><b>{c.code}</b></td>
                     <td className="wrap c-name">
-                      <b>{c.displayName || <span style={{ color: 'var(--ink-3)' }}>ไม่ระบุชื่อ</span>}</b>
-                      <div className="subtle fs-12">
-                        {c.type === 'company' ? 'นิติบุคคล' : 'บุคคลธรรมดา'}{c.email ? ` · ${c.email}` : ''}
-                      </div>
+                      <span className="who-row">
+                        <span className="av" data-tone={toneOf(c.code)} aria-hidden="true">{initialsOf(c.displayName)}</span>
+                        <span className="who-text">
+                          <b>{c.displayName || <span style={{ color: 'var(--ink-3)' }}>ไม่ระบุชื่อ</span>}</b>
+                          <div className="subtle fs-12">
+                            {c.type === 'company' ? 'นิติบุคคล' : 'บุคคลธรรมดา'}{c.email ? ` · ${c.email}` : ''}
+                          </div>
+                        </span>
+                      </span>
                     </td>
                     {show('tel') ? <td className="mono">{c.tel || '-'}</td> : null}
                     {show('plate') ? (
@@ -240,14 +300,14 @@ export default async function CustomersPage({
                                   ใบที่ไม่มี id ของรถ (ข้อมูลเก่าก่อนมีทะเบียนรถ) ยังเป็นข้อความเฉย ๆ */}
                               {c.plates.length ? c.plates.slice(0, 2).map((p, i) => (
                                 <span key={p}>
-                                  {i > 0 ? ' · ' : ''}
+                                  {i > 0 ? ' ' : ''}
                                   {/* RowLink ปล่อยให้ลิงก์ในแถวทำงานเองอยู่แล้ว ไม่ต้องกันคลิกซ้อน */}
                                   {c.vehicleIds?.[i]
-                                    ? <Link href={`/vehicles/${c.vehicleIds[i]}`} className="plate-link">{p}</Link>
-                                    : p}
+                                    ? <Plate value={p} href={`/vehicles/${c.vehicleIds[i]}`} />
+                                    : <Plate value={p} />}
                                 </span>
                               )) : '-'}
-                              {c.plates.length > 2 ? <span className="subtle fs-12"> · อีก {c.plates.length - 2} คัน</span> : null}
+                              {c.plates.length > 2 ? <span className="chip plate-more" title={c.plates.slice(2).join(' · ')}>+{c.plates.length - 2} คัน</span> : null}
                             </div>
                             {c.taxId ? <div className="subtle fs-12">{c.taxId}</div> : null}
                           </>
@@ -264,13 +324,12 @@ export default async function CustomersPage({
                     ) : null}
                     <td>
                       {/* ปุ่มสองบรรทัดแบบเดียวกับประวัติ: เปิดใบ(เขียว) แก้ไข(แดงอ่อน) / พิมพ์(เทา) เปิด(เทา) */}
-                      <span className="row-acts grid2">
+                      <span className="row-acts line">
                         {c.kind === 'customer'
                           ? <Link className="btn sm act-pay" href={`/income/new?kind=QT&party=${c.id}`}>ใบเสนอราคา</Link>
                           : <Link className="btn sm act-pay" href={`/expense/new?kind=PO&party=${c.id}`}>ใบซื้อ</Link>}
                         <Link className="btn sm act-edit" href={`/customers/${c.id}`}>แก้ไข</Link>
                         <Link className="btn sm act-print" href={`/customers/print?q=${encodeURIComponent(c.code)}`}>พิมพ์</Link>
-                        <Link className="btn sm act-print" href={`/customers/${c.id}`}>เปิด</Link>
                       </span>
                     </td>
                   </RowLink>

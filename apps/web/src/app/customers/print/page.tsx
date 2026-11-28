@@ -52,11 +52,11 @@ export default async function ContactsPrintPage({
             <tr key={k.id}>
               <td style={{ textAlign: 'center' }}>{i + 1}</td>
               <td>{k.code}</td>
-              <td style={{ fontSize: 11 }}>{KIND_LABEL[k.kind] ?? k.kind}</td>
+              <td style={{ fontSize: '0.875rem' }}>{KIND_LABEL[k.kind] ?? k.kind}</td>
               <td>
                 {k.displayName || 'ไม่ระบุชื่อ'}
                 {k.addrText ? (
-                  <div style={{ fontSize: 10.5, color: '#666' }}>{k.addrText}</div>
+                  <div style={{ fontSize: '0.875rem', color: '#666' }}>{k.addrText}</div>
                 ) : null}
               </td>
               <td>{k.taxId || ''}</td>

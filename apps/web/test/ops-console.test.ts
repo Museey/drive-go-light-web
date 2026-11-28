@@ -143,6 +143,8 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
       'db/037_usage_activity.sql',
       /* 038 ย้าย open_shop ไปเรียก open_shop_core และเพิ่มฟังก์ชันของคำขอที่แนบสลิป */
       'db/038_payment_requests.sql',
+      /* 039 เพิ่มฟังก์ชันอนุมัติคำขอต่ออายุ และ grant_app ทับของ 038 */
+      'db/039_renewal_requests.sql',
     ]);
     await admin.query(`
       do $$ begin
@@ -197,6 +199,12 @@ describe.skipIf(!DB_URL)('ด่านตรวจสิทธิ์ในฐา
       ['record_renewal',
         `select ops.record_renewal($1, gen_random_uuid(), 'p', current_date, current_date + 1, 1, '')`,
         [bad]],
+      ['list_renewal_requests', 'select * from ops.list_renewal_requests($1)', [bad]],
+      ['approve_renewal_request',
+        `select ops.approve_renewal_request($1, gen_random_uuid(), current_date, current_date + 365, '')`,
+        [bad]],
+      ['reject_renewal_request',
+        `select ops.reject_renewal_request($1, gen_random_uuid(), 'x')`, [bad]],
       ['set_max_users', 'select ops.set_max_users($1, gen_random_uuid(), 3)', [bad]],
       ['add_operator',
         `select ops.add_operator($1,'x@example.com','x',$2, now()+interval '7 days')`, [bad, t]],
@@ -658,6 +666,139 @@ describe.skipIf(!DB_URL)('งานของคอนโซล', () => {
       'select expires_on, amount::float8 as amount from subscriptions where tenant_id = $1', [id]);
     expect(String(s.rows[0].expires_on).slice(0, 10)).toBe('2027-09-01');
     expect(s.rows[0].amount).toBe(3900);
+  });
+
+  /* ---------- ขั้นตอนตรวจการชำระเงินก่อนต่ออายุ (039) ---------- */
+
+  /** อู่แจ้งชำระเงิน — เขียนด้วย role ของแอปในนามอู่นั้น เหมือนหน้าลิขสิทธิ์จริง */
+  const requestRenewal = async (tenant: string, years = 1, amount = 3600) => {
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [tenant]);
+    try {
+      const r = await app.query(
+        `insert into renewal_requests (tenant_id, years, amount, paid_on, note)
+         values (current_tenant_id(), $1, $2, current_date, 'โอน 10:20 น.') returning id`,
+        [years, amount]);
+      return r.rows[0].id as string;
+    } finally {
+      await app.query(`select set_config('app.tenant_id', '', false)`);
+    }
+  };
+
+  it('อู่แจ้งชำระเงินแล้ว **ยังไม่ได้ต่ออายุ** จนกว่าผู้ให้บริการจะอนุมัติ', async () => {
+    const id = (await openShop('อู่ ก', 'o@example.com')).rows[0].id;
+    const req = await requestRenewal(id);
+
+    const before = await admin.query('select count(*)::int as c from subscriptions where tenant_id = $1', [id]);
+    expect(before.rows[0].c).toBe(0);
+
+    const list = await app.query('select * from ops.list_renewal_requests($1)', [good]);
+    expect(list.rows).toHaveLength(1);
+    expect(list.rows[0]).toMatchObject({ request_id: req, tenant_id: id, tenant_name: 'อู่ ก', status: 'pending' });
+  });
+
+  it('อนุมัติแล้วได้แถว subscriptions ตามยอดที่แจ้ง คำขอปิด และมีบันทึกการใช้งาน', async () => {
+    const id = (await openShop('อู่ ก', 'o@example.com')).rows[0].id;
+    const req = await requestRenewal(id, 1, 3600);
+    await admin.query('delete from ops.audit');
+
+    await app.query(
+      `select ops.approve_renewal_request($1,$2,'2026-11-24','2027-11-24','ตรวจยอดแล้ว')`, [good, req]);
+
+    const s = await admin.query(
+      `select id, expires_on::text as expires_on, amount::float8 as amount
+         from subscriptions where tenant_id = $1`, [id]);
+    expect(s.rows).toHaveLength(1);
+    expect(s.rows[0]).toMatchObject({ expires_on: '2027-11-24', amount: 3600 });
+
+    const r = await admin.query(
+      'select status, decided_at, decided_note, subscription_id from renewal_requests where id = $1', [req]);
+    expect(r.rows[0]).toMatchObject({ status: 'approved', decided_note: 'ตรวจยอดแล้ว', subscription_id: s.rows[0].id });
+    expect(r.rows[0].decided_at).not.toBeNull();
+
+    const a = await admin.query('select action, tenant_id from ops.audit');
+    expect(a.rows).toEqual([{ action: 'approve_renewal', tenant_id: id }]);
+  });
+
+  it('อนุมัติซ้ำไม่ได้ — กดสองครั้งไม่ได้อายุสองเท่า', async () => {
+    const id = (await openShop('อู่ ก', 'o@example.com')).rows[0].id;
+    const req = await requestRenewal(id);
+    await app.query(
+      `select ops.approve_renewal_request($1,$2,current_date,current_date + 365,'')`, [good, req]);
+
+    await expect(app.query(
+      `select ops.approve_renewal_request($1,$2,current_date,current_date + 730,'')`, [good, req],
+    )).rejects.toThrow(/ตัดสินหรือยกเลิกไปแล้ว/);
+
+    const s = await admin.query('select count(*)::int as c from subscriptions where tenant_id = $1', [id]);
+    expect(s.rows[0].c).toBe(1);
+  });
+
+  it('อนุมัติแล้วที่นั่งพนักงานที่ตั้งไว้ไม่หาย', async () => {
+    const id = (await openShop('อู่ ก', 'o@example.com')).rows[0].id;
+    await app.query(
+      `select ops.record_renewal($1,$2,'light-yearly','2025-11-01','2026-11-30',3600,'')`, [good, id]);
+    await app.query('select ops.set_max_users($1,$2,6)', [good, id]);
+
+    const req = await requestRenewal(id);
+    await app.query(
+      `select ops.approve_renewal_request($1,$2,'2026-11-24','2027-11-30','')`, [good, req]);
+
+    const s = await admin.query(
+      'select max_users from subscriptions where tenant_id = $1 order by expires_on desc limit 1', [id]);
+    expect(s.rows[0].max_users).toBe(6);
+  });
+
+  /* เดิมฟังก์ชันอนุมัติเขียน 'light-yearly' ตายตัว — อู่ Light Plus แจ้งชำระเงินต่ออายุแล้วพออนุมัติ
+     แพ็กเกจตกเป็น Light ฟีเจอร์เงินเดือน นัดหมาย เอกสารภาษีปิดทั้งชุดทันที (24 พ.ย. 2569) */
+  it('อนุมัติแล้วคงแพ็กเกจเดิม — อู่ Light Plus ไม่ตกเป็น Light · อู่ทดลองใช้ได้ Light', async () => {
+    const plus = (await openShop('อู่พลัส', 'p@example.com')).rows[0].id;
+    await app.query(
+      `select ops.record_renewal($1,$2,'plus-yearly','2025-11-01','2026-11-30',5900,'')`, [good, plus]);
+    await app.query(
+      `select ops.approve_renewal_request($1,$2,'2026-11-24','2027-11-30','')`, [good, await requestRenewal(plus)]);
+    const p = await admin.query(
+      'select plan from subscriptions where tenant_id = $1 order by expires_on desc limit 1', [plus]);
+    expect(p.rows[0].plan).toBe('plus-yearly');
+
+    const trial = (await openShop('อู่ทดลอง', 't@example.com')).rows[0].id;
+    await app.query(
+      `select ops.approve_renewal_request($1,$2,'2026-11-24','2027-11-24','')`, [good, await requestRenewal(trial)]);
+    const t = await admin.query(
+      'select plan from subscriptions where tenant_id = $1 order by expires_on desc limit 1', [trial]);
+    expect(t.rows[0].plan).toBe('light-yearly');
+  });
+
+  it('ไม่อนุมัติ — ไม่มีแถว subscriptions และอู่เห็นเหตุผล', async () => {
+    const id = (await openShop('อู่ ก', 'o@example.com')).rows[0].id;
+    const req = await requestRenewal(id);
+    await app.query(`select ops.reject_renewal_request($1,$2,'ไม่พบยอดโอน')`, [good, req]);
+
+    const s = await admin.query('select count(*)::int as c from subscriptions where tenant_id = $1', [id]);
+    expect(s.rows[0].c).toBe(0);
+
+    /* อู่อ่านผลของตัวเองได้ผ่าน RLS */
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [id]);
+    try {
+      const mine = await app.query('select status, decided_note from renewal_requests');
+      expect(mine.rows).toEqual([{ status: 'rejected', decided_note: 'ไม่พบยอดโอน' }]);
+    } finally {
+      await app.query(`select set_config('app.tenant_id', '', false)`);
+    }
+  });
+
+  it('อู่หนึ่งมีคำขอที่รอตรวจได้ครั้งละใบ และอู่อื่นมองไม่เห็นคำขอของกัน', async () => {
+    const a = (await openShop('อู่ ก', 'a@example.com')).rows[0].id;
+    const b = (await openShop('อู่ ข', 'b@example.com')).rows[0].id;
+    await requestRenewal(a);
+    await expect(requestRenewal(a)).rejects.toThrow(/renewal_requests_one_pending/);
+
+    await app.query(`select set_config('app.tenant_id', $1, false)`, [b]);
+    try {
+      const seen = await app.query('select count(*)::int as c from renewal_requests');
+      expect(seen.rows[0].c).toBe(0);
+    } finally {
+      await app.query(`select set_config('app.tenant_id', '', false)`);
+    }
   });
 
   it('วันหมดอายุก่อนวันเริ่ม ต้องปฏิเสธ', async () => {

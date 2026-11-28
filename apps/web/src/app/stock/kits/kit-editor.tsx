@@ -1,5 +1,6 @@
 'use client';
 
+import { NumInput } from '@/components/num-input';
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { useLiveSearch } from '@/components/use-live-search';
@@ -81,8 +82,8 @@ export function KitEditor({ initial, code, showCost, mayEdit, returnTo }: {
       <div className="row-fields f4">
         <div className={bad('price')}>
           <label htmlFor="price">ราคาขาย A *</label>
-          <input className="in mono amber" id="price" name="price" inputMode="decimal" style={{ textAlign: 'right' }}
-                 value={price} onChange={(e) => setPrice(Number(e.target.value) || 0)} readOnly={!mayEdit} />
+          <NumInput className="in mono amber" id="price" name="price" inputMode="decimal" style={{ textAlign: 'right' }}
+                 value={price} onNum={(num) => setPrice(num)} readOnly={!mayEdit} />
         </div>
         <div className={bad('priceB')}>
           <label htmlFor="priceB">ราคา B</label>
@@ -163,9 +164,9 @@ export function KitEditor({ initial, code, showCost, mayEdit, returnTo }: {
                     : l.name.trim() ? <span className="chip warn" title="ไม่ได้ผูกกับทะเบียนสินค้า จะไม่ตัดสต๊อก">ไม่ตัดสต๊อก</span> : null}
                 </td>
                 <td className="num c-qty">
-                  <input className="in mono" name={`it${i}_qty`} inputMode="decimal" value={l.qty} readOnly={!mayEdit}
+                  <NumInput className="in mono" name={`it${i}_qty`} inputMode="decimal" value={l.qty} readOnly={!mayEdit}
                          style={{ textAlign: 'right', ...(state.field === `it${i}_qty` ? { borderColor: 'var(--due)' } : {}) }}
-                         onChange={(e) => setLine(i, { qty: Number(e.target.value) || 0 })} />
+                         onNum={(num) => setLine(i, { qty: num })} />
                 </td>
                 <td className="c-unit">
                   <input className="in" name={`it${i}_unit`} value={l.unit} readOnly={!mayEdit || !!l.productId}
@@ -174,9 +175,9 @@ export function KitEditor({ initial, code, showCost, mayEdit, returnTo }: {
                 {showCost ? (
                   <>
                     <td className="num c-price">
-                      <input className="in mono" name={`it${i}_cost`} inputMode="decimal" value={l.unitCost} readOnly={!mayEdit}
+                      <NumInput className="in mono" name={`it${i}_cost`} inputMode="decimal" value={l.unitCost} readOnly={!mayEdit}
                              style={{ textAlign: 'right', ...(state.field === `it${i}_cost` ? { borderColor: 'var(--due)' } : {}) }}
-                             onChange={(e) => setLine(i, { unitCost: Number(e.target.value) || 0 })} />
+                             onNum={(num) => setLine(i, { unitCost: num })} />
                     </td>
                     <td className="num mono">{l.name.trim() ? baht(l.qty * l.unitCost) : ''}</td>
                   </>

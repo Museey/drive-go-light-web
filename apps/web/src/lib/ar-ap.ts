@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { DEBT_PAID_SQL, hasLiveReceiptSql } from './debt-paid';
 
 /**
  * ลูกหนี้และเจ้าหนี้คงค้าง — ตัวคิดตัวจริง
@@ -59,8 +60,7 @@ export async function receivablesWith(c: Client, opts: {
       `d.direction = 'sell'`,
       `d.kind <> 'QT'`,
       /* ใบส่งมอบที่มีใบเสร็จออกตามมาแล้ว ให้ถือว่าหนี้ย้ายไปอยู่ที่ใบเสร็จ */
-      `not exists (select 1 from documents x
-                   where x.parent_doc_id = d.id and x.kind = 'RC' and x.status <> 'void')`,
+      `not ${hasLiveReceiptSql('d')}`,
     ];
 
     if (search) {
@@ -75,7 +75,7 @@ export async function receivablesWith(c: Client, opts: {
               coalesce(p.paid, 0) as paid,
               current_date - d.due_date as days_overdue
        from documents d
-       left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+       left join ${DEBT_PAID_SQL} p
               on p.doc_id = d.id
        where ${where.join(' and ')}
          and d.payable - coalesce(p.paid, 0) > 0.004
@@ -149,7 +149,7 @@ export async function payablesWith(c: Client, opts: {
               coalesce(p.paid, 0) as paid,
               current_date - d.due_date as days_overdue
        from documents d
-       left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+       left join ${DEBT_PAID_SQL} p
               on p.doc_id = d.id
        where ${where.join(' and ')}
          and d.payable - coalesce(p.paid, 0) > 0.004

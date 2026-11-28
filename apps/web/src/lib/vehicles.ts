@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { DEBT_PAID_SQL, hasLiveReceiptSql } from './debt-paid';
 
 /**
  * ค้นด้วยทะเบียนรถ และประวัติของรถแต่ละคัน (ผู้ใช้กำหนด 19 ก.ย. 2569)
@@ -55,11 +56,14 @@ const HIT_SELECT = `
          (select count(*) from documents d
            where ${DOC_OF_VEHICLE} and ${DOC_KINDS} and d.kind <> 'QT'
              and d.status <> 'void' and d.purged_at is null)::int as doc_count,
-         (select coalesce(sum(d.payable - coalesce(
-                    (select sum(p.amount) from payments p where p.doc_id = d.id), 0)), 0)
+         /* ยอดค้างของรถ — เงินนับตาม debt-paid.ts และไม่นับใบส่งมอบที่มีใบเสร็จออกต่อแล้วซ้ำ
+            เดิมบวกทั้งใบส่งมอบและใบเสร็จของงานเดียวกัน ยอดค้างจึงเป็นสองเท่า */
+         (select coalesce(sum(greatest(d.payable - coalesce(dp.paid, 0), 0)), 0)
             from documents d
+            left join ${DEBT_PAID_SQL} dp on dp.doc_id = d.id
            where ${DOC_OF_VEHICLE} and d.kind in ('IV','IVT','RC')
-             and d.status = 'issued' and d.purged_at is null)::float8 as outstanding
+             and d.status = 'issued' and d.purged_at is null
+             and not ${hasLiveReceiptSql('d')})::float8 as outstanding
     from vehicles v
     join contacts k on k.id = v.contact_id`;
 

@@ -3,6 +3,9 @@ import { docNoPeriod, formatDocNo } from './doc-no';
 import type pg from 'pg';
 import { barcodeAliases, lineAmount, recTotals, today, totalsOf, whtBaseOf, type VatMode } from '@drivegolight/core';
 import { query } from './auth';
+import { canEdit as canEditTab } from './perms';
+import { ensureCustomerForDocWith } from './doc-new-customer';
+import { isUuid } from './ids';
 import {
   openDocsForWith, plateOf, resolveSourceForNewWith, syncVehicleFromDocWith,
   type OpenDoc,
@@ -68,6 +71,8 @@ export interface SalesDocInput {
 
   vehicleId: string | null;
   vehicle: Record<string, string> | null;
+  /** ลูกค้ายังไม่มีในทะเบียน — บันทึกเอกสารแล้วสร้างลูกค้า (และรถ) ลงทะเบียนไปพร้อมกัน (lib/doc-new-customer.ts) */
+  saveAsCustomer?: boolean;
 
   priceTier: 'A' | 'B' | 'C' | null;
   /** ส่วนลดท้ายบิล — ค่าที่ผู้ใช้กรอก (บาท เมื่อ mode='baht') · ตอนบันทึกระบบเก็บบาทที่มีผลจริง */
@@ -121,10 +126,22 @@ function effectiveDiscount(
  * ทุกอย่างอยู่ในทรานแซกชันเดียว: ออกเลขที่ เขียนเอกสาร รายการ การชำระเงิน และตัดสต๊อก
  * ถ้าล้มกลางทางจะไม่มีเลขที่ถูกใช้ทิ้งและไม่มีสต๊อกที่ตัดค้าง
  */
-export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; docNo: string }> {
-  return mutate('income', async (c, userId) => {
+export async function saveSalesDoc(raw: SalesDocInput): Promise<{ id: string; docNo: string }> {
+  return mutate('income', async (c, userId, session) => {
+    let input = raw;
     let id = input.id;
     let docNo = '';
+
+    /* ลูกค้าใหม่จากหน้าออกเอกสาร — สร้างในทรานแซกชันเดียวกับใบ ใบบันทึกไม่ผ่านลูกค้าก็ไม่ค้างในทะเบียน
+       ต้องมีสิทธิ์แก้ทะเบียนลูกค้าเหมือนเพิ่มที่เมนู 02 — ช่องทางนี้ต้องไม่เป็นทางอ้อมข้ามสิทธิ์
+       ใบที่เลือกลูกค้าจากทะเบียนอยู่แล้ว (มี partyId) ไม่เข้าทางนี้ */
+    if (input.saveAsCustomer && !input.partyId && input.partyName.trim()) {
+      if (!canEditTab(session, 'customer', 'customer')) {
+        throw new Error('บัญชีของคุณไม่มีสิทธิ์เพิ่มลูกค้าในทะเบียน — เอาติ๊ก "บันทึกเป็นลูกค้าใหม่ในทะเบียน" ออกแล้วบันทึกอีกครั้ง');
+      }
+      const made = await ensureCustomerForDocWith(c, input);
+      input = { ...input, partyId: made.contactId, vehicleId: input.vehicleId ?? made.vehicleId };
+    }
 
     if (id) {
       /* ล็อกแถวก่อนตรวจทุกอย่าง — อีกเครื่องที่ยกเลิก รับเงิน หรือแก้ใบเดียวกันอยู่ ต้องรอกันคนละรอบ
@@ -140,9 +157,11 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
     }
 
     const shop = await c.query(
-      `select vat_rate, warranty_text from tenants where id = current_tenant_id()`,
+      `select vat_rate, warranty_text, wht_base from tenants where id = current_tenant_id()`,
     );
     const vatRate = n(shop.rows[0].vat_rate);
+    /* ฐานหัก ณ ที่จ่ายอ่านจากค่าของร้านในฐานเสมอ ไม่เชื่อค่าที่หน้าเว็บส่งมา (041) */
+    const whtBase = shop.rows[0].wht_base === 'all' ? 'all' as const : 'labour' as const;
     /* ร้านจด / ไม่จด VAT — ตัดสินจากค่าในฐานใต้ล็อก (sales-vat.ts · กติกาอยู่ที่ vatChoices) */
     const vatMode = await vatModeForSaveWith(c, input, await shopVatRegisteredWith(c));
 
@@ -161,7 +180,7 @@ export async function saveSalesDoc(input: SalesDocInput): Promise<{ id: string; 
       whtRate: input.kind === 'QT' ? 0 : input.whtRate,
       date: input.docDate,
     };
-    const t = recTotals(doc, { vatRate });
+    const t = recTotals(doc, { vatRate, whtBase });
 
     const dueDate = input.creditDays > 0 ? addDays(input.docDate, input.creditDays) : input.docDate;
 
@@ -446,6 +465,22 @@ export async function searchProducts(q: string, limit = 15): Promise<PickedProdu
        limit $3`,
       [term, `%${term}%`, limit, barcodeAliases(term).map((a) => a.toUpperCase())],
     );
+    return rows.map(toPickedProduct);
+  });
+}
+
+/**
+ * อะไหล่หลายตัวตามรหัสภายใน — ใช้ตอนเปลี่ยนระดับราคาแล้วต้องปรับราคาทุกบรรทัดที่ผูกทะเบียนไว้
+ *
+ * เดิมหน้าจอเอารหัสของทุกบรรทัดมาต่อกันด้วยเว้นวรรคแล้วส่งเข้า searchProducts() ซึ่งค้นทั้งก้อน
+ * เป็นคำเดียว — ใบที่มีสองบรรทัดขึ้นไปจึงไม่เจออะไรเลย ราคาไม่เปลี่ยนสักบรรทัดทั้งที่กดตกลงไปแล้ว
+ * ที่นี่ไม่กรอง active: ของที่ปิดใช้งานไปแล้วแต่ยังอยู่บนใบ ก็ต้องปรับราคาตามระดับได้
+ */
+export async function productsByIds(ids: string[]): Promise<PickedProduct[]> {
+  const list = [...new Set(ids)].filter(isUuid).slice(0, 500);
+  if (list.length === 0) return [];
+  return query(async (c) => {
+    const { rows } = await c.query(`${PICK_SELECT} where p.id = any($1::uuid[])`, [list]);
     return rows.map(toPickedProduct);
   });
 }

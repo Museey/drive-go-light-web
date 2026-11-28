@@ -207,7 +207,7 @@ test('ใบเสนอราคา → ใบกำกับภาษี → �
 
 /* ---------- ข้อ 3 — popup แก้ไข / ยกเลิก ---------- */
 
-test('กดแก้ไขใบที่ออกใบต่อแล้ว → popup → แก้ไขเอกสาร แก้ในใบเดิม เลขที่เดิม · popup → ยกเลิกเอกสาร → ประวัติขึ้นยกเลิก', async ({ page }, info) => {
+test('กดแก้ไข: ใบที่ออกใบต่อแล้วแก้ไม่ได้พร้อมเหตุผล · ใบที่ยังไม่มีใบต่อ → popup → แก้ในใบเดิม เลขที่เดิม · popup → ยกเลิกเอกสาร → ประวัติขึ้นยกเลิก', async ({ page }, info) => {
   const tag = tagOf('ลูกค้าล็อกทดสอบ', info.parallelIndex);
   try {
     const ids = await db(async (c) => {
@@ -221,34 +221,48 @@ test('กดแก้ไขใบที่ออกใบต่อแล้ว �
       const q = await mk('QT', `QTLOCK${info.parallelIndex}${Date.now().toString(36)}`, null);
       const i = await mk('IV', `IVLOCK${info.parallelIndex}${Date.now().toString(36)}`, q.id);
       const r = await mk('RC', `RCLOCK${info.parallelIndex}${Date.now().toString(36)}`, null);
-      for (const d of [q, i, r]) {
+      /* ใบเสนอราคาที่ยังไม่มีใบต่อ — ใบที่แก้ได้ (สถานะ issued: ใส่ผ่าน IV ที่ไม่มีแม่ไม่ได้ จึง update หลัง insert) */
+      const q2 = await mk('QT', `QTFREE${info.parallelIndex}${Date.now().toString(36)}`, null);
+      await c.query(`update documents set status = 'issued' where id = $1`, [q2.id]);
+      for (const d of [q, i, r, q2]) {
         await c.query(
           `insert into doc_items (tenant_id, doc_id, line_no, code, oem, name, unit, qty, unit_price, is_service, disc_pct)
            values (current_tenant_id(), $1, 1, '', '', 'รายการทดสอบ', 'ชิ้น', 1, 1000, false, 0)`, [d.id]);
       }
-      return { qt: q, iv: i, rc: r };
+      return { qt: q, iv: i, rc: r, free: q2 };
     });
 
-    /* แก้ไข → popup ถามก่อน ไม่ใช่เข้าฟอร์มทันที */
+    /* กติกา 26 พ.ย. 2569: ใบที่ออกใบต่อไปแล้วแก้ไม่ได้ — popup บอกว่าต้องไปแก้หรือยกเลิกใบไหน */
     await page.goto(`/income/${ids.qt.id}`);
+    await page.getByRole('button', { name: 'แก้ไข', exact: true }).click();
+    await expect(gate(page)).toContainText(`${ids.iv.doc_no} ต่อไปแล้ว แก้ไม่ได้`);
+    await expect(gate(page).locator('.btn.off')).toHaveText('แก้ไขเอกสาร');
+    await expect(gate(page).getByRole('link', { name: 'แก้ไขเอกสาร' })).toHaveCount(0);
+    /* เปิดหน้าแก้ไขตรง ๆ ก็ไม่ได้ฟอร์ม — เซิร์ฟเวอร์ตรวจกติกาเดียวกัน */
+    await page.goto(`/income/${ids.qt.id}/edit`);
+    await expect(page.locator('table.lines')).toHaveCount(0);
+
+    /* ใบที่ยังไม่มีใบต่อ: แก้ไข → popup ถามก่อน ไม่ใช่เข้าฟอร์มทันที */
+    await page.goto(`/income/${ids.free.id}`);
     await page.getByRole('button', { name: 'แก้ไข', exact: true }).click();
     const g = gate(page);
     await expect(g).toBeVisible();
     await expect(g).toContainText('ต้องการแก้ไขใช่หรือไม่');
-    await expect(g).toContainText(ids.qt.doc_no);
+    await expect(g).toContainText(ids.free.doc_no);
     await g.getByRole('button', { name: 'ปิด' }).click();
     await expect(g).toHaveCount(0);
 
     await page.getByRole('button', { name: 'แก้ไข', exact: true }).click();
     await gate(page).getByRole('link', { name: 'แก้ไขเอกสาร' }).click();
-    await expect(page).toHaveURL(new RegExp(`/income/${ids.qt.id}/edit$`));
+    await expect(page).toHaveURL(new RegExp(`/income/${ids.free.id}/edit$`));
     await page.locator('table.lines tbody tr').first().locator('td.c-price input').fill('1200');
     await page.getByRole('button', { name: 'บันทึกการแก้ไข' }).first().click();
     await confirmSave(page).getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
     await expect(page).toHaveURL(/saved=sales/);
     const after = await db((c) => c.query(
-      `select count(*)::int as n, max(doc_no) as no, max(grand_total) as total from documents where party_name = $1 and kind = 'QT'`, [tag]));
-    expect(after.rows[0], 'แก้ในใบเดิม ไม่ได้สร้างใบใหม่').toMatchObject({ n: 1, no: ids.qt.doc_no });
+      `select count(*)::int as n, max(doc_no) filter (where id = $2) as no, max(grand_total) filter (where id = $2) as total
+         from documents where party_name = $1 and kind = 'QT'`, [tag, ids.free.id]));
+    expect(after.rows[0], 'แก้ในใบเดิม ไม่ได้สร้างใบใหม่').toMatchObject({ n: 2, no: ids.free.doc_no });
     expect(Number(after.rows[0].total)).not.toBe(1000);
 
     /* popup → ยกเลิกเอกสาร (ใบที่มีใบต่อก็ยกเลิกได้ตามต้นแบบ)

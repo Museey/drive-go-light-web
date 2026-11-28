@@ -1,12 +1,14 @@
 import 'server-only';
 import { query, requirePerm } from './auth';
 import { mutate } from './mutate';
-import { deleteStaffWith, setStaffPasswordWith, transferOwnershipWith } from './staff-admin';
+import {
+  assertStaffSeatFreeWith, deleteStaffWith, setStaffPasswordWith, transferOwnershipWith,
+} from './staff-admin';
 
 const n = (v: unknown): number => Number(v ?? 0);
 
 export { PERM_KEYS, PERM_LABEL, type PermKey, type StaffUser } from './perms';
-import { seatsLeft, type PermKey, type Perms, type StaffUser } from './perms';
+import { type PermKey, type Perms, type StaffUser } from './perms';
 
 /* =====================================================================
    ข้อมูลร้าน
@@ -54,6 +56,14 @@ export interface ShopSettings {
   bankAccounts: BankAccount[];
   /** รูปลายเซ็น data URI — ว่าง = ไม่มี */
   signatureUrl: string;
+  /** เลขพร้อมเพย์สำหรับคิวอาร์รับเงินบนเอกสาร (040) — ว่าง = ไม่มีคิวอาร์ */
+  /** ฐานหัก ณ ที่จ่ายของเอกสารขาย — เฉพาะค่าแรง หรือทั้งใบ (041) */
+  whtBase: 'labour' | 'all';
+  promptpayId: string;
+  /** พิมพ์คิวอาร์บนใบส่งมอบ / ใบแจ้งหนี้ / ใบกำกับภาษี */
+  qrOnInvoice: boolean;
+  /** พิมพ์คิวอาร์บนใบเสร็จรับเงินที่ยังมียอดค้าง */
+  qrOnReceipt: boolean;
 }
 
 export async function getShopSettings(): Promise<ShopSettings> {
@@ -62,7 +72,8 @@ export async function getShopSettings(): Promise<ShopSettings> {
       `select name, tax_id, addr_text, tel, tel2, vat_rate, vat_registered, wht_rate,
               price_tier, proposer_name, warranty_text, logo_url, note_default,
               owner_name, signature_url, bank_accounts,
-              bank_name, bank_account_no, bank_account_name, expiry_warn_days
+              bank_name, bank_account_no, bank_account_name, expiry_warn_days,
+              promptpay_id, qr_on_invoice, qr_on_receipt, wht_base
        from tenants where id = current_tenant_id()`,
     );
     const r = rows[0];
@@ -79,6 +90,10 @@ export async function getShopSettings(): Promise<ShopSettings> {
       bankAccountNo: r.bank_account_no ?? '',
       bankAccountName: r.bank_account_name ?? '',
       expiryWarnDays: n(r.expiry_warn_days) || 60,
+      whtBase: r.wht_base === 'all' ? 'all' : 'labour',
+      promptpayId: r.promptpay_id ?? '',
+      qrOnInvoice: r.qr_on_invoice === true,
+      qrOnReceipt: r.qr_on_receipt === true,
     };
   });
 }
@@ -98,7 +113,8 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
               warranty_text=$10, logo_url=$11,
               bank_name=$12, bank_account_no=$13, bank_account_name=$14,
               expiry_warn_days=$15, note_default=$16, owner_name=$17, signature_url=$18,
-              bank_accounts=$19, vat_registered=$20
+              bank_accounts=$19, vat_registered=$20,
+              promptpay_id=$21, qr_on_invoice=$22, qr_on_receipt=$23, wht_base=$24
        where id = current_tenant_id()`,
       [
         input.name, input.taxId || null, input.addrText, input.tel, input.tel2,
@@ -110,6 +126,8 @@ export async function saveShopSettings(input: ShopSettings): Promise<void> {
         input.ownerName ?? '', input.signatureUrl || null,
         JSON.stringify(input.bankAccounts ?? []),
         input.vatRegistered,
+        input.promptpayId ?? '', input.qrOnInvoice === true, input.qrOnReceipt === true,
+        input.whtBase === 'all' ? 'all' : 'labour',
       ],
     );
   }, { sub: 'shop', allowExpired: true });
@@ -167,7 +185,7 @@ export async function nextUserCode(): Promise<string> {
  * ไม่งั้นเจ้าของอู่กดพลาดครั้งเดียวก็ล็อกตัวเองออกจากระบบถาวร
  */
 export async function saveStaff(input: StaffInput, currentUserId: string): Promise<string> {
-  return mutate('settings', async (c) => {
+  return mutate('settings', async (c, _userId, session) => {
     if (input.id === currentUserId) {
       if (!input.active) throw new Error('ปิดการใช้งานบัญชีของตัวเองไม่ได้');
       if (input.perms.menus?.settings !== true) {
@@ -179,8 +197,21 @@ export async function saveStaff(input: StaffInput, currentUserId: string): Promi
     }
 
     if (input.id) {
-      const before = await c.query(`select role::text as role from users where id = $1`, [input.id]);
+      const before = await c.query(
+        `select role::text as role, active from users where id = $1 for update`, [input.id]);
       if (!before.rows[0]) throw new Error('ไม่พบผู้ใช้');
+
+      /* เปิดบัญชีพนักงานที่ปิดไว้กลับมาใช้ = กินที่นั่งเพิ่มหนึ่งที่ ต้องตรวจเหมือนสร้างใหม่
+         ไม่งั้นปิดคนเก่า สร้างคนใหม่ แล้วเปิดคนเก่ากลับมา ได้พนักงานเกินแพ็กเกจกี่คนก็ได้ */
+      if (before.rows[0].role === 'staff' && !before.rows[0].active && input.active) {
+        await assertStaffSeatFreeWith(c);
+      }
+
+      /* บัญชีเจ้าของกิจการแก้ได้เฉพาะเจ้าของเอง — พนักงานที่มีสิทธิ์ตั้งค่าพนักงาน
+         เปลี่ยนอีเมลของเจ้าของแล้วออกลิงก์ตั้งรหัสใหม่ = ยึดบัญชีเจ้าของได้ */
+      if (before.rows[0].role === 'owner' && session.role !== 'owner') {
+        throw new Error('เฉพาะเจ้าของกิจการเท่านั้นที่แก้ไขบัญชีเจ้าของกิจการได้');
+      }
 
       /* เจ้าของกิจการต้องเหลืออย่างน้อยหนึ่งคนที่ยังใช้งานได้เสมอ */
       if (before.rows[0].role === 'owner' && !input.active) {
@@ -201,22 +232,8 @@ export async function saveStaff(input: StaffInput, currentUserId: string): Promi
       return input.id;
     }
 
-    /* ที่นั่งพนักงานตามแพ็กเกจ — ตรวจตอนสร้างบัญชีใหม่เท่านั้น ไม่ตรวจตอนล็อกอิน
-       ลดแพ็กเกจแล้วต้องไม่มีใครถูกล็อกออกจากระบบกลางดึกโดยไม่รู้ตัว
-       เจ้าของกิจการไม่ถูกนับ เพราะที่นั่งที่ขายคือที่นั่งพนักงาน */
-    const seat = await c.query(
-      `select (select max_users from subscriptions
-                order by expires_on desc limit 1) as max_users,
-              (select count(*)::int from users
-                where role = 'staff' and active) as staff`,
-    );
-    const max = seat.rows[0].max_users === null ? null : Number(seat.rows[0].max_users);
-    if (seatsLeft(max, Number(seat.rows[0].staff)) === 0) {
-      throw new Error(
-        `แพ็กเกจนี้เปิดบัญชีพนักงานได้ ${max} คน — ` +
-        'ปิดการเข้าใช้งานของคนที่ไม่ได้ทำงานแล้ว หรือติดต่อผู้ให้บริการเพื่อเพิ่มจำนวน',
-      );
-    }
+    /* ที่นั่งพนักงานตามแพ็กเกจ — บัญชีที่สร้างแบบปิดไว้ยังไม่กินที่นั่ง จะถูกตรวจตอนเปิดใช้ */
+    if (input.active) await assertStaffSeatFreeWith(c);
 
     const { rows } = await c.query(
       `insert into users (tenant_id, code, name, email, role, perms, active)

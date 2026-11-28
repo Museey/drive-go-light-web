@@ -112,6 +112,17 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
                  defaultValue={v('whtRate', shop.whtRate)} />
         </div>
         <div className="field">
+          <label htmlFor="whtBase">ฐานที่หัก ณ ที่จ่าย</label>
+          <select className="in" id="whtBase" name="whtBase" defaultValue={v('whtBase', shop.whtBase)}>
+            <option value="labour">เฉพาะค่าแรง</option>
+            <option value="all">ทั้งใบ (ค่าแรง + ค่าอะไหล่)</option>
+          </select>
+          <span className="hint">
+            ใช้กับเอกสารขายที่บันทึกหลังจากนี้ ใบเดิมคงยอดเดิมจนกว่าจะเปิดแก้ไข ·
+            ควรตั้งตามที่ลูกค้านิติบุคคลส่วนใหญ่ของร้านหักจริง
+          </span>
+        </div>
+        <div className="field">
           <label htmlFor="priceTier">ระดับราคาตั้งต้น</label>
           <select className="in" id="priceTier" name="priceTier" defaultValue={v('priceTier', shop.priceTier)}>
             <option value="A">A — ราคาปกติ</option>
@@ -172,6 +183,31 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
         <button className="btn" type="button" onClick={() => setBanks([...banks, { bank: '', no: '', name: '' }])}>+ เพิ่มบัญชีธนาคาร</button>
       </div>
 
+      {/* ---------- คิวอาร์รับเงินบนเอกสาร (040) ---------- */}
+      <div className={bad('promptpayId')} style={{ marginTop: 4 }}>
+        <label htmlFor="promptpayId">
+          คิวอาร์รับเงิน (พร้อมเพย์) บนเอกสาร{' '}
+          <span className="hint">ลูกค้าสแกนด้วยแอปธนาคาร ยอดในคิวอาร์ = ยอดที่ยังค้างของใบนั้น</span>
+        </label>
+        <input className="in mono" id="promptpayId" name="promptpayId" inputMode="numeric" autoComplete="off"
+               placeholder="เบอร์มือถือ 10 หลัก หรือเลขประจำตัวผู้เสียภาษี 13 หลัก"
+               defaultValue={v('promptpayId', shop.promptpayId)} style={{ maxWidth: 360 }} />
+        <div className="tag-row" style={{ marginTop: 8 }}>
+          <label className="tag-row" style={{ fontSize: '0.9375rem' }}>
+            <input type="checkbox" name="qrOnInvoice" defaultChecked={shop.qrOnInvoice} />
+            พิมพ์บนใบส่งมอบงาน / ใบแจ้งหนี้ / ใบกำกับภาษี
+          </label>
+          <label className="tag-row" style={{ fontSize: '0.9375rem' }}>
+            <input type="checkbox" name="qrOnReceipt" defaultChecked={shop.qrOnReceipt} />
+            พิมพ์บนใบเสร็จรับเงิน
+          </label>
+        </div>
+        <span className="hint">
+          เลขพร้อมเพย์ต้องผูกกับบัญชีธนาคารของอู่ไว้แล้ว · ใบที่ชำระครบแล้วหรือถูกยกเลิกจะไม่มีคิวอาร์
+          · ลองสแกนจากเอกสารจริงหนึ่งใบหลังบันทึก เพื่อดูว่าชื่อบัญชีที่แอปธนาคารแสดงเป็นของอู่
+        </span>
+      </div>
+
       {/* ---------- โลโก้ ---------- */}
       <div className={bad('logo')}>
         <label>โลโก้บนหัวเอกสาร</label>
@@ -182,7 +218,7 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
                  style={{ width: 64, height: 64, objectFit: 'contain', border: '1px solid var(--line)', borderRadius: 6 }} />
           ) : (
             <div style={{ width: 64, height: 64, border: '1px dashed var(--line)', borderRadius: 6,
-                          display: 'grid', placeItems: 'center', fontSize: 11, color: 'var(--ink-3)' }}>
+                          display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: 'var(--ink-3)' }}>
               ไม่มี
             </div>
           )}
@@ -206,7 +242,7 @@ export function ShopForm({ shop }: { shop: ShopSettings }) {
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={sig} alt="ลายเซ็น" style={{ width: 120, height: 56, objectFit: 'contain', border: '1px solid var(--line)', borderRadius: 6, background: '#fff' }} />
           ) : (
-            <div style={{ width: 120, height: 56, border: '1px dashed var(--line)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 11, color: 'var(--ink-3)' }}>ไม่มี</div>
+            <div style={{ width: 120, height: 56, border: '1px dashed var(--line)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: 'var(--ink-3)' }}>ไม่มี</div>
           )}
           <input ref={sigRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style={{ display: 'none' }}
                  onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = () => setSig(String(r.result ?? '')); r.readAsDataURL(f); }} />

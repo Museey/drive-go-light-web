@@ -84,6 +84,13 @@ export const MENU: MenuItem[] = [
         key: 'vendor', no: '02.3', label: 'ทะเบียนผู้ขาย', desc: 'ร้านอะไหล่ / ผู้จำหน่าย',
         icon: 'seeShop', color: '#C25A18', href: '/customers?kind=vendor',
       },
+      {
+        /* Light Plus (042) — นัดเข้าซ่อมและรายการเตือนลูกค้า · อู่แพ็กเกจ Light เปิดแล้วเจอการ์ดชวนอัปเกรด
+           แท็บแสดงทุกแพ็กเกจโดยตั้งใจ: ซ่อนไว้ ลูกค้า Light จะไม่มีทางรู้ว่ามีฟีเจอร์นี้ให้อัปเกรด */
+        key: 'appt', no: '02.5', label: 'นัดหมาย / แจ้งเตือนลูกค้า',
+        desc: 'นัดรถเข้าซ่อมและเตือนถึงรอบ · Light Plus',
+        icon: 'pending', color: '#1F5FBF', href: '/customers/appointments',
+      },
     ],
   },
   {
@@ -207,6 +214,24 @@ export const MENU: MenuItem[] = [
       {
         key: 'pl', no: '06.4', label: 'กำไรขาดทุน', desc: 'กำไรขาดทุนรายเดือน',
         icon: 'pl', color: '#5B3FBF', href: '/finance/pl',
+      },
+      {
+        /* Light Plus (042) — งวดเงินเดือน สลิป · ต้องมีสิทธิ์เห็นต้นทุนด้วย (perms.ts) เงินเดือนเป็นความลับกว่าต้นทุนสินค้า */
+        key: 'payroll', no: '06.5', label: 'เงินเดือนพนักงาน',
+        desc: 'งวดเงินเดือน ประกันสังคม สลิป · Light Plus',
+        icon: 'coins', color: '#1D7A5F', href: '/finance/payroll',
+      },
+      {
+        /* แท็บลูกของเงินเดือน — ข้อมูลชุดเดียวกัน (มีฐานเงินเดือนอยู่ในนั้น) สิทธิ์จึงชุดเดียวกัน */
+        key: 'employees', no: '06.6', label: 'ทะเบียนพนักงาน',
+        desc: 'รายชื่อ เงินเดือน เลขผู้เสียภาษี · Light Plus',
+        icon: 'people', color: '#5B3FBF', href: '/finance/payroll/employees', parent: 'payroll',
+      },
+      {
+        /* Light Plus (042) — รายงานภาษีซื้อ-ขาย ใบแนบ ภ.ง.ด.1/3/53 สปส.1-10 และ 50 ทวิ */
+        key: 'tax', no: '06.7', label: 'เอกสารภาษี',
+        desc: 'ภาษีซื้อ-ขาย ภ.ง.ด. 50 ทวิ · Light Plus',
+        icon: 'receipts', color: '#B4720B', href: '/finance/tax',
       },
     ],
   },

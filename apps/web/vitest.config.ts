@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -10,6 +11,8 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
   },
   resolve: {
-    alias: { '@': new URL('./src/', import.meta.url).pathname },
+    /* fileURLToPath ไม่ใช่ .pathname — .pathname คืน /C:/... บน Windows และคง %20 ไว้เมื่อโฟลเดอร์มีช่องว่าง
+       alias จึงชี้ไปที่ที่ไม่มีอยู่จริง แล้วเทสต์ที่ import ผ่าน @/ ล้มทั้งไฟล์ */
+    alias: { '@': fileURLToPath(new URL('./src/', import.meta.url)) },
   },
 });

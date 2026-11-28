@@ -9,6 +9,7 @@ import { DateRange } from '@/components/date-range';
 import { getSalesReport, getVatChain } from '@/lib/reports';
 import { query } from '@/lib/auth';
 import { salesDocsWith } from '@/lib/home-report';
+import { salesSplitWith, type SplitRow } from '@/lib/sales-split';
 import { getVatRegistered } from '@/lib/queries';
 import { PageSize, pageSizeOf } from '@/components/page-size';
 import { baht, KIND_SHORT, monthLabel, thDate } from '@/lib/format';
@@ -28,11 +29,12 @@ export default async function SalesReportPage({
   const page = Math.max(1, Number(sp.page ?? '1') || 1);
   const pageSize = pageSizeOf(sp.size);
 
-  const [report, vat, docs, vatRegistered] = await Promise.all([
+  const [report, vat, docs, vatRegistered, split] = await Promise.all([
     getSalesReport(sp.from, sp.to),
     getVatChain(),
     query((c) => salesDocsWith(c, { from: sp.from, to: sp.to, page, pageSize })),
     getVatRegistered(),
+    query((c) => salesSplitWith(c, sp.from, sp.to)),
   ]);
 
   const lastPage = Math.max(1, Math.ceil(docs.total / pageSize));
@@ -80,6 +82,67 @@ export default async function SalesReportPage({
           <div className="value">{report.docCount}</div>
         </div></div>
       </div>
+
+      {/* แยกรายได้ตามช่องทางและประเภท (ผู้ใช้ขอ 24 พ.ย. 2569) — ยอดรวมแถวล่างเท่ากับ "ยอดขายก่อนภาษี" ข้างบนพอดี
+          นิยามและข้อจำกัดอยู่ที่ lib/sales-split.ts */}
+      {split.total.count > 0 ? (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <header>
+            <h2>แยกรายได้ — งานซ่อม / ขายหน้าร้าน</h2>
+            <div className="spacer" />
+            <span className="subtle">มูลค่าก่อนภาษี{sp.from || sp.to ? ' · ช่วงที่เลือก' : ''}</span>
+          </header>
+          <div className="tablewrap">
+            <table className="tbl split">
+              <thead>
+                <tr>
+                  <th>ช่องทาง</th><th className="num">เอกสาร</th>
+                  <th className="num">ค่าแรง</th><th className="num">ค่าอะไหล่/สินค้า</th>
+                  <th className="num">รวมก่อนภาษี</th><th className="num">สัดส่วน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ['งานซ่อม', 'มีใบเสนอราคาหรือใบส่งมอบ', split.job, 'violet'],
+                  ['ขายหน้าร้าน', 'ใบเสร็จที่ไม่มีใบต้นทาง (03.6)', split.walkin, 'teal'],
+                ] as [string, string, SplitRow, string][]).map(([name, hint, r, tone]) => (
+                  <tr key={name} data-tone={tone}>
+                    <td className="wrap">
+                      <b className="split-nm">{name}</b>
+                      <div className="subtle">{hint}</div>
+                    </td>
+                    <td className="num">{r.count.toLocaleString('en-US')}</td>
+                    <td className="num mono">{baht(r.labour)}</td>
+                    <td className="num mono">{baht(r.parts)}</td>
+                    <td className="num mono"><b>{baht(r.net)}</b></td>
+                    <td className="num">{split.total.net > 0 ? `${Math.round((r.net / split.total.net) * 100)}%` : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td><b>รวม</b></td>
+                  <td className="num"><b>{split.total.count.toLocaleString('en-US')}</b></td>
+                  <td className="num mono">
+                    <b>{baht(split.total.labour)}</b>
+                    <div className="subtle">{split.total.net > 0 ? `${Math.round((split.total.labour / split.total.net) * 100)}% ของยอดขาย` : ''}</div>
+                  </td>
+                  <td className="num mono">
+                    <b>{baht(split.total.parts)}</b>
+                    <div className="subtle">{split.total.net > 0 ? `${Math.round((split.total.parts / split.total.net) * 100)}% ของยอดขาย` : ''}</div>
+                  </td>
+                  <td className="num mono"><b>{baht(split.total.net)}</b></td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="hint" style={{ padding: '8px 12px', margin: 0 }}>
+            ค่าแรงคือบรรทัดที่ติ๊ก “ค่าแรง” ในเอกสาร · ส่วนลดท้ายบิลและ VAT ถูกกระจายให้ค่าแรงกับค่าอะไหล่ตามสัดส่วน ·
+            งานซ่อมที่เปิดผ่านเมนูขายหน้าร้านจะนับเป็นขายหน้าร้าน
+          </p>
+        </div>
+      ) : null}
 
       {/* ตารางรายเดือนคงเป็นตารางทุกขนาดจอ — ตัวเลขหลายคอลัมน์ที่ต้องไล่เทียบเดือนต่อเดือน อ่านเป็นตารางง่ายกว่า */}
       <div className="card sales-monthly">

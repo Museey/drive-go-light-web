@@ -1,7 +1,7 @@
 /**
  * ถังขยะ — ตัวที่ผูกกับ session และสิทธิ์ของผู้ใช้ งานจริงอยู่ใน trash-core.ts
  */
-import { query, requireSession } from './auth';
+import { query, requireSession, requireTab } from './auth';
 import { mutate } from './mutate';
 import {
   assertOwnerPasswordWith, listTrashWith, purgeFromTrashWith, restoreFromTrashWith, type TrashRow,
@@ -11,12 +11,21 @@ export type { TrashRow };
 
 type Source = 'doc' | 'billnote';
 
+/**
+ * แท็บ 07.4 ในผังเมนู (menu-map.ts) — หน้าตั้งสิทธิ์พนักงานมีช่องติ๊กของแท็บนี้แยกอยู่แล้ว
+ * เดิมทั้งหน้าและการกู้คืนตรวจกับแท็บ 07.1 ข้อมูลร้าน: ปิดแท็บถังขยะของพนักงานไปก็ยังเปิดหน้านี้
+ * และกู้คืนเอกสารได้ ส่วนคนที่ได้แท็บถังขยะอย่างเดียวกลับเข้าไม่ได้ (ตรวจ 24 พ.ย. 2569)
+ */
+const TAB = 'trash';
+
+/** รายการในถังขยะมีชื่อลูกค้าและยอดเงิน — ตรวจสิทธิ์เปิดแท็บที่นี่ด้วย ไม่พึ่งว่าหน้าเว็บตรวจมาแล้ว */
 export async function listTrash(opts: { from?: string; to?: string }): Promise<TrashRow[]> {
+  await requireTab('settings', TAB);
   return query((c) => listTrashWith(c, opts));
 }
 
 export async function restoreFromTrash(source: Source, id: string): Promise<void> {
-  return mutate('settings', (c, userId) => restoreFromTrashWith(c, source, id, userId), { sub: 'shop' });
+  return mutate('settings', (c, userId) => restoreFromTrashWith(c, source, id, userId), { sub: TAB });
 }
 
 /** ลบถาวร — เฉพาะเจ้าของกิจการ และต้องยืนยันรหัสผ่านซ้ำ (ผู้ใช้กำหนด) · ตรวจรหัสในทรานแซกชันเดียวกับที่ลบ */
@@ -25,5 +34,5 @@ export async function purgeFromTrash(source: Source, id: string, password: strin
   return mutate('settings', async (c, userId) => {
     await assertOwnerPasswordWith(c, { userId, role: s.role }, password);
     await purgeFromTrashWith(c, source, id);
-  }, { sub: 'shop' });
+  }, { sub: TAB });
 }

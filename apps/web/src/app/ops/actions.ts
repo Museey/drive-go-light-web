@@ -5,9 +5,11 @@ import {
   appUrl, newSetupToken, opsSetupUrl, requireOperator, shopSetupUrl,
 } from '@/lib/ops-auth';
 import {
-  addOperator, decideRequest, issueOwnerReset, openShop, recordRenewal, setMaxUsers, setOperatorActive,
+  addOperator, approveRenewalRequest, decideRequest, issueOwnerReset, openShop, recordRenewal,
+  rejectRenewalRequest, setMaxUsers, setOperatorActive,
 } from '@/lib/ops-console';
 import type { FormResult } from '@/lib/mutate';
+import { PLAN_CHOICES, PLAN_LIGHT } from '@/lib/plan-core';
 
 /**
  * งานทั้งหมดของคอนโซล
@@ -71,9 +73,13 @@ export async function renewAction(_prev: FormResult, fd: FormData): Promise<Form
   const amount = raw === '' ? null : Number(raw);
   if (amount !== null && !Number.isFinite(amount)) return { error: 'ยอดเงินไม่ถูกต้อง' };
 
+  /* รับเฉพาะแพ็กเกจที่รู้จัก — ค่าอื่นจะถูกอ่านเป็น Light เงียบ ๆ (isPlusPlan ดูแค่คำขึ้นต้น) */
+  const plan = str(fd, 'plan') || PLAN_LIGHT;
+  if (!PLAN_CHOICES.some((c) => c.value === plan)) return { error: 'แพ็กเกจไม่ถูกต้อง — เลือกจากรายการ' };
+
   try {
     await recordRenewal(s, {
-      tenantId, plan: str(fd, 'plan') || 'light-yearly', from, to, amount,
+      tenantId, plan, from, to, amount,
       note: str(fd, 'note'),
     });
   } catch (err) {
@@ -81,6 +87,34 @@ export async function renewAction(_prev: FormResult, fd: FormData): Promise<Form
   }
   revalidatePath('/ops');
   revalidatePath(`/ops/shop/${tenantId}`);
+  return { ok: true };
+}
+
+/**
+ * ตัดสินคำขอต่ออายุที่อู่แจ้งชำระเงินมา — `decision` มาจากปุ่มที่กด
+ * อนุมัติ = ตรวจยอดโอนกับบัญชีธนาคารแล้ว · ไม่อนุมัติต้องมีเหตุผลให้อู่เห็น
+ */
+export async function decideRenewalAction(_prev: FormResult, fd: FormData): Promise<FormResult> {
+  const s = await requireOperator();
+  const requestId = str(fd, 'requestId');
+  const decision = str(fd, 'decision');
+  const note = str(fd, 'note').slice(0, 300);
+  if (!requestId) return { error: 'ไม่รู้ว่าเป็นคำขอไหน' };
+
+  try {
+    if (decision === 'approve') {
+      const r = await approveRenewalRequest(s, requestId, note);
+      revalidatePath(`/ops/shop/${r.tenantId}`);
+    } else if (decision === 'reject') {
+      if (!note) return { error: 'ไม่อนุมัติต้องกรอกเหตุผล — อู่จะเห็นข้อความนี้', field: 'note' };
+      await rejectRenewalRequest(s, requestId, note);
+    } else {
+      return { error: 'คำสั่งไม่ถูกต้อง' };
+    }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ' };
+  }
+  revalidatePath('/ops');
   return { ok: true };
 }
 

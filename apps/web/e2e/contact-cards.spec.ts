@@ -186,9 +186,10 @@ test('เดสก์ท็อป: เมนูย่อย ชิปประ�
   /* ลิงก์ CSV ที่เพิ่มในเครื่องมือของหน้าเป็นของจอแคบ — เดสก์ท็อปมีการ์ด 02.4 ในแถบเมนูย่อยอยู่แล้ว ไม่ซ้ำในหัวหน้า */
   await expect(page.locator('.page-acts').getByRole('link', { name: /นำเข้า \/ ส่งออก CSV/ })).toBeHidden();
   /* เดสก์ท็อปย้ายแถบเมนูย่อยขึ้นแถวหัวหน้า — ต้องเห็นลิงก์ CSV อันเดียวคือการ์ด 02.4 ไม่ซ้ำกับปุ่มในเครื่องมือ */
-  const csv = await page.getByRole('link', { name: /นำเข้า \/ ส่งออก CSV/ }).evaluateAll(
-    (els) => els.filter((e) => (e as HTMLElement).offsetParent !== null).length);
-  expect(csv, 'ลิงก์ CSV ที่มองเห็นบนเดสก์ท็อป').toBe(1);
+  /* นับแบบรอได้ — evaluateAll นับทันทีครั้งเดียว ถ้าแถบเมนูย่อยยังวาดไม่ครบจะได้ 0 ทั้งที่หน้าถูก */
+  await expect.poll(() => page.getByRole('link', { name: /นำเข้า \/ ส่งออก CSV/ }).evaluateAll(
+    (els) => els.filter((e) => (e as HTMLElement).offsetParent !== null).length),
+  { message: 'ลิงก์ CSV ที่มองเห็นบนเดสก์ท็อป' }).toBe(1);
   for (const label of ['ทุกรูปแบบ', 'บุคคลธรรมดา', 'นิติบุคคล']) {
     await expect(page.getByRole('link', { name: label, exact: true })).toBeVisible();
   }

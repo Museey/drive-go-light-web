@@ -36,7 +36,7 @@ export default async function OpsErrorsPage() {
                       {thDateTime(e.lastAt)}
                       {/* เกิดซ้ำ — บอกด้วยว่าเริ่มเมื่อไหร่ ปัญหาที่ลากยาวดูออกทันที */}
                       {e.occurrences > 1 ? (
-                        <div className="subtle" style={{ fontSize: 11 }}>
+                        <div className="subtle" style={{ fontSize: '0.875rem' }}>
                           ครั้งแรก {thDateTime(e.at)}
                         </div>
                       ) : null}
@@ -47,8 +47,8 @@ export default async function OpsErrorsPage() {
                         : <span className="subtle">1</span>}
                     </td>
                     <td><span className="chip">{e.kind}</span></td>
-                    <td className="wrap" style={{ fontSize: 12.5 }}>{e.message}</td>
-                    <td className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+                    <td className="wrap" style={{ fontSize: '0.875rem' }}>{e.message}</td>
+                    <td className="mono" style={{ fontSize: '0.875rem', color: 'var(--ink-3)' }}>
                       {e.tenantId ? e.tenantId.slice(0, 8) : '—'}
                     </td>
                   </tr>

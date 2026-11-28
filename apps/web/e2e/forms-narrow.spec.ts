@@ -66,7 +66,7 @@ for (const f of FORMS) {
       const short = inputs.filter((i) => i.h < 48).map((i) => `${i.name} ${i.h}px`);
       expect(short, 'ช่องที่เตี้ยกว่า 48px').toEqual([]);
     } else {
-      expect([...new Set(inputs.map((i) => i.font))], 'เดสก์ท็อปตัวหนังสือเดิม').toEqual([14]);
+      expect([...new Set(inputs.map((i) => i.font))], 'เดสก์ท็อปตัวหนังสือเดิม').toEqual([15]);
       expect(inputs.filter((i) => i.tag !== 'TEXTAREA').every((i) => i.h === 44), 'เดสก์ท็อปช่องสูงเดิม').toBe(true);
     }
   });

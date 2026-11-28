@@ -52,6 +52,12 @@ export function canTab(s: PermSubject, menu: PermKey, sub: string): boolean {
   if (menu === 'finance' && sub === 'pl' && !canCost(s)) return false;
   if (isOwner(s)) return true;
   if (!canMenu(s, menu)) return false;
+  /* เงินเดือน (Light Plus) — **ต้องติ๊กให้ตรง ๆ เท่านั้น** ไม่ได้มาเองจาก "ยังไม่เคยตั้งละเอียด = เข้าได้ทุกแท็บ"
+     แท็บนี้เพิ่มทีหลัง พนักงานที่เคยได้เมนูบัญชีทั้งเมนูจะเห็นเงินเดือนของทุกคนทันทีโดยเจ้าของไม่รู้ตัว
+     และต้องมีสิทธิ์เห็นต้นทุนด้วย — เงินเดือนเป็นความลับกว่าต้นทุนสินค้า */
+  if (menu === 'finance' && sub === 'payroll') {
+    return canCost(s) && s.perms.tabs?.[tabKey(menu, sub)] === true;
+  }
 
   const tabs = s.perms.tabs;
   if (!tabs) return true;

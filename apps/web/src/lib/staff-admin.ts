@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { seatsLeft } from '@drivegolight/core';
 import { checkPasswordStrength, hashPassword } from './password';
 
 /**
@@ -14,6 +15,35 @@ type Client = pg.PoolClient | pg.Client;
 const OWNER_PERMS = {
   menus: { customer: true, income: true, expense: true, stock: true, finance: true, settings: true },
 };
+
+/**
+ * ที่นั่งพนักงานตามแพ็กเกจ — เรียกก่อน**ทุกครั้งที่จำนวนพนักงานที่เข้าใช้ได้จะเพิ่มขึ้น**
+ * คือสร้างบัญชีใหม่ และเปิดบัญชีที่ปิดไว้กลับมาใช้
+ *
+ * เดิมตรวจเฉพาะตอนสร้าง — อู่ที่ซื้อ 3 ที่นั่งจึงสร้าง 3 คน ปิด 3 คน สร้างอีก 3 คน
+ * แล้วเปิด 3 คนแรกกลับมา ได้ 6 คนจากแพ็กเกจ 3 ที่นั่ง (ตรวจ 24 พ.ย. 2569)
+ *
+ * ไม่ตรวจตอนล็อกอิน: ลดแพ็กเกจแล้วต้องไม่มีใครถูกล็อกออกจากระบบกลางดึกโดยไม่รู้ตัว
+ * เจ้าของกิจการไม่ถูกนับ เพราะที่นั่งที่ขายคือที่นั่งพนักงาน
+ */
+export async function assertStaffSeatFreeWith(c: Client): Promise<void> {
+  /* ล็อกแถวอู่ก่อนนับ — สองเครื่องกดเพิ่มพนักงานพร้อมกันตอนเหลือที่เดียว ต้องผ่านแค่เครื่องเดียว */
+  await c.query(`select 1 from tenants where id = current_tenant_id() for update`);
+
+  const seat = await c.query(
+    `select (select max_users from subscriptions
+              order by expires_on desc limit 1) as max_users,
+            (select count(*)::int from users
+              where role = 'staff' and active) as staff`,
+  );
+  const max = seat.rows[0].max_users === null ? null : Number(seat.rows[0].max_users);
+  if (seatsLeft(max, Number(seat.rows[0].staff)) === 0) {
+    throw new Error(
+      `แพ็กเกจนี้เปิดบัญชีพนักงานได้ ${max} คน — ` +
+      'ปิดการเข้าใช้งานของคนที่ไม่ได้ทำงานแล้ว หรือติดต่อผู้ให้บริการเพื่อเพิ่มจำนวน',
+    );
+  }
+}
 
 /**
  * โอนสิทธิ์เจ้าของกิจการ — **อู่มีเจ้าของได้คนเดียว** (ผู้ใช้เลือก 19 ก.ย. 2569)

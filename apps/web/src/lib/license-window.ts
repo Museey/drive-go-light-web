@@ -6,6 +6,7 @@
  * เรื่องวันหมดอายุเถียงกับลูกค้าไม่ได้ ต้องมีชุดทดสอบยืนยัน
  */
 import type pg from 'pg';
+import { today } from '@drivegolight/core';
 
 /** ทดลองใช้ฟรีกี่วัน — ยกมาจากโปรแกรมเดิม */
 export const TRIAL_DAYS = 15;
@@ -26,7 +27,15 @@ export interface LicenseStatus {
 export const isoOf = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-export const todayIso = (): string => isoOf(new Date());
+/**
+ * วันนี้**ตามเวลาไทย** ไม่ใช่ตามนาฬิกาของเครื่องที่รันแอป (24 พ.ย. 2569)
+ *
+ * เซิร์ฟเวอร์อยู่สิงคโปร์และมักตั้งเวลาเป็น UTC — เดิมใช้ `isoOf(new Date())` ซึ่งอ่านเวลาเครื่อง
+ * ระหว่างเที่ยงคืนถึง 07:00 น. ของไทย เครื่องยังเห็นเป็นเมื่อวาน: อู่ที่หมดอายุแล้วใช้ต่อได้อีก 7 ชั่วโมง
+ * และการต่ออายุที่บันทึกช่วงนั้นเริ่มนับจากเมื่อวาน ลูกค้าเสียไปหนึ่งวัน
+ * ใช้ตัวเดียวกับวันที่บนเอกสาร (core/date.ts) ทั้งระบบจึงเห็นวันเดียวกัน
+ */
+export const todayIso = (): string => today();
 
 export function addDays(iso: string, days: number): string {
   const d = new Date(iso + 'T00:00:00');

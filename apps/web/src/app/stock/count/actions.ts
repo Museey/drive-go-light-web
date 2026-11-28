@@ -114,8 +114,10 @@ export async function applyCountAction(id: string): Promise<FormResult> {
     return {
       ok: true,
       values: {
-        note: `ปรับยอด ${r.adjusted} รายการตามใบตรวจนับ ${r.no} แล้ว`
-          + ` · รับเข้าเพิ่ม ${r.up} รายการ · ตัดออก ${r.adjusted - r.up} รายการ`,
+        note: r.adjusted === 0
+          ? `ปิดใบตรวจนับ ${r.no} แล้ว — นับได้ตรงกับระบบทุกรายการ สต๊อกไม่เปลี่ยน`
+          : `ปรับยอด ${r.adjusted} รายการตามใบตรวจนับ ${r.no} แล้ว`
+            + ` · รับเข้าเพิ่ม ${r.up} รายการ · ตัดออก ${r.adjusted - r.up} รายการ`,
       },
     };
   } catch (err) {

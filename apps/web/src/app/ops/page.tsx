@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { requireOperator } from '@/lib/ops-auth';
-import { listShops, type ShopRow } from '@/lib/ops-console';
+import { listRenewalRequests, listShops, type ShopRow } from '@/lib/ops-console';
+import { DecideRenewal } from './renewal-forms';
+import { baht } from '@/lib/format';
 import { OpsShell } from './ops-shell';
 import { thDate } from '@/lib/format';
 import { lastUsed, needsFollowUp, usageLevel } from '@/lib/usage';
@@ -30,6 +32,7 @@ export default async function OpsHomePage({
 }) {
   const session = await requireOperator();
   const shops = await listShops(session);
+  const pending = (await listRenewalRequests(session)).filter((r) => r.status === 'pending');
   const sp = await searchParams;
   const filter: FilterKey = sp.filter && sp.filter in FILTERS ? sp.filter as FilterKey : 'all';
   const byUsed = sp.sort === 'used';
@@ -69,6 +72,31 @@ export default async function OpsHomePage({
       }
       actions={<Link className="btn primary" href="/ops/new">+ เปิดอู่ใหม่</Link>}
     >
+      {pending.length ? (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <header><h2>คำขอต่ออายุที่รอตรวจการชำระเงิน ({pending.length})</h2></header>
+          <div className="body">
+            <div className="hint" style={{ marginBottom: 10 }}>
+              ตรวจยอดกับรายการเดินบัญชีก่อนกดอนุมัติ — อนุมัติแล้วระบบต่ออายุให้อู่ทันที
+              โดยต่อจากวันหมดอายุเดิม (หรือจากวันนี้ถ้าหมดอายุไปแล้ว)
+            </div>
+            {pending.map((r) => (
+              <div key={r.id} style={{ borderTop: '1px solid var(--line)', padding: '10px 0' }}>
+                <div style={{ marginBottom: 6 }}>
+                  <Link href={`/ops/shop/${r.tenantId}`} style={{ textDecoration: 'underline', fontWeight: 600 }}>
+                    {r.tenantName}
+                  </Link>
+                  {' '}· ต่ออายุ {r.years} ปี · โอน <b>{baht(r.amount)}</b> บาท
+                  เมื่อ {thDate(r.paidOn)} · แจ้งเมื่อ {thDate(r.createdAt.slice(0, 10))}
+                  <div style={{ color: 'var(--ink-2)', fontSize: '0.875rem' }}>อ้างอิง: {r.note || '-'}</div>
+                </div>
+                <DecideRenewal requestId={r.id} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
         {(Object.keys(FILTERS) as FilterKey[]).map((k) => (
           <Link key={k} href={href(k)} className="chip"
@@ -113,7 +141,7 @@ export default async function OpsHomePage({
                           ควรโทรตาม
                         </span>
                       ) : null}
-                      <div style={{ color: 'var(--ink-3)', fontSize: 12 }}>
+                      <div style={{ color: 'var(--ink-3)', fontSize: '0.875rem' }}>
                         เปิดเมื่อ {thDate(s.createdOn)}
                       </div>
                     </td>
@@ -131,7 +159,7 @@ export default async function OpsHomePage({
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <DocSpark values={s.usage.docsSpark} />
-                        <span style={{ fontSize: 12, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}
+                        <span style={{ fontSize: '0.875rem', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}
                               title="วันที่มีคนเข้าใช้หรือสร้างเอกสาร · จำนวนเอกสารที่สร้าง">
                           {s.usage.activeDays30} วัน · {s.usage.docs30} ใบ
                         </span>

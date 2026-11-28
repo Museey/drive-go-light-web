@@ -21,7 +21,7 @@ export function LinkBox({ link, note }: { link: string; note: string }) {
           readOnly
           value={link}
           onFocus={(e) => e.currentTarget.select()}
-          style={{ flex: 1, minWidth: 260, fontSize: 12 }}
+          style={{ flex: 1, minWidth: 260, fontSize: '0.875rem' }}
         />
         <button
           className="btn"
@@ -37,7 +37,7 @@ export function LinkBox({ link, note }: { link: string; note: string }) {
           }}
         >{copied ? 'ก๊อปแล้ว' : 'ก๊อปลิงก์'}</button>
       </div>
-      <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 8 }}>
+      <div style={{ fontSize: '0.875rem', color: 'var(--ink-3)', marginTop: 8 }}>
         ลิงก์นี้แสดงครั้งเดียว — ปิดหน้านี้แล้วดูย้อนหลังไม่ได้ ต้องออกใหม่
         · ใช้ได้ครั้งเดียว หมดอายุใน 7 วัน · ใครถือลิงก์ก็ตั้งรหัสผ่านได้ ส่งทางที่ปลอดภัย
       </div>

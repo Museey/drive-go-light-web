@@ -7,11 +7,13 @@ import { BackFab } from '@/components/back-fab';
 import { PrintButton } from '../../../../income/[id]/print/print-button';
 import { baht, thDateLong } from '@/lib/format';
 import { COPY_LABELS } from '@/components/doc-paper';
+import { canCost } from '@/lib/perms';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ClaimPrintPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireTab('stock', 'claim');
+  const session = await requireTab('stock', 'claim');
+  const showCost = canCost(session);
   const { id } = await params;
   /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
   if (!isUuid(id)) notFound();
@@ -32,7 +34,7 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
     <>
       <div className="printbar">
         <div className="spacer" />
-        <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>
+        <span style={{ color: 'var(--ink-3)', fontSize: '0.875rem' }}>
           เอกสารตัดสต๊อก ไม่ใช่ใบกำกับภาษี — ไม่มีการเรียกเก็บเงินตามใบนี้
         </span>
         <PrintButton />
@@ -55,7 +57,7 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
             </div>
             <div className="doc-meta">
               <h1>{S.title}</h1>
-              <div style={{ fontSize: 11, letterSpacing: '.08em' }}>
+              <div style={{ fontSize: '0.875rem', letterSpacing: '.08em' }}>
                 {vendor ? 'SUPPLIER CLAIM / GOODS RETURN' : 'CLAIM / STOCK WRITE-OFF'}
               </div>
               <div className="copy-tag">{copy}</div>
@@ -71,7 +73,7 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
 
           {claim.voided ? (
             <div className="box"><h4>เอกสารนี้ถูกยกเลิกแล้ว</h4>
-              <div style={{ fontSize: 11.5 }}>
+              <div style={{ fontSize: '0.875rem' }}>
                 สต๊อกที่ตัดไปตามใบนี้ถูกคืนกลับเข้าคลังเรียบร้อยแล้ว
                 {claim.voidedReason ? ` · เหตุผล: ${claim.voidedReason}` : ''}
               </div>
@@ -105,8 +107,8 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
                 <th style={{ width: 116 }}>รหัสสินค้า</th>
                 <th>รายการ</th>
                 <th style={{ width: 62 }}>จำนวน</th>
-                <th style={{ width: 92 }}>ต้นทุน/หน่วย</th>
-                <th style={{ width: 100 }}>มูลค่ารวม</th>
+                {showCost ? <th style={{ width: 92 }}>ต้นทุน/หน่วย</th> : null}
+                {showCost ? <th style={{ width: 100 }}>มูลค่ารวม</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -118,16 +120,19 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
                     <td>{it.code || '-'}</td>
                     <td>{it.name}</td>
                     <td style={{ textAlign: 'right' }}>{it.qty}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      {baht(it.qty > 0 ? value / it.qty : 0)}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>{baht(value)}</td>
+                    {showCost ? (
+                      <td style={{ textAlign: 'right' }}>
+                        {baht(it.qty > 0 ? value / it.qty : 0)}
+                      </td>
+                    ) : null}
+                    {showCost ? <td style={{ textAlign: 'right' }}>{baht(value)}</td> : null}
                   </tr>
                 );
               })}
               {Array.from({ length: blankRows }).map((_, i) => (
                 <tr key={`b-${i}`}>
-                  <td className="blank">&nbsp;</td><td /><td /><td /><td /><td />
+                  <td className="blank">&nbsp;</td><td /><td /><td />
+                  {showCost ? <><td /><td /></> : null}
                 </tr>
               ))}
             </tbody>
@@ -137,8 +142,8 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
                   <b>รวมทั้งสิ้น</b>
                 </td>
                 <td style={{ textAlign: 'right', background: '#EDEFF1' }}><b>{claim.qty}</b></td>
-                <td style={{ background: '#EDEFF1' }} />
-                <td style={{ textAlign: 'right', background: '#EDEFF1' }}><b>{baht(claim.cost)}</b></td>
+                {showCost ? <td style={{ background: '#EDEFF1' }} /> : null}
+                {showCost ? <td style={{ textAlign: 'right', background: '#EDEFF1' }}><b>{baht(claim.cost)}</b></td> : null}
               </tr>
             </tfoot>
           </table>
@@ -146,7 +151,7 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
           {claim.note ? (
             <div className="box">
               <h4>หมายเหตุ</h4>
-              <div style={{ fontSize: 11.5, whiteSpace: 'pre-wrap' }}>{claim.note}</div>
+              <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>{claim.note}</div>
             </div>
           ) : null}
 
@@ -154,20 +159,20 @@ export default async function ClaimPrintPage({ params }: { params: Promise<{ id:
             <div>
               <div className="line" />ผู้อนุมัติ
               <br />
-              <span style={{ fontSize: 11 }}>
+              <span style={{ fontSize: '0.875rem' }}>
                 ( {claim.byWhom || '................................................'} )
               </span>
             </div>
             <div>
               <div className="line" />{vendor ? 'ผู้รับของคืน' : 'ผู้รับของ'}
               <br />
-              <span style={{ fontSize: 11 }}>
+              <span style={{ fontSize: '0.875rem' }}>
                 ( {claim.partyName || '................................................'} )
               </span>
             </div>
           </div>
 
-          <div style={{ fontSize: 10.5, marginTop: 10, color: '#555', lineHeight: 1.7 }}>
+          <div style={{ fontSize: '0.875rem', marginTop: 10, color: '#555', lineHeight: 1.7 }}>
             {vendor ? (
               <>
                 เอกสารนี้ใช้บันทึกการส่งสินค้าชำรุดหรือผิดรุ่นคืนให้ผู้ขาย

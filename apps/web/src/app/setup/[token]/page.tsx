@@ -23,7 +23,7 @@ export default async function SetupPage({
           <header><h2>ลิงก์ใช้ไม่ได้แล้ว</h2></header>
           <div className="body">
             <p>ลิงก์ตั้งรหัสผ่านนี้หมดอายุ ถูกใช้ไปแล้ว หรือถูกยกเลิก</p>
-            <p style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>
+            <p style={{ color: 'var(--ink-3)', fontSize: '0.875rem' }}>
               ขอลิงก์ใหม่จากเจ้าของกิจการได้เลย ลิงก์เดิมจะใช้ไม่ได้ทันทีที่ออกลิงก์ใหม่
             </p>
           </div>
@@ -78,14 +78,14 @@ export default async function SetupPage({
           ) : null}
 
           <form autoComplete="off" action={submit}>
-            <label htmlFor="password" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+            <label htmlFor="password" style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 4 }}>
               รหัสผ่านใหม่ (อย่างน้อย 10 ตัวอักษร)
             </label>
             <input className="in" id="password" name="password" type="password"
                    autoComplete="new-password" required minLength={10}
                    style={{ width: '100%', marginBottom: 12 }} />
 
-            <label htmlFor="confirm" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+            <label htmlFor="confirm" style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 4 }}>
               พิมพ์รหัสผ่านอีกครั้ง
             </label>
             <input className="in" id="confirm" name="confirm" type="password"
@@ -97,7 +97,7 @@ export default async function SetupPage({
             </button>
           </form>
 
-          <p style={{ color: 'var(--ink-3)', fontSize: 12, marginTop: 14, marginBottom: 0 }}>
+          <p style={{ color: 'var(--ink-3)', fontSize: '0.875rem', marginTop: 14, marginBottom: 0 }}>
             ตั้งรหัสผ่านแล้วระบบจะออกจากระบบทุกเครื่องที่เคยเข้าไว้
           </p>
         </div>

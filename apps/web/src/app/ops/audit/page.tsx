@@ -50,9 +50,9 @@ export default async function OpsAuditPage() {
                 {rows.length ? rows.map((a) => (
                   <tr key={a.id}>
                     <td>{thDateTime(a.at)}</td>
-                    <td className="mono" style={{ fontSize: 12 }}>{a.operatorEmail || '—'}</td>
+                    <td className="mono" style={{ fontSize: '0.875rem' }}>{a.operatorEmail || '—'}</td>
                     <td>{AUDIT_LABEL[a.action] ?? a.action}</td>
-                    <td className="wrap" style={{ fontSize: 12.5 }}>
+                    <td className="wrap" style={{ fontSize: '0.875rem' }}>
                       {detailOf(a.action, a.detail)}
                     </td>
                   </tr>

@@ -44,7 +44,7 @@ export default async function PendingPrintPage() {
               <td style={{ textAlign: 'right' }}>{p.lineCount}</td>
               <td style={{ textAlign: 'right' }}>{p.totalQty.toLocaleString('en-US')}</td>
               <td>{thDate(p.lastUsedOn)}</td>
-              <td style={{ fontSize: 11 }}>{p.lastDocNo}</td>
+              <td style={{ fontSize: '0.875rem' }}>{p.lastDocNo}</td>
               <td className="blank">&nbsp;</td>
             </tr>
           ))}

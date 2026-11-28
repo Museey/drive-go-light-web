@@ -63,14 +63,26 @@ export async function importProductsCsvWith(
     const existing = await c.query(`select id from products where upper(code) = upper($1)`, [code]);
 
     if (existing.rows[0]) {
-      await c.query(
-        `update products set oem=$2, name=$3, unit=$4, category_id=$5,
-                last_cost=$6, price_a=$7, price_b=$8, price_c=$9, qty_min=$10, qty_max=$11
-         where id=$1`,
-        [existing.rows[0].id, str(row, map.oem), name, str(row, map.unit), categoryId,
-         num(row, map.cost), num(row, map.priceA), num(row, map.priceB), num(row, map.priceC),
-         num(row, map.qtyMin), num(row, map.qtyMax)],
-      );
+      /* **แก้เฉพาะคอลัมน์ที่มีในไฟล์** — เดิมเขียนทับทุกช่อง คอลัมน์ที่ไฟล์ไม่มีถูกล้างเป็นค่าว่างหรือ 0
+         ไฟล์ปรับราคาที่มีแค่ รหัส · ชื่อ · ราคา จึงลบทุน หน่วย หมวด และจุดสั่งซื้อของสินค้าทุกตัวทิ้งเงียบ ๆ
+         ช่องที่**มีคอลัมน์แต่เว้นว่าง**ยังถือว่าตั้งใจล้างค่า เหมือนเดิม */
+      const sets = ['name=$2'];
+      const vals: unknown[] = [existing.rows[0].id, name];
+      const put = (col: string, index: number | undefined, value: unknown) => {
+        if (index === undefined) return;
+        vals.push(value);
+        sets.push(`${col}=$${vals.length}`);
+      };
+      put('oem', map.oem, str(row, map.oem));
+      put('unit', map.unit, str(row, map.unit));
+      put('category_id', map.cat, categoryId);
+      put('last_cost', map.cost, num(row, map.cost));
+      put('price_a', map.priceA, num(row, map.priceA));
+      put('price_b', map.priceB, num(row, map.priceB));
+      put('price_c', map.priceC, num(row, map.priceC));
+      put('qty_min', map.qtyMin, num(row, map.qtyMin));
+      put('qty_max', map.qtyMax, num(row, map.qtyMax));
+      await c.query(`update products set ${sets.join(', ')} where id=$1`, vals);
       result.updated++;
     } else {
       const made = await c.query(

@@ -3,6 +3,7 @@ import { EXPENSE_CATS, vatChainFromMonths, type VatMonth } from '@drivegolight/c
 import { query } from './auth';
 import { whtByRateWith, type WhtByRate } from './home-report';
 import { profitAndLossWith } from './reports-pl';
+import { DEBT_PAID_SQL } from './debt-paid';
 
 import type { PLReport } from './reports-pl';
 
@@ -189,6 +190,11 @@ export interface FinanceCsvRow {
   paid: number;
   outstanding: number;
   status: string;
+  /** sales rows only (lib/sales-split.ts): 'walkin' | 'job' - '' on purchase and expense rows */
+  channel: 'walkin' | 'job' | '';
+  /** sales rows only - labour + parts = net, null on purchase and expense rows */
+  labour: number | null;
+  parts: number | null;
 }
 
 /**
@@ -206,19 +212,26 @@ export async function getFinanceCsvRows(from?: string, to?: string): Promise<Fin
     const buyRange = rangeSql(params, from, to);
 
     const { rows } = await c.query(
-      `with paid as (select doc_id, sum(amount) as amount from payments group by doc_id)
+      `with paid as (select doc_id, paid as amount from ${DEBT_PAID_SQL} dp)
        select 'ขาย' as grp, d.kind::text as kind, null::text as cat,
               d.doc_no, d.doc_date::text as doc_date, d.party_name,
               d.net_amount, d.vat_amount, d.wht_amount, d.payable,
-              coalesce(p.amount, 0) as paid
+              coalesce(p.amount, 0) as paid,
+              (d.kind = 'RC' and d.parent_doc_id is null) as walkin,
+              coalesce(l.svc, 0) as svc, coalesce(l.tot, 0) as tot
          from documents d left join paid p on p.doc_id = d.id
+         left join (
+           select i.doc_id, sum(i.line_total) filter (where i.is_service) as svc, sum(i.line_total) as tot
+             from doc_items i group by i.doc_id
+         ) l on l.doc_id = d.id
         where ${SALES_DOCS}${sellRange}
        union all
        select case when d.kind = 'PO' then 'ซื้อ' else 'ค่าใช้จ่าย' end as grp,
               d.kind::text, d.expense_cat::text,
               d.doc_no, d.doc_date::text, d.party_name,
               d.net_amount, d.vat_amount, d.wht_amount, d.payable,
-              coalesce(p.amount, 0)
+              coalesce(p.amount, 0),
+              null::boolean, null::numeric, null::numeric
          from documents d left join paid p on p.doc_id = d.id
         where d.status <> 'void' and d.direction = 'buy'${buyRange}
        order by doc_date, doc_no`,
@@ -231,7 +244,14 @@ export async function getFinanceCsvRows(from?: string, to?: string): Promise<Fin
       const payable = n(r.payable);
       const paid = n(r.paid);
       const outstanding = round2(Math.max(0, payable - paid));
+      /* same rule as lib/sales-split.ts: split net_amount by the share of labour lines; parts is the remainder */
+      const sell = r.walkin !== null && r.walkin !== undefined;
+      const net = n(r.net_amount);
+      const labour = sell ? (n(r.tot) > 0 ? round2(net * n(r.svc) / n(r.tot)) : 0) : null;
       return {
+        channel: sell ? (r.walkin ? 'walkin' : 'job') : '',
+        labour,
+        parts: labour === null ? null : round2(net - labour),
         group: r.cat ? `${r.grp} · ${catLabel[r.cat] ?? r.cat}` : r.grp,
         docNo: r.doc_no,
         docDate: r.doc_date,

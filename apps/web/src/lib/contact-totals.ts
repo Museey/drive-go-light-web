@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { DEBT_PAID_SQL } from './debt-paid';
 
 /**
  * ยอดสะสมและยอดคงค้างต่อผู้ติดต่อ
@@ -32,7 +33,7 @@ export const CONTACT_MONEY_SQL = `
          coalesce(sum(greatest(d.payable - coalesce(p.paid, 0), 0)), 0) as owe
     from documents d
     left join documents pd on pd.id = d.parent_doc_id
-    left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+    left join ${DEBT_PAID_SQL} p
            on p.doc_id = d.id
    where d.status <> 'void'
      and d.party_id is not null

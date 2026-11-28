@@ -192,6 +192,7 @@ export async function profitAndLossWith(
     const r4 = rangeSql(p4, from, to);
     const r4b = rangeSql(p4, from, to);
     const mr = moveRange(p4);
+    const r4c = rangeSql(p4, from, to, 'c.claim_date');
     const monthRes = await c.query(
       `with doc_side as (
          select to_char(d.doc_date, 'YYYY-MM') as key,
@@ -239,20 +240,36 @@ export async function profitAndLossWith(
                 ), 0) as writeoff
          from stock_moves m
          join products p on p.id = m.product_id
-         where m.reason in ('use','adjust','count','set')${mr}
+         /* **ต้องเป็นเงื่อนไขชุดเดียวกับ writeOffRes ข้างบน** — เดิมที่นี่ไม่มีเคลม
+            กำไรสุทธิรายเดือนจึงไม่หักของที่เคลม ทั้งที่ยอดรวมหัวงบหัก
+            บวกทุกเดือนเข้าด้วยกันแล้วได้กำไรมากกว่ายอดรวมเท่ากับมูลค่าเคลมทั้งงวด (ตรวจ 24 พ.ย. 2569) */
+         where (m.reason in ('use','adjust','count','set','claim')
+                or (m.reason = 'return' and m.claim_id is not null))${mr}
+         group by 1
+       ),
+       /* ใบเคลมที่นำเข้ามาจากไฟล์สำรอง ไม่มีแถวในบัญชีสต๊อก — อ่านจากตัวใบ เหมือน importedClaimRes */
+       claim_side as (
+         select to_char(c.claim_date, 'YYYY-MM') as key,
+                coalesce(sum(coalesce(i.cost_amount, i.qty * i.unit_cost)), 0) as writeoff
+         from claims c
+         join claim_items i on i.claim_id = c.id
+         where c.status <> 'void'
+           and not exists (select 1 from stock_moves m where m.claim_id = c.id)${r4c}
          group by 1
        )
        select k.key,
               coalesce(a.revenue, 0) as revenue,
               coalesce(cg.cogs, 0)   as cogs,
               coalesce(a.buy, 0)     as buy,
-              coalesce(a.ops, 0) + coalesce(b.writeoff, 0) as ops
+              coalesce(a.ops, 0) + coalesce(b.writeoff, 0) + coalesce(cl.writeoff, 0) as ops
        from (select key from doc_side
              union select key from cogs_side
-             union select key from stock_side) k
+             union select key from stock_side
+             union select key from claim_side) k
        left join doc_side   a  on a.key  = k.key
        left join cogs_side  cg on cg.key = k.key
        left join stock_side b  on b.key  = k.key
+       left join claim_side cl on cl.key = k.key
        order by 1`, p4,
     );
 

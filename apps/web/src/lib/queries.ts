@@ -4,6 +4,7 @@ import { query } from './auth';
 import { quoteFollowUpsWith, receiptsOfWith, type DocRef } from './doc-chain';
 import { expiringSummaryWith } from './expiry';
 import { BOOK_VALUE_SQL } from './stock-cost';
+import { DEBT_PAID_SQL } from './debt-paid';
 import { shopVatRegisteredWith } from './sales-vat';
 import {
   owingSidesWith, salesByMonthWith, salesSummaryWith, whtByRateWith,
@@ -32,6 +33,12 @@ export interface ShopInfo {
   bankAccounts: { bank: string; no: string; name: string }[];
   /** เตือนล่วงหน้ากี่วันก่อนของหมดอายุ ตั้งได้ที่หน้าตั้งค่าร้าน */
   expiryWarnDays: number;
+  /** คิวอาร์รับเงินพร้อมเพย์บนเอกสาร (040) — ดู lib/pay-qr.ts */
+  /** ฐานหัก ณ ที่จ่ายของเอกสารขาย (041) */
+  whtBase: 'labour' | 'all';
+  promptpayId: string;
+  qrOnInvoice: boolean;
+  qrOnReceipt: boolean;
 }
 
 /** ร้านนี้จด VAT ไหม (036) — หน้าที่ต้องการแค่ค่านี้ ไม่ต้องอ่านข้อมูลร้านทั้งแถว */
@@ -51,7 +58,8 @@ export async function getShop(): Promise<ShopInfo> {
   return query(async (c) => {
     const { rows } = await c.query(
       `select id, name, tax_id, addr_text, tel, tel2, vat_rate, vat_registered, wht_rate,
-              bank_name, bank_account_no, bank_account_name, expiry_warn_days, bank_accounts
+              bank_name, bank_account_no, bank_account_name, expiry_warn_days, bank_accounts,
+              promptpay_id, qr_on_invoice, qr_on_receipt, wht_base
        from tenants where id = current_tenant_id()`,
     );
     const r = rows[0];
@@ -64,6 +72,10 @@ export async function getShop(): Promise<ShopInfo> {
       bankAccountNo: r.bank_account_no ?? '',
       bankAccountName: r.bank_account_name ?? '',
       expiryWarnDays: money(r.expiry_warn_days) || EXPIRY_WARN_DAYS,
+      whtBase: r.wht_base === 'all' ? 'all' : 'labour',
+      promptpayId: r.promptpay_id ?? '',
+      qrOnInvoice: r.qr_on_invoice === true,
+      qrOnReceipt: r.qr_on_receipt === true,
     };
   });
 }
@@ -199,8 +211,9 @@ export async function getHomeSummary(from?: string, to?: string): Promise<HomeSu
     const expiring = await expiringSummaryWith(c);
 
     /* สามอย่างนี้ไม่ผูกกับช่วงวันที่ที่เลือก — หนี้ที่ค้างอยู่ก็ค้างอยู่ ไม่ว่าจะเลือกดูช่วงไหน
-       และ "หกเดือนล่าสุด" ต้องแปลว่าหกเดือนล่าสุดเสมอ ไม่งั้นชื่อหัวข้อจะโกหก */
-    const salesBars = await salesByMonthWith(c, 6);
+       และ "12 เดือนล่าสุด" ต้องแปลว่า 12 เดือนล่าสุดเสมอ ไม่งั้นชื่อหัวข้อจะโกหก
+       (เดิมหกเดือน · ผู้ใช้ขอ 12 เดือนเทียบปีก่อน 26 พ.ย. 2569) */
+    const salesBars = await salesByMonthWith(c, 12);
     const owing = await owingSidesWith(c, 5);
 
     const counts = await c.query(
@@ -320,6 +333,12 @@ export async function listIncomeDocs(opts: {
   vat?: 'yes' | 'no';
   /** ขายหน้าร้าน = ใบเสร็จที่ไม่มีใบอ้างอิง */
   walkinOnly?: boolean;
+  /**
+   * กรองตามสถานะ — แถบสรุปบนหน้ารายการกดแล้วมาที่นี่ (26 พ.ย. 2569)
+   *   paid = รับครบแล้ว · open = ยังมียอดค้าง · late = ค้างและเลยวันครบกำหนด · billed = ใบเสนอราคาที่ออกใบต่อแล้ว
+   * ยอดค้างใช้นิยามเดียวกับคอลัมน์ในตารางและการ์ด "เอกสารที่ออก" (DEBT_PAID_SQL)
+   */
+  pay?: 'paid' | 'open' | 'late' | 'billed';
 }): Promise<IncomeListResult> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -359,6 +378,17 @@ export async function listIncomeDocs(opts: {
     if (opts.vat === 'yes') where.push(`d.vat_mode <> 'none'`);
     if (opts.vat === 'no') where.push(`d.vat_mode = 'none'`);
     if (opts.walkinOnly) where.push(`d.parent_doc_id is null`);
+    if (opts.pay) {
+      const owe = `(d.payable - coalesce((select dp.paid from ${DEBT_PAID_SQL} dp where dp.doc_id = d.id), 0))`;
+      if (opts.pay === 'billed') where.push(`d.status = 'billed'`);
+      else {
+        /* ใบเสนอราคายังไม่ใช่หนี้ และใบที่ยกเลิกไม่ต้องเก็บแล้ว — สามตัวกรองนี้ไม่นับทั้งคู่ */
+        where.push(`d.kind <> 'QT' and d.status <> 'void'`);
+        if (opts.pay === 'paid') where.push(`${owe} <= 0.004`);
+        if (opts.pay === 'open') where.push(`${owe} > 0.004`);
+        if (opts.pay === 'late') where.push(`${owe} > 0.004 and d.due_date is not null and d.due_date < current_date`);
+      }
+    }
     if (sIdx) {
       where.push(`(d.doc_no ilike $${sIdx} or d.party_name ilike $${sIdx}
                    or d.vehicle_plate ilike $${sIdx})`);
@@ -396,7 +426,7 @@ export async function listIncomeDocs(opts: {
                    else json_build_object('id', pd.id, 'docNo', pd.doc_no) end as parent,
               coalesce(pm.methods, '{}') as pay_methods
        from documents d
-       left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+       left join ${DEBT_PAID_SQL} p
               on p.doc_id = d.id
        left join documents pd on pd.id = d.parent_doc_id
        left join (select doc_id, array_agg(distinct method) as methods

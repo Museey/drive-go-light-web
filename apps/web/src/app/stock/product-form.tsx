@@ -51,13 +51,13 @@ function SupplierPicker({ initial }: { initial: ProductSupplier[] }) {
   };
   return (
     <div className="card" style={{ marginTop: 12 }}>
-      <header><h2 style={{ fontSize: 14 }}>ผู้ขายของสินค้านี้ <span className="subtle" style={{ fontWeight: 400 }}>(มีได้หลายราย)</span></h2></header>
+      <header><h2 style={{ fontSize: '0.9375rem' }}>ผู้ขายของสินค้านี้ <span className="subtle" style={{ fontWeight: 400 }}>(มีได้หลายราย)</span></h2></header>
       <div className="body" style={{ padding: 12 }}>
         <input type="hidden" name="suppliers" value={JSON.stringify(list)} />
         {list.length ? (
           <div className="tag-row" style={{ marginBottom: 8 }}>
             {list.map((sp, i) => (
-              <span key={i} className={`chip${sp.vendorId ? ' ok' : ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', fontSize: 13 }}
+              <span key={i} className={`chip${sp.vendorId ? ' ok' : ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', fontSize: '0.875rem' }}
                     title={sp.vendorId ? 'จากทะเบียนผู้ขาย' : 'พิมพ์เอง — เก็บกับสินค้านี้เท่านั้น'}>
                 {sp.name}{sp.vendorId ? '' : ' (พิมพ์เอง)'}
                 <button type="button" aria-label="เอาออก" onClick={() => setList(list.filter((_, j) => j !== i))}
@@ -376,7 +376,7 @@ export function ProductForm({
 
       {/* กดติดเฉพาะที่ช่องสี่เหลี่ยม (ผู้ใช้กำหนด) — เดิมทั้งบรรทัดเป็น <label> คลิกข้อความก็สลับเผลอปิดสินค้า
           ติ๊ก = เปิดใช้ · ไม่ติ๊ก = บันทึก active=false แล้วสินค้าไม่ขึ้นในช่องค้นหาของทุกเอกสาร (ตรวจแล้ว) */}
-      <div className="tag-row" style={{ fontSize: 14 }}>
+      <div className="tag-row" style={{ fontSize: '0.9375rem' }}>
         <input type="checkbox" name="active" aria-label="เปิดใช้งานสินค้านี้"
                defaultChecked={state.values ? state.values.active === 'on' : (product?.active ?? true)} />
         <span>เปิดใช้งาน — สินค้าที่ปิดจะไม่ขึ้นในรายการให้เลือกตอนออกเอกสาร</span>

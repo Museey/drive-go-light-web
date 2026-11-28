@@ -7,6 +7,7 @@ import { ResetLink, SeatsForm, RenewForm } from './forms';
 import { KIND_SHORT, thDate, thDateTime } from '@/lib/format';
 import { agoLabel, lastUsed } from '@/lib/usage';
 import { ActivityGrid, LastUsed } from '../../usage-bits';
+import { planLabel } from '@/lib/plan-core';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +50,7 @@ export default async function OpsShopPage({
               <dt>สถานะ</dt><dd>{MODE_LABEL[shop.license.mode]}</dd>
               <dt>ถึงวันที่</dt><dd>{thDate(shop.license.until)}</dd>
               <dt>เหลืออีก</dt><dd>{shop.license.daysLeft} วัน</dd>
-              <dt>แพ็กเกจ</dt><dd>{shop.license.plan ?? '—'}</dd>
+              <dt>แพ็กเกจ</dt><dd>{shop.license.plan ? `${planLabel(shop.license.plan)} (${shop.license.plan})` : '—'}</dd>
               <dt>เคยชำระแล้ว</dt><dd>{shop.license.everPaid ? 'เคย' : 'ยังไม่เคย'}</dd>
             </dl>
           </div>
@@ -97,7 +98,7 @@ export default async function OpsShopPage({
                 <dt>เอกสารทั้งหมด</dt><dd>{activity.docsTotal.toLocaleString('en-US')} ใบ</dd>
               </dl>
               <div>
-                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 6 }}>
+                <div style={{ fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 6 }}>
                   วันที่เข้าใช้ 13 สัปดาห์ล่าสุด — ยิ่งเข้มยิ่งมีคนเข้าหลายคน
                 </div>
                 <ActivityGrid days={activity.days} />

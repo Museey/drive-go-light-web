@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { isUuid } from '@/lib/ids';
 import { query, requireTab } from '@/lib/auth';
 import { getCount } from '@/lib/stock-counts';
+import { canCost } from '@/lib/perms';
 import { getShop } from '@/lib/queries';
 import { BackFab } from '@/components/back-fab';
 import { PrintButton } from '../../../../income/[id]/print/print-button';
@@ -18,7 +19,8 @@ export default async function CountPrintPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ sys?: string }>;
 }) {
-  await requireTab('stock', 'count');
+  const session = await requireTab('stock', 'count');
+  const showValue = canCost(session);
   const { id } = await params;
   /* รหัสที่ไม่ใช่ uuid ส่งไป Postgres แล้วพังเป็น 500 — ต้องเป็น 404 */
   if (!isUuid(id)) notFound();
@@ -41,7 +43,7 @@ export default async function CountPrintPage({
           </Link>
         ) : null}
         <div className="spacer" />
-        <span style={{ color: 'var(--ink-3)', fontSize: 12.5 }}>
+        <span style={{ color: 'var(--ink-3)', fontSize: '0.875rem' }}>
           {count.applied
             ? 'ปรับยอดแล้ว — ใบนี้เป็นหลักฐานส่วนต่างที่พบ'
             : 'ใบร่างสำหรับเดินนับ — สต๊อกยังไม่เปลี่ยน'}
@@ -64,7 +66,7 @@ export default async function CountPrintPage({
             </div>
             <div className="doc-meta">
               <h1>ใบตรวจนับสต๊อก</h1>
-              <div style={{ fontSize: 11, letterSpacing: '.08em' }}>STOCK COUNT SHEET</div>
+              <div style={{ fontSize: '0.875rem', letterSpacing: '.08em' }}>STOCK COUNT SHEET</div>
               <table style={{ marginTop: 4 }}>
                 <tbody>
                   <tr><td>เลขที่</td><td style={{ textAlign: 'right' }}><b>{count.no}</b></td></tr>
@@ -75,7 +77,7 @@ export default async function CountPrintPage({
             </div>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, marginTop: 6 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', marginTop: 6 }}>
             <tbody>
               <tr>
                 <td style={{ padding: '4px 0' }}>ผู้นับ ......................................................</td>
@@ -86,7 +88,7 @@ export default async function CountPrintPage({
           </table>
 
           {count.note ? (
-            <div style={{ fontSize: 11.5, margin: '4px 0' }}>หมายเหตุ: {count.note}</div>
+            <div style={{ fontSize: '0.875rem', margin: '4px 0' }}>หมายเหตุ: {count.note}</div>
           ) : null}
 
           <table className="doc">
@@ -135,20 +137,20 @@ export default async function CountPrintPage({
           </table>
 
           {count.applied && count.offCount > 0 ? (
-            <div style={{ fontSize: 11.5, marginTop: 8 }}>
-              พบส่วนต่าง <b>{count.offCount}</b> รายการ ·
-              มูลค่ารวม <b>{baht(count.offValue)}</b> บาท
+            <div style={{ fontSize: '0.875rem', marginTop: 8 }}>
+              พบส่วนต่าง <b>{count.offCount}</b> รายการ
+              {showValue ? <> · มูลค่ารวม <b>{baht(count.offValue)}</b> บาท</> : null}
             </div>
           ) : null}
 
-          <div style={{ fontSize: 10.5, color: '#555', marginTop: 8, lineHeight: 1.6 }}>
+          <div style={{ fontSize: '0.875rem', color: '#555', marginTop: 8, lineHeight: 1.6 }}>
             {count.applied ? (
               <>ใบนี้ปรับยอดเข้าระบบเรียบร้อยแล้วเมื่อ {thDate(count.countDate)} —
                 ทุกรายการที่มีส่วนต่างถูกบันทึกลงประวัติความเคลื่อนไหวของสินค้า</>
             ) : (
               <>
                 นับของจริงในชั้นวางแล้วเขียนจำนวนลงช่อง “นับได้จริง”
-                จากนั้นนำตัวเลขไปกรอกที่เมนู 05.5 ตรวจนับสต๊อก
+                จากนั้นนำตัวเลขไปกรอกที่เมนู 05.6 ตรวจนับสต๊อก
                 เพื่อให้ระบบปรับยอดและบันทึกส่วนต่างไว้เป็นหลักฐาน
                 {!showSys ? (
                   <><br />ใบนี้ไม่ได้พิมพ์จำนวนที่ระบบมีไว้

@@ -25,6 +25,9 @@ export const PRINT_TITLE: Record<string, string> = {
 
 type Brand = { logoUrl: string; ownerName: string; signatureUrl: string; warrantyText: string };
 
+/** คิวอาร์รับเงินของใบนี้ — สร้างที่หน้าพิมพ์ด้วย lib/pay-qr.ts (040) */
+type PayQrView = { dataUri: string; amount: number; promptpayId: string };
+
 const CAPN = 26;
 
 /** ทุกเอกสารพิมพ์สองชุด — ต้นฉบับให้ลูกค้า สำเนาเก็บเข้าแฟ้ม (ผู้ใช้กำหนด 19 ก.ย. 2569) */
@@ -39,13 +42,16 @@ function Kv({ l, v, mono, bold }: { l: string; v: string | number | null | undef
   );
 }
 
-export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo; brand: Brand }) {
+export function DocPrint({ doc, shop, brand, payQr }: {
+  doc: DocDetail; shop: ShopInfo; brand: Brand; payQr?: PayQrView | null;
+}) {
   const kind = doc.kind;
   /* ใบซื้อและค่าใช้จ่ายเป็นคู่ค้าฝั่งผู้ขายและไม่มีรถ — ต้นแบบกันเฉพาะ PO ค่าใช้จ่ายจึงได้กรอบรถว่างและหัว "ลูกค้า"
      ซึ่งไม่มีความหมายบนบันทึกค่าใช้จ่าย ทำให้เหมือนใบซื้อ */
   const buy = kind === 'PO' || kind === 'EX';
   const hasDisc = doc.items.some((it) => it.discPct > 0);
-  const CAP1 = kind === 'QT' ? 8 : 12;
+  /* มีคิวอาร์ = ท้ายหน้าสูงขึ้นราวสามบรรทัด หน้าแรกจึงรับรายการได้น้อยลงเท่านั้น ไม่งั้นลายเซ็นล้นไปหน้าใหม่ */
+  const CAP1 = (kind === 'QT' ? 8 : 12) - (payQr ? 3 : 0);
 
   const pages: DocDetail['items'][] = [];
   if (doc.items.length <= CAP1) pages.push(doc.items);
@@ -262,7 +268,34 @@ export function DocPrint({ doc, shop, brand }: { doc: DocDetail; shop: ShopInfo;
                   <div><div className="line" />{kind === 'QT' ? 'ผู้อนุมัติซ่อม' : 'ผู้มีอำนาจลงนาม'}</div>
                 </div>
 
-                {showBank ? (
+                {payQr ? (
+                  <div className="payqr">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={payQr.dataUri} alt={`คิวอาร์พร้อมเพย์ ยอด ${baht(payQr.amount)} บาท`} />
+                    <div>
+                      <b>สแกนจ่ายด้วยแอปธนาคาร (พร้อมเพย์)</b>
+                      <div>
+                        ยอดชำระ <b className="mono">{baht(payQr.amount)}</b> บาท
+                        {/* ยอดในคิวอาร์คือยอดค้าง — ต่างจาก "รวมทั้งสิ้น" เมื่อมีหัก ณ ที่จ่ายหรือจ่ายมาแล้วบางส่วน
+                            บอกไว้ให้ลูกค้าไม่สงสัยว่าทำไมตัวเลขสองที่ไม่เท่ากัน */}
+                        {Math.abs(payQr.amount - doc.grandTotal) > 0.004 ? (
+                          <span className="payqr-bank">
+                            {' '}({[
+                              doc.whtAmount > 0 ? `หัก ณ ที่จ่าย ${baht(doc.whtAmount)}` : '',
+                              paid > 0.004 ? `ชำระแล้ว ${baht(paid)}` : '',
+                            ].filter(Boolean).join(' · ') || 'ยอดคงค้าง'})
+                          </span>
+                        ) : null}
+                      </div>
+                      <div>พร้อมเพย์ <span className="mono">{payQr.promptpayId}</span></div>
+                      {showBank ? (
+                        <div className="payqr-bank">
+                          หรือโอนเข้าบัญชี ธนาคาร {bank!.bank} · เลขที่ <b className="mono">{bank!.no}</b> · {bank!.name}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : showBank ? (
                   <div className="bankline2">
                     <b>ชำระเงินโอนเข้าบัญชี:</b> ธนาคาร {bank!.bank} · เลขที่บัญชี <b className="mono">{bank!.no}</b> · ชื่อบัญชี {bank!.name}
                   </div>

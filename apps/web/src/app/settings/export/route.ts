@@ -1,4 +1,5 @@
 import { query, requireCost, requireExport } from '@/lib/auth';
+import { canTab } from '@/lib/perms';
 import { backupFileName, exportBackupWith } from '@/lib/backup';
 
 /**
@@ -9,9 +10,10 @@ import { backupFileName, exportBackupWith } from '@/lib/backup';
  * กันแค่หน้าจอแล้วปล่อยให้กดดาวน์โหลดได้ การซ่อนต้นทุนก็ไม่มีความหมายเลย
  */
 export async function GET() {
-  await requireExport('settings', 'import');
+  const session = await requireExport('settings', 'import');
   await requireCost();
-  const data = await query((c) => exportBackupWith(c));
+  /* เงินเดือนลงไฟล์เฉพาะเมื่อผู้ดาวน์โหลดเปิดแท็บเงินเดือนได้ — ไฟล์สำรองต้องไม่เป็นทางอ้อมให้เห็นสิ่งที่หน้าจอซ่อน */
+  const data = await query((c) => exportBackupWith(c, { payroll: canTab(session, 'finance', 'payroll') }));
 
   return new Response(JSON.stringify(data, null, 2), {
     headers: {

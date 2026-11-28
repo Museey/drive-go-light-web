@@ -1,5 +1,6 @@
 import type pg from 'pg';
 import { payablesWith, receivablesWith } from './ar-ap';
+import { DEBT_PAID_SQL } from './debt-paid';
 
 /**
  * ตัวเลขชุดที่หน้าแรกของรุ่น 6.4 มีแต่ของเรายังไม่มี
@@ -29,6 +30,8 @@ export interface SalesMonthBar {
   /** 'YYYY-MM' */
   key: string;
   amount: number;
+  /** ยอดของเดือนเดียวกันปีก่อน — ไว้วางแท่งเทียบข้างกัน (ผู้ใช้ขอ 26 พ.ย. 2569) */
+  prev: number;
 }
 
 /**
@@ -49,15 +52,18 @@ export async function salesByMonthWith(c: Client, months = 6): Promise<SalesMont
          interval '1 month')::date as m
      )
      select to_char(span.m, 'YYYY-MM') as key,
-            coalesce(sum(d.payable), 0) as amount
+            /* สองยอดคิดแยกกันด้วยซับคิวรี — join สองรอบแล้ว sum จะคูณแถวกันเอง ยอดเพี้ยนเป็นเท่าตัว */
+            (select coalesce(sum(d.payable), 0) from documents d
+              where date_trunc('month', d.doc_date) = span.m and ${SALES_DOCS}) as amount,
+            (select coalesce(sum(d.payable), 0) from documents d
+              where date_trunc('month', d.doc_date) = span.m - interval '1 year' and ${SALES_DOCS}) as prev
        from span
-       left join documents d
-              on date_trunc('month', d.doc_date) = span.m and ${SALES_DOCS}
-      group by span.m
       order by span.m`,
     [months],
   );
-  return rows.map((r) => ({ key: r.key as string, amount: round2(n(r.amount)) }));
+  return rows.map((r) => ({
+    key: r.key as string, amount: round2(n(r.amount)), prev: round2(n(r.prev)),
+  }));
 }
 
 /** ตัวเลขการ์ด "สรุปยอดขาย" หน้าแรก */
@@ -89,7 +95,7 @@ export async function salesSummaryWith(c: Client, from?: string, to?: string): P
             count(*)::int as n,
             coalesce(sum(coalesce(pay.paid, 0)), 0) as paid
        from documents d
-       left join (select doc_id, sum(amount) as paid from payments group by doc_id) pay
+       left join ${DEBT_PAID_SQL} pay
               on pay.doc_id = d.id
       where ${SALES_DOCS}${range}`,
     params,
@@ -265,7 +271,7 @@ export async function salesDocsWith(
             coalesce(pay.paid, 0) as paid,
             cost.amount as cost
        from documents d
-       left join (select doc_id, sum(amount) as paid from payments group by doc_id) pay
+       left join ${DEBT_PAID_SQL} pay
               on pay.doc_id = d.id
        /* ต้นทุนที่ตรึงไว้ตอนตัด — แถวคืนของหักกลบให้เองด้วยเครื่องหมายของ qty_delta */
        left join (select m.doc_id,

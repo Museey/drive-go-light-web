@@ -28,8 +28,8 @@ export default async function OpsLoginPage({
   return (
     <div style={{ maxWidth: 400, margin: '80px auto', padding: '0 20px' }}>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: 22, fontWeight: 700 }}>คอนโซลผู้ให้บริการ</div>
-        <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>
+        <div style={{ fontSize: '1.375rem', fontWeight: 700 }}>คอนโซลผู้ให้บริการ</div>
+        <div style={{ color: 'var(--ink-3)', fontSize: '0.875rem' }}>
           DriveGoLight! — สำหรับผู้ดูแลระบบเท่านั้น
         </div>
       </div>
@@ -50,14 +50,14 @@ export default async function OpsLoginPage({
 
           <form autoComplete="off" action={submit}>
             <label htmlFor="email"
-                   style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+                   style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 4 }}>
               อีเมล
             </label>
             <input className="in" id="email" name="email" type="email" autoComplete="username"
                    required autoFocus style={{ width: '100%', marginBottom: 12 }} />
 
             <label htmlFor="password"
-                   style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 4 }}>
+                   style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: 4 }}>
               รหัสผ่าน
             </label>
             <input className="in" id="password" name="password" type="password"
@@ -69,7 +69,7 @@ export default async function OpsLoginPage({
         </div>
       </div>
 
-      <p style={{ textAlign: 'center', fontSize: 12, marginTop: 18, color: 'var(--ink-3)' }}>
+      <p style={{ textAlign: 'center', fontSize: '0.875rem', marginTop: 18, color: 'var(--ink-3)' }}>
         นี่ไม่ใช่หน้าเข้าใช้งานของอู่ — <a href="/login" style={{ textDecoration: 'underline' }}>ไปหน้าของอู่</a>
       </p>
     </div>

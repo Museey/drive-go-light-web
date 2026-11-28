@@ -1,5 +1,6 @@
 'use client';
 
+import { NumInput } from '@/components/num-input';
 import { useActionState, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -20,6 +21,7 @@ import { baht, thDate } from '@/lib/format';
 import { formatDocNo } from '@/lib/doc-no';
 import { BLANK_QTY, patchLine } from '@/lib/line-qty';
 import { typeCode, unstockedLines, type CodeLink } from '@/lib/line-link';
+import { keyedDoc, keyRows, rowKey, stripRowKeys } from '@/lib/row-key';
 
 /**
  * ฟอร์มใบซื้อ / บันทึกค่าใช้จ่าย — โครงเดียวกับฟอร์มขาย (13 ก.ย. 69)
@@ -45,15 +47,19 @@ const addDaysIso = (iso: string, days: number) => {
   const d = new Date(iso + 'T00:00:00');
   if (Number.isNaN(d.getTime())) return '';
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  /* ประกอบจากวันที่ตามเวลาเครื่อง — ห้ามใช้ toISOString() ซึ่งแปลงเป็น UTC ก่อน
+     เที่ยงคืนเวลาไทยคือ 17:00 ของวันก่อนหน้าใน UTC วันครบกำหนดจึงเคยออกมาเร็วไปหนึ่งวัน */
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 /* ---------- บรรทัด — ใบซื้อค้นหาสินค้าในบรรทัด ผลหล่นใต้บรรทัด ---------- */
 function BuyLineRow({
-  i, item, isPurchase, isLast, onChange, onPick, onRemove, onEnterLast,
+  i, item, seed, isPurchase, isLast, onChange, onPick, onRemove, onEnterLast,
 }: {
   i: number;
   item: BuyItemInput;
+  /** คำค้นที่หน้าจอส่งมาให้เปิดผลค้นหา (ยิงบาร์โค้ดแล้วตรงหลายตัว) */
+  seed: { term: string } | null;
   isPurchase: boolean;
   isLast: boolean;
   onChange: (patch: Partial<BuyItemInput>) => void;
@@ -65,6 +71,7 @@ function BuyLineRow({
   /* รหัสของสินค้าที่บรรทัดนี้เคยผูกไว้ — ให้พิมพ์กลับมาเหมือนเดิมแล้วผูกคืนได้ (lib/line-link.ts) */
   const [memo, setMemo] = useState<CodeLink | null>(null);
   const { results, busy, clear } = useLiveSearch(isPurchase ? query : '', searchProductsAction);
+  useEffect(() => { if (seed) setQuery(seed.term); }, [seed]);
   const amount = lineAmount({ qty: item.qty, price: item.unitPrice, discPct: item.discPct ?? 0 });
 
   /* เลือกตัวใหม่แล้วความจำเก่าใช้ไม่ได้ — ไม่งั้นพิมพ์รหัสของตัวก่อนหน้าจะดึงตัวเก่ากลับมา */
@@ -99,19 +106,19 @@ function BuyLineRow({
           {isPurchase && item.productId ? <span className="chip ok" style={{ marginTop: 4 }}>เข้าสต๊อก</span> : null}
         </td>
         <td className="c-qty">
-          <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.qty}
-                 onChange={(e) => onChange({ qty: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
+          <NumInput className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.qty}
+                 onNum={(num) => onChange({ qty: num })} onKeyDown={enterKey} />
         </td>
         <td className="c-unit">
           <input className="in" value={item.unit} placeholder="หน่วย" onChange={(e) => onChange({ unit: e.target.value })} onKeyDown={enterKey} />
         </td>
         <td className="c-price">
-          <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.unitPrice}
-                 onChange={(e) => onChange({ unitPrice: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
+          <NumInput className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.unitPrice}
+                 onNum={(num) => onChange({ unitPrice: num })} onKeyDown={enterKey} />
         </td>
         <td className="c-disc">
-          <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.discPct ?? 0} title="ส่วนลดรายบรรทัด (%)"
-                 onChange={(e) => onChange({ discPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} onKeyDown={enterKey} />
+          <NumInput className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.discPct ?? 0} title="ส่วนลดรายบรรทัด (%)"
+                 onNum={(num) => onChange({ discPct: Math.min(100, Math.max(0, num)) })} onKeyDown={enterKey} />
         </td>
         <td className="amt">{baht(amount)}</td>
         {isPurchase ? (
@@ -171,12 +178,17 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
   returnTo?: string;
 }) {
   const [state, action] = useActionState<FormResult, FormData>(saveBuyDocAction, {});
-  const [doc, setDoc] = useState<BuyDocInput>({
+  const [doc, setDocRaw] = useState<BuyDocInput>(() => keyedDoc({
     ...initial,
     discountMode: initial.discountMode ?? 'baht',
     discountPct: initial.discountPct ?? 0,
     items: padRows(initial.items.map((it) => ({ ...it, discPct: it.discPct ?? 0 }))),
-  });
+  }));
+  /* ทุกบรรทัดต้องมีกุญแจประจำตัวเสมอ ไม่ว่าจะเข้ามาทางไหน — ดู lib/row-key.ts */
+  const setDoc = (next: BuyDocInput | ((d: BuyDocInput) => BuyDocInput)) =>
+    setDocRaw((d) => keyedDoc(typeof next === 'function' ? next(d) : next));
+  /* คำค้นที่ยิงเข้ามาแล้วตรงหลายตัว — ส่งให้บรรทัดเจ้าของกุญแจเปิดผลค้นหาเอง */
+  const [seed, setSeed] = useState<{ k: string; term: string } | null>(null);
   const [vendorQuery, setVendorQuery] = useState('');
   const [notFound, setNotFound] = useState('');
   const [confirm, setConfirm] = useState(false);
@@ -251,7 +263,7 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
     expiresOn: addMonths(d.docDate, p.shelfLifeMonths),
   });
   const fillRow = (i: number, p: PickedProduct, qty = 1) =>
-    setDoc((d) => ({ ...d, items: d.items.map((it, j) => (j === i ? { ...fromProduct(d, p, qty), unitPrice: it.unitPrice, discPct: it.discPct } : it)) }));
+    setDoc((d) => ({ ...d, items: d.items.map((it, j) => (j === i ? { ...it, ...fromProduct(d, p, qty), unitPrice: it.unitPrice, discPct: it.discPct } : it)) }));
   const addProduct = (p: PickedProduct, qty = 1) => setDoc((d) => {
     const at = d.items.findIndex((i) => i.productId === p.id);
     if (at >= 0) return { ...d, items: d.items.map((i, j) => (j === at ? { ...i, qty: i.qty + qty } : i)) };
@@ -267,15 +279,23 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
     if (r.kind === 'one') { addProduct(r.product, r.qty); return { ok: true, message: `${r.product.code} ${r.product.name} · ${r.qty} ${r.product.unit}` }; }
     if (r.kind === 'inactive') return { ok: false, message: `${r.code} ${r.name} ปิดใช้งานอยู่ — เปิดใช้งานที่ทะเบียนสินค้าก่อน` };
     if (r.kind === 'many') {
+      /* วางคำค้นลงบรรทัดว่างแรกแล้วเปิดผลค้นหาใต้บรรทัดนั้นให้เลย · ไม่เหลือบรรทัดว่างก็เพิ่มบรรทัดใหม่
+         (เดิมเขียนลงลำดับที่ไม่มีอยู่ จึงไม่เกิดอะไรเลย) — แบบเดียวกับตัวแก้ใบขาย */
       const blank = doc.items.findIndex((i) => !isRealItem(i));
-      setItem(blank >= 0 ? blank : doc.items.length, { code: r.term });
-      return { ok: false, message: `ตรงกับสินค้า ${r.count} รายการ — พิมพ์ต่อในบรรทัดที่ขึ้นรหัสให้แล้วเลือก` };
+      const [base] = keyRows([blank >= 0 ? doc.items[blank]! : emptyItem()]);
+      const line = patchLine(base!, { code: r.term }, isRealItem);
+      const k = rowKey(line, 0);
+      setDoc((d) => (d.items.some((it, j) => rowKey(it, j) === k)
+        ? { ...d, items: d.items.map((it, j) => (rowKey(it, j) === k ? line : it)) }
+        : { ...d, items: [...d.items, line] }));
+      setSeed({ k, term: r.term });
+      return { ok: false, message: `ตรงกับสินค้า ${r.count} รายการ — เลือกจากรายการใต้บรรทัดที่ขึ้นรหัสให้แล้ว` };
     }
     setNotFound(r.term);
     return { ok: false, message: `ไม่พบ "${r.term}"` };
   };
 
-  const payload = useMemo(() => JSON.stringify({ ...doc, items: realItems }), [doc, realItems]);
+  const payload = useMemo(() => JSON.stringify({ ...doc, items: stripRowKeys(realItems) }), [doc, realItems]);
   const title = isPurchase ? 'ใบซื้อสินค้า' : 'บันทึกค่าใช้จ่าย';
 
   /* ปุ่มลัดวิธีจ่ายชำระ — โหมดที่ตรงกับข้อมูลจริงตอนนี้ (lib/pay-mode.ts มีเทสต์คุม) */
@@ -383,12 +403,12 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
                     {EXPENSE_CATS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select></div>
                 <div className="field"><label htmlFor="wht">หัก ณ ที่จ่าย (%)</label>
-                  <input className="in mono" id="wht" inputMode="decimal" value={doc.whtRate} onChange={(e) => set('whtRate', Number(e.target.value) || 0)} />
+                  <NumInput className="in mono" id="wht" inputMode="decimal" value={doc.whtRate} onNum={(num) => set('whtRate', num)} />
                   <span className="hint">หมวดนี้แนะนำ {catInfo?.wht ?? 0}% · อู่เป็นผู้หักและนำส่งเอง</span></div>
                 {doc.expenseCat === 'asset' ? (
                   <div className="field"><label htmlFor="life">อายุการใช้งาน (ปี)</label>
-                    <input className="in mono" id="life" inputMode="numeric" value={doc.assetLifeYears ?? 5}
-                           onChange={(e) => set('assetLifeYears', Math.max(1, Number(e.target.value) || 1))} />
+                    <NumInput className="in mono" id="life" inputMode="numeric" value={doc.assetLifeYears ?? 5}
+                           onNum={(num) => set('assetLifeYears', Math.max(1, (num || 1)))} />
                     <span className="hint">ใช้คิดค่าเสื่อมราคาในอนาคต — ระบบยังไม่คำนวณให้</span></div>
                 ) : null}
               </div>
@@ -400,8 +420,8 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
                   <option value="cash">เงินสด</option><option value="credit">เครดิต</option>
                 </select></div>
               <div className="field"><label htmlFor="creditDays">กำหนดชำระ (วัน)</label>
-                <input className="in mono amber" id="creditDays" inputMode="numeric" value={doc.creditDays}
-                       onChange={(e) => set('creditDays', Math.max(0, Number(e.target.value) || 0))} /></div>
+                <NumInput className="in mono amber" id="creditDays" inputMode="numeric" value={doc.creditDays}
+                       onNum={(num) => set('creditDays', Math.max(0, num))} /></div>
               <div className="field"><label>วันครบกำหนด <span className="hint">พิมพ์ วว/ดด/ปป หรือกดปฏิทิน</span></label>
                 <ThaiDateField value={doc.creditDays > 0 ? dueDate : ''} style={{ background: '#FFF3CC', borderColor: '#F0C24A', fontWeight: 600 }}
                                onChange={(iso) => set('creditDays', Math.max(0, Math.round((new Date(iso + 'T00:00:00').getTime() - new Date(doc.docDate + 'T00:00:00').getTime()) / 86400000)))} /></div>
@@ -463,7 +483,7 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
             </tr></thead>
             <tbody>
               {doc.items.map((it, i) => (
-                <BuyLineRow key={i} i={i} item={it} isPurchase={isPurchase} isLast={i === doc.items.length - 1}
+                <BuyLineRow key={rowKey(it, i)} i={i} item={it} seed={seed && seed.k === rowKey(it, i) ? seed : null} isPurchase={isPurchase} isLast={i === doc.items.length - 1}
                             onChange={(patch) => setItem(i, patch)} onPick={(p) => fillRow(i, p, it.qty || 1)}
                             onRemove={() => removeRow(i)} onEnterLast={() => addRow()} />
               ))}
@@ -484,7 +504,7 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
             <div className="field"><label>หมายเหตุ</label>
               <textarea className="in" value={doc.note} placeholder="เช่น อ้างอิงใบสั่งซื้อ / เงื่อนไขการส่งมอบ" onChange={(e) => set('note', e.target.value)} /></div>
             {isPurchase ? (
-              <label className="tag-row" style={{ fontSize: 14, marginTop: 12 }}>
+              <label className="tag-row" style={{ fontSize: '0.9375rem', marginTop: 12 }}>
                 <input type="checkbox" checked={doc.goodsReceived} onChange={(e) => set('goodsReceived', e.target.checked)} />
                 รับของเข้าสต๊อกแล้ว — อะไหล่ที่ผูกทะเบียนจะถูกบวกเข้าคงเหลือ และราคาซื้อล่าสุดอัปเดตตามใบนี้
               </label>
@@ -500,9 +520,9 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
             <div className="row">
               <span className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 ส่วนลดท้ายบิล
-                <input className="in mono" inputMode="decimal" style={{ width: 96, textAlign: 'right' }}
+                <NumInput className="in mono" inputMode="decimal" style={{ width: 96, textAlign: 'right' }}
                        value={doc.discountMode === 'pct' ? (doc.discountPct ?? 0) : doc.discount}
-                       onChange={(e) => { const v = Number(e.target.value) || 0;
+                       onNum={(num) => { const v = num;
                          if (doc.discountMode === 'pct') set('discountPct', Math.min(100, Math.max(0, v))); else set('discount', Math.max(0, v)); }} />
                 <span className="pctswitch" role="group" aria-label="หน่วยส่วนลด">
                   {(['pct', 'baht'] as const).map((m) => (
@@ -521,7 +541,7 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
               <div className="row"><span className="lbl">หัก ณ ที่จ่าย {doc.whtRate}%</span><span>−{baht(t.wht)}</span></div>
               <div className="row grand"><span>ยอดที่ต้องจ่ายจริง</span><span>{baht(t.payable)}</span></div>
             </>) : null}
-            <div className="subtle" style={{ fontSize: 12.5, marginTop: 4 }}>({bahttext(t.payable)})</div>
+            <div className="subtle" style={{ fontSize: '0.875rem', marginTop: 4 }}>({bahttext(t.payable)})</div>
 
             <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
               <div className="tag-row" style={{ marginBottom: 8 }}><b>การจ่ายเงิน</b>
@@ -532,8 +552,8 @@ export function BuyEditor({ initial, vatRate, mode, docNo, returnTo, docNoPrevie
                   const amount = at >= 0 ? doc.payments[at]!.amount : 0;
                   return (
                     <div className="field" key={method}><label>{method}</label>
-                      <input className="in mono" id={`bpay-${method}`} inputMode="decimal" value={amount || ''} placeholder="0.00"
-                             onChange={(e) => { const v = Number(e.target.value) || 0;
+                      <NumInput className="in mono" id={`bpay-${method}`} inputMode="decimal" value={amount} blankZero placeholder="0.00"
+                             onNum={(num) => { const v = num;
                                setDoc((d) => { const rest = d.payments.filter((p) => p.method !== method);
                                  const ref = d.payments.find((p) => p.method === method)?.ref ?? '';
                                  return { ...d, payments: v > 0 ? [...rest, { method, amount: v, ref }] : rest }; }); }} />

@@ -1,5 +1,6 @@
 'use client';
 
+import { NumInput } from '@/components/num-input';
 import { useActionState, useState, useEffect } from 'react';
 import { useLiveSearch } from '@/components/use-live-search';
 import { ConfirmSave } from '@/components/confirm-save';
@@ -45,7 +46,7 @@ const emptyLine = (): Line => ({
 const isRealLine = (l: Line) => Boolean(l.productId) || l.name.trim() !== '';
 
 
-export function ClaimEditor({ side, today }: { side: ClaimSide; today: string }) {
+export function ClaimEditor({ side, today, showCost }: { side: ClaimSide; today: string; showCost: boolean }) {
   const S = CLAIM_SIDE[side];
   const kinds = CLAIM_KINDS[side];
 
@@ -263,8 +264,8 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
               <th className="c-code">รหัสสินค้า</th>
               <th className="c-name">รายการ</th>
               <th className="num c-qty">จำนวน</th>
-              <th className="num c-price">ต้นทุน/หน่วย</th>
-              <th className="num" style={{ width: 110 }}>มูลค่ารวม</th>
+              {showCost ? <th className="num c-price">ต้นทุน/หน่วย</th> : null}
+              {showCost ? <th className="num" style={{ width: 110 }}>มูลค่ารวม</th> : null}
               <th style={{ width: 34 }} />
             </tr>
           </thead>
@@ -289,21 +290,23 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
                   ) : null}
                 </td>
                 <td className="num c-qty">
-                  <input className="in mono" name={`it${i}_qty`} inputMode="decimal"
+                  <NumInput className="in mono" name={`it${i}_qty`} inputMode="decimal"
                          style={{ textAlign: 'right' }} value={l.qty}
-                         onChange={(e) => setLine(i, { qty: Number(e.target.value) || 0 })} />
+                         onNum={(num) => setLine(i, { qty: num })} />
                   {l.onHand !== null && l.qty > l.onHand ? (
                     <span className="hint" style={{ color: 'var(--due)' }}>
                       คงเหลือ {l.onHand}
                     </span>
                   ) : null}
                 </td>
-                <td className="num c-price">
-                  <input className="in mono" name={`it${i}_cost`} inputMode="decimal"
-                         style={{ textAlign: 'right' }} value={l.unitCost}
-                         onChange={(e) => setLine(i, { unitCost: Number(e.target.value) || 0 })} />
-                </td>
-                <td className="num">{baht(l.qty * l.unitCost)}</td>
+                {showCost ? (
+                  <td className="num c-price">
+                    <NumInput className="in mono" name={`it${i}_cost`} inputMode="decimal"
+                           style={{ textAlign: 'right' }} value={l.unitCost}
+                           onNum={(num) => setLine(i, { unitCost: num })} />
+                  </td>
+                ) : null}
+                {showCost ? <td className="num">{baht(l.qty * l.unitCost)}</td> : null}
                 <td style={{ textAlign: 'center' }}>
                   <button className="lnk" type="button" title="ลบบรรทัดนี้"
                           onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>×</button>
@@ -320,8 +323,8 @@ export function ClaimEditor({ side, today }: { side: ClaimSide; today: string })
                 </button>
               </td>
               <td className="num" style={{ fontWeight: 700 }}>{totalQty}</td>
-              <td className="num" style={{ fontWeight: 600 }}>รวม</td>
-              <td className="num" style={{ fontWeight: 700 }}>{baht(total)}</td>
+              {showCost ? <td className="num" style={{ fontWeight: 600 }}>รวม</td> : null}
+              {showCost ? <td className="num" style={{ fontWeight: 700 }}>{baht(total)}</td> : null}
               <td />
             </tr>
           </tfoot>

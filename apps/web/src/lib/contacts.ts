@@ -1,7 +1,8 @@
 import 'server-only';
-import { query } from './auth';
+import { assertCanEdit, query } from './auth';
 import { mutate } from './mutate';
 import { CONTACT_MONEY_SQL } from './contact-totals';
+import { DEBT_PAID_SQL } from './debt-paid';
 import { syncVehiclesWith } from './contact-vehicles';
 
 const n = (v: unknown): number => Number(v ?? 0);
@@ -131,6 +132,8 @@ export async function listContacts(opts: {
   /** ขอทุกแถวโดยไม่แบ่งหน้า — ใช้ตอนสั่งพิมพ์รายชื่อ */
   all?: boolean;
   pageSize?: number;
+  /** เฉพาะรายที่มียอดค้าง — แถบสรุปบนหน้าทะเบียนกดแล้วมาที่นี่ (26 พ.ย. 2569) */
+  oweOnly?: boolean;
 }): Promise<{ rows: Contact[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const search = (opts.search ?? '').trim();
@@ -157,6 +160,11 @@ export async function listContacts(opts: {
                    or exists (select 1 from vehicles v
                               where v.contact_id = k.id
                                 and (v.plate_b ilike $${i} or v.plate_a ilike $${i})))`);
+    }
+
+    /* ยอดค้างใช้นิยามเดียวกับคอลัมน์ "คงค้าง" ในตาราง (CONTACT_MONEY_SQL) — ตัวกรองกับตัวเลขในแถวจึงตรงกันเสมอ */
+    if (opts.oweOnly) {
+      where.push(`coalesce((select mo.owe from (${CONTACT_MONEY_SQL}) mo where mo.party_id = k.id), 0) > 0.004`);
     }
 
     const whereSql = where.length ? `where ${where.join(' and ')}` : '';
@@ -192,6 +200,39 @@ export async function listContacts(opts: {
     );
 
     return { total: totalRes.rows[0].c, rows: rows.map(toContact) };
+  });
+}
+
+export interface ContactSummary {
+  /** จำนวนรายทั้งหมดของชนิดนี้ */
+  total: number;
+  /** รายที่มียอดค้าง */
+  owing: number;
+  /** ยอดค้างรวมของทุกราย */
+  oweTotal: number;
+  /** รถในทะเบียนของลูกค้า — ผู้ขายเป็นศูนย์ */
+  vehicles: number;
+}
+
+/**
+ * ตัวเลขแถบสรุปบนหน้าทะเบียน — ทั้งทะเบียนของชนิดนั้น ไม่ขึ้นกับคำค้นหรือหน้าที่เปิดอยู่
+ * ยอดค้างมาจาก CONTACT_MONEY_SQL ตัวเดียวกับคอลัมน์ในตารางและตัวกรอง oweOnly
+ */
+export async function contactSummary(kind: 'customer' | 'vendor'): Promise<ContactSummary> {
+  return query(async (c) => {
+    const { rows } = await c.query(
+      `with money as (${CONTACT_MONEY_SQL})
+       select count(*)::int as total,
+              count(*) filter (where coalesce(m.owe, 0) > 0.004)::int as owing,
+              coalesce(sum(m.owe), 0) as owe_total,
+              (select count(*)::int from vehicles v join contacts kk on kk.id = v.contact_id where kk.kind = $1) as vehicles
+         from contacts k left join money m on m.party_id = k.id
+        where k.kind = $1`, [kind]);
+    const r = rows[0];
+    return {
+      total: n(r.total), owing: n(r.owing),
+      oweTotal: Math.round(n(r.owe_total) * 100) / 100, vehicles: n(r.vehicles),
+    };
   });
 }
 
@@ -248,7 +289,7 @@ export async function getContactHistory(id: string): Promise<ContactHistory> {
               exists (select 1 from documents x
                        where x.parent_doc_id = d.id and x.kind = 'RC' and x.status <> 'void') as has_receipt
        from documents d
-       left join (select doc_id, sum(amount) as paid from payments group by doc_id) p
+       left join ${DEBT_PAID_SQL} p
               on p.doc_id = d.id
        where d.party_id = $1 and d.status <> 'void' and d.kind <> 'QT'
        /* ใบที่บันทึกล่าสุดอยู่บนสุด (ผู้ใช้กำหนด 17 ก.ย. 2569) — เวลาเท่ากัน (นำเข้า/กู้คืนทั้งชุด) ค่อยเรียงวันที่ → เลขที่ */
@@ -270,9 +311,13 @@ export async function getContactHistory(id: string): Promise<ContactHistory> {
 
     return {
       docs,
-      totalAmount: Math.round(docs.reduce((s, d) => s + d.payable, 0) * 100) / 100,
+      /* ใบส่งมอบที่มีใบเสร็จออกต่อแล้วไม่นับซ้ำ — หนี้ก้อนเดียวกัน นับที่ใบเสร็จ (debt-paid.ts)
+         เดิมบวกทั้งสองใบ ยอดสะสมและยอดค้างของลูกค้าที่ออกครบทั้งสองใบจึงเป็นสองเท่า */
+      totalAmount: Math.round(
+        docs.filter((d) => !d.hasReceipt).reduce((s, d) => s + d.payable, 0) * 100) / 100,
       totalOutstanding: Math.round(
-        docs.filter((d) => d.outstanding > 0.004).reduce((s, d) => s + d.outstanding, 0) * 100,
+        docs.filter((d) => !d.hasReceipt && d.outstanding > 0.004)
+          .reduce((s, d) => s + d.outstanding, 0) * 100,
       ) / 100,
       lastDocDate: docs[0]?.docDate ?? null,
     };
@@ -321,10 +366,16 @@ export async function nextContactCode(kind: 'customer' | 'vendor'): Promise<stri
 
 export async function saveContact(input: ContactInput): Promise<string> {
   /* ทะเบียนลูกค้ากับทะเบียนผู้ขายเป็นคนละแท็บ สิทธิ์แก้ไขจึงแยกกัน */
-  return mutate('customer', async (c) => {
+  return mutate('customer', async (c, _userId, session) => {
     let id = input.id;
 
     if (id) {
+      /* ชนิดในฟอร์มมาจากผู้ใช้ — ต้องมีสิทธิ์แก้แท็บของ**แถวเดิม**ด้วย
+         ไม่งั้นคนที่แก้ได้แค่ทะเบียนลูกค้า ส่ง kind=customer มากับ id ของผู้ขายแล้วแก้ผู้ขายได้ */
+      const before = await c.query(`select kind::text as kind from contacts where id = $1`, [id]);
+      if (!before.rows[0]) throw new Error('ไม่พบผู้ติดต่อรายนี้ — อาจถูกลบไปแล้ว');
+      if (before.rows[0].kind !== input.kind) assertCanEdit(session, 'customer', before.rows[0].kind);
+
       await c.query(
         `update contacts set code=$2, kind=$3, type=$4, prefix=$5, first_name=$6, last_name=$7,
                 org_name=$8, tax_id=$9, addr=$10, addr_text=$11, tel=$12, tel2=$13,
@@ -351,7 +402,7 @@ export async function saveContact(input: ContactInput): Promise<string> {
     await syncVehiclesWith(c, id!, input.kind, input.vehicles);
 
     return id!;
-  });
+  }, { sub: input.kind });
 }
 
 /**
@@ -363,7 +414,12 @@ export async function saveContact(input: ContactInput): Promise<string> {
 export async function deleteContact(
   id: string, kind: 'customer' | 'vendor' = 'customer',
 ): Promise<{ ok: boolean; reason?: string }> {
-  return mutate('customer', async (c) => {
+  return mutate('customer', async (c, _userId, session) => {
+    /* สิทธิ์ดูจากชนิดของแถวจริง ไม่ใช่ค่า kind ที่ผู้เรียกส่งมา */
+    const row = await c.query(`select kind::text as kind from contacts where id = $1`, [id]);
+    if (!row.rows[0]) return { ok: false, reason: 'ไม่พบผู้ติดต่อรายนี้ — อาจถูกลบไปแล้ว' };
+    assertCanEdit(session, 'customer', row.rows[0].kind);
+
     const { rows } = await c.query(
       `select count(*)::int as c from documents where party_id = $1`, [id],
     );

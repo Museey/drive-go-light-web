@@ -239,6 +239,13 @@ describe.skipIf(!DB_URL)('ถังขยะ', () => {
       .rejects.toThrow('รหัสผ่านไม่ถูกต้อง');
     await expect(assertOwnerPasswordWith(app, { userId: u.id, role: 'owner' }, 'รหัสที่ถูก-1234')).resolves.toBeUndefined();
 
+    /* กู้คืนทับข้อมูลทั้งอู่ใช้ตัวตรวจเดียวกัน — ข้อความต้องพูดถึงการกู้คืน ไม่ใช่การลบ */
+    const restore = { verb: 'กู้คืนทับข้อมูลทั้งอู่', undone: 'ยังไม่ได้กู้คืน ข้อมูลเดิมยังอยู่ครบ' };
+    await expect(assertOwnerPasswordWith(app, { userId: u.id, role: 'staff' }, 'รหัสที่ถูก-1234', restore))
+      .rejects.toThrow('กู้คืนทับข้อมูลทั้งอู่ได้เฉพาะเจ้าของกิจการ');
+    await expect(assertOwnerPasswordWith(app, { userId: u.id, role: 'owner' }, 'ผิด', restore))
+      .rejects.toThrow('รหัสผ่านไม่ถูกต้อง — ยังไม่ได้กู้คืน');
+
     /* ผู้ใช้ของอู่อื่นมองไม่เห็น — รหัสถูกก็ผ่านไม่ได้ */
     await as(theirs);
     await expect(assertOwnerPasswordWith(app, { userId: u.id, role: 'owner' }, 'รหัสที่ถูก-1234'))

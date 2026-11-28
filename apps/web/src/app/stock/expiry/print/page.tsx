@@ -93,7 +93,7 @@ export default async function ExpiryPrintPage({
         </tfoot>
       </table>
       {!seeCost ? (
-        <div style={{ marginTop: 8, fontSize: 11 }}>มูลค่าต้นทุน {HIDDEN_COST}</div>
+        <div style={{ marginTop: 8, fontSize: '0.875rem' }}>มูลค่าต้นทุน {HIDDEN_COST}</div>
       ) : null}
     </ListPaper>
   );

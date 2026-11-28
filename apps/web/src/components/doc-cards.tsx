@@ -1,3 +1,4 @@
+import { Plate } from './plate';
 import Link from 'next/link';
 import { baht, thDate } from '@/lib/format';
 import type { DocCard } from '@/lib/doc-card';
@@ -48,7 +49,7 @@ export function DocCardView({ c }: { c: DocCard }) {
         <span className={`chip ${c.status.tone === 'plain' ? '' : c.status.tone}`}>{c.status.label}</span>
       </div>
       <div className="nm">{c.name}</div>
-      {c.plate ? <div className="plate mono">{c.plate}</div> : null}
+      {c.plate ? <div className="plate"><Plate value={c.plate} /></div> : null}
       <div className="r3">
         <div className="d">{thDate(c.date)}</div>
         <div className="tot">

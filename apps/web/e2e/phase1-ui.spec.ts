@@ -184,7 +184,9 @@ test('เพิ่มลูกค้า: เลขผู้เสียภาษ
   await page.getByRole('button', { name: 'เพิ่มผู้ติดต่อ' }).click();
 
   /* บันทึกแล้วกลับไปหน้าทะเบียน — เปิดใบที่เพิ่งบันทึกดูว่าเลขครบ 13 หลัก */
-  await expect(page).toHaveURL(/\/customers/);
+  /* ต้องรอจนบันทึกเสร็จจริง (หน้ากลับมาพร้อม saved=contact) — เดิมจับแค่ /customers ซึ่งหน้าฟอร์มเองก็ตรงอยู่แล้ว
+     เทสต์จึงวิ่งไปค้นก่อนบันทึกเสร็จ แล้วล้มสลับขนาดจอไปมา */
+  await expect(page).toHaveURL(/[?&]saved=contact/);
   await page.goto(`/customers?kind=customer&q=${code}`);
   const wide = (page.viewportSize()?.width ?? 0) >= 1280;
   await (wide ? page.locator('table.cust tbody tr').first() : page.locator('.contact-cards .mparty').first()).click();

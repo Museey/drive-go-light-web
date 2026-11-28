@@ -1,10 +1,15 @@
 'use client';
 
+import { Plate } from '@/components/plate';
+import { NumInput } from '@/components/num-input';
 import { useActionState, useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { bahttext, expiredLines, lineAmount, recTotals, WHT_MIN_BASE, type VatMode } from '@drivegolight/core';
 import { forcedVatMode, vatChoices } from '@/lib/sales-rules';
-import { loadSourceAction, saveDocAction, scanPartAction, searchCustomersAction, searchOpenSourcesAction, searchProductsAction, sourceHoldsStockAction } from './actions';
+import { loadSourceAction, productsByIdsAction, saveDocAction, scanPartAction, searchCustomersAction, searchOpenSourcesAction, searchProductsAction, sourceHoldsStockAction } from './actions';
+import { keyedDoc, keyRows, rowKey, stripRowKeys } from '@/lib/row-key';
+import { plateMatches, vehicleForPlate, vehiclesByMatch } from '@/lib/pick-vehicle';
+import { worthSavingCustomer } from '@/lib/doc-new-customer';
 import { useLiveSearch } from '@/components/use-live-search';
 import { ConfirmSave } from '@/components/confirm-save';
 import { payModeOf } from '@/lib/pay-mode';
@@ -78,16 +83,20 @@ const addDaysIso = (iso: string, days: number) => {
   const d = new Date(iso + 'T00:00:00');
   if (Number.isNaN(d.getTime())) return '';
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  /* ประกอบจากวันที่ตามเวลาเครื่อง — ห้ามใช้ toISOString() ซึ่งแปลงเป็น UTC ก่อน
+     เที่ยงคืนเวลาไทยคือ 17:00 ของวันก่อนหน้าใน UTC วันครบกำหนดจึงเคยออกมาเร็วไปหนึ่งวัน */
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 /* ---------- บรรทัดสินค้า: ช่องรหัสค้นหาสด ผลหล่นเป็นแถวใต้บรรทัด ---------- */
 function LineRow({
-  i, item, isLast, stock, today, expiryWarnDays, priceOf, onChange, onPick, onRemove, onEnterLast, onFound,
+  i, item, isLast, seed, stock, today, expiryWarnDays, priceOf, onChange, onPick, onRemove, onEnterLast, onFound,
 }: {
   i: number;
   item: DocItemInput;
   isLast: boolean;
+  /** คำค้นที่หน้าจอส่งมาให้เปิดผลค้นหา (ยิงบาร์โค้ดแล้วตรงหลายตัว) */
+  seed: { term: string } | null;
   stock: number | null;
   today: string;
   expiryWarnDays: number;
@@ -102,6 +111,7 @@ function LineRow({
   /* รหัสของสินค้าที่บรรทัดนี้เคยผูกไว้ — ให้พิมพ์กลับมาเหมือนเดิมแล้วผูกคืนได้ (lib/line-link.ts) */
   const [memo, setMemo] = useState<CodeLink | null>(null);
   const { results, busy, clear } = useLiveSearch(query, searchProductsAction, { onFound });
+  useEffect(() => { if (seed) setQuery(seed.term); }, [seed]);
   const amount = lineAmount({ qty: item.qty, price: item.unitPrice, discPct: item.discPct ?? 0 });
 
   /* เลือกตัวใหม่แล้วความจำเก่าใช้ไม่ได้ — ไม่งั้นพิมพ์รหัสของตัวก่อนหน้าจะดึงตัวเก่ากลับมา */
@@ -133,8 +143,8 @@ function LineRow({
                  onChange={(e) => onChange({ name: e.target.value })} onKeyDown={enterKey} />
         </td>
         <td className="c-qty">
-          <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.qty}
-                 onChange={(e) => onChange({ qty: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
+          <NumInput className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.qty}
+                 onNum={(num) => onChange({ qty: num })} onKeyDown={enterKey} />
         </td>
         <td className="stock">{item.productId && stock !== null ? stock.toLocaleString('en-US') : '-'}</td>
         <td className="c-unit">
@@ -142,13 +152,13 @@ function LineRow({
                  onChange={(e) => onChange({ unit: e.target.value })} onKeyDown={enterKey} />
         </td>
         <td className="c-price">
-          <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.unitPrice}
-                 onChange={(e) => onChange({ unitPrice: Number(e.target.value) || 0 })} onKeyDown={enterKey} />
+          <NumInput className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.unitPrice}
+                 onNum={(num) => onChange({ unitPrice: num })} onKeyDown={enterKey} />
         </td>
         <td className="c-disc">
-          <input className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.discPct ?? 0}
+          <NumInput className="in mono" inputMode="decimal" style={{ textAlign: 'right' }} value={item.discPct ?? 0}
                  title="ส่วนลดรายบรรทัด (%)"
-                 onChange={(e) => onChange({ discPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+                 onNum={(num) => onChange({ discPct: Math.min(100, Math.max(0, num)) })}
                  onKeyDown={enterKey} />
         </td>
         <td className="amt">{baht(amount)}</td>
@@ -199,12 +209,14 @@ function LineRow({
 /* ====================================================================== */
 
 export function DocEditor({
-  initial, vatRate, shopWhtRate, mode, lotExpiry, expiryWarnDays, today, cashOnOpen, docNo, banks, returnTo, docNoPreview,
+  initial, vatRate, shopWhtRate, whtBase = 'labour', mode, lotExpiry, expiryWarnDays, today, cashOnOpen, docNo, banks, returnTo, docNoPreview,
   vatRegistered = true, parentKind = null, parentHoldsStock = false, receiptHoldsStock = false,
 }: {
   initial: SalesDocInput;
   vatRate: number;
   shopWhtRate: number;
+  /** ฐานหัก ณ ที่จ่ายที่ร้านตั้งไว้ (07.1) — ต้องเป็นค่าเดียวกับที่เซิร์ฟเวอร์ใช้ตอนบันทึก ยอดบนจอจึงตรงกัน */
+  whtBase?: 'labour' | 'all';
   /** ร้านจดภาษีมูลค่าเพิ่มหรือไม่ — ไม่จด = ช่อง VAT ล็อกตามกติกาใน vatChoices() (ตั้งที่ 07) */
   vatRegistered?: boolean;
   /** ชนิดของใบต้นทาง (ใบที่ใบนี้ออกต่อมา) — ใบเสร็จต่อจากใบกำกับภาษีต้องคิด VAT ตามใบกำกับ */
@@ -230,14 +242,19 @@ export function DocEditor({
   returnTo?: string;
 }) {
   const [state, action] = useActionState<FormResult, FormData>(saveDocAction, {});
-  const [doc, setDoc] = useState<SalesDocInput>({
+  const [doc, setDocRaw] = useState<SalesDocInput>(() => keyedDoc({
     ...initial,
     discountMode: initial.discountMode ?? 'baht',
     discountPct: initial.discountPct ?? 0,
     items: padRows(initial.items.map((it) => ({ ...it, discPct: it.discPct ?? 0 }))),
-  });
+  }));
+  /* ทุกบรรทัดต้องมีกุญแจประจำตัวเสมอ ไม่ว่าจะเข้ามาทางไหน — ดู lib/row-key.ts */
+  const setDoc = (next: SalesDocInput | ((d: SalesDocInput) => SalesDocInput)) =>
+    setDocRaw((d) => keyedDoc(typeof next === 'function' ? next(d) : next));
   const [custQuery, setCustQuery] = useState('');
   const [plateQuery, setPlateQuery] = useState('');
+  /* บันทึกลูกค้าที่พิมพ์เองลงทะเบียน — null = ยังไม่ได้แตะ ใช้ค่าตั้งต้นจากข้อมูลที่กรอก (lib/doc-new-customer.ts) */
+  const [saveCust, setSaveCust] = useState<boolean | null>(null);
   const [picked, setPicked] = useState<PickedContact | null>(null);
   const [, startTransition] = useTransition();
   const [confirm, setConfirm] = useState(false);
@@ -292,6 +309,8 @@ export function DocEditor({
   /** คงเหลือของสินค้าที่เคยเห็นในหน้านี้ — ไว้โชว์คอลัมน์ "คงเหลือ" */
   const [stock, setStock] = useState<Record<string, number>>({});
   const [notFound, setNotFound] = useState('');
+  /* คำค้นที่ยิงเข้ามาแล้วตรงหลายตัว — ส่งให้บรรทัดเจ้าของกุญแจเปิดผลค้นหาเอง (วัตถุใหม่ทุกครั้งที่ยิง) */
+  const [seed, setSeed] = useState<{ k: string; term: string } | null>(null);
 
   const learn = (found: PickedProduct[]) => {
     setExpiry((e) => {
@@ -344,7 +363,7 @@ export function DocEditor({
     : money(Math.max(0, doc.discount || 0));
   const t = recTotals(
     { items: coreItems, discount: effDiscount, vatMode, whtRate: doc.kind === 'QT' ? 0 : doc.whtRate, date: doc.docDate },
-    { vatRate },
+    { vatRate, whtBase },
   );
 
   useEffect(() => {
@@ -362,6 +381,9 @@ export function DocEditor({
 
   /* ---------- ลูกค้า ---------- */
   const applyCustomer = (c: PickedContact) => {
+    /* ค้นด้วยทะเบียนแล้วเลือกลูกค้า = ต้องได้รถคันที่ค้น ไม่ใช่คันแรกของลูกค้า (lib/pick-vehicle.ts) */
+    /* ช่องชื่อลูกค้าก็ค้นด้วยเลขทะเบียนได้ (2–4 ตัวท้ายเป็นท่าที่ใช้บ่อย) — คำที่พิมพ์ในช่องไหนก็ใช้เลือกคัน */
+    const veh = vehicleForPlate(c.vehicles, plateQuery || custQuery);
     setPicked(c);
     setCustQuery('');
     setPlateQuery('');
@@ -371,8 +393,8 @@ export function DocEditor({
       partyId: c.id, partyType: c.type, partyName: c.name, partyTaxId: c.taxId,
       partyTel: c.tel, partyEmail: c.email, partyAddr: c.addr, partyAddrText: c.addrText,
       creditDays: d.creditDays || c.creditDays,
-      vehicleId: c.vehicles[0]?.id ?? null,
-      vehicle: c.vehicles[0] ? normVeh(c.vehicles[0].data) : null,
+      vehicleId: veh?.id ?? null,
+      vehicle: veh ? normVeh(veh.data) : null,
     }));
   };
 
@@ -387,7 +409,8 @@ export function DocEditor({
     );
     if (!yes) { set('priceTier', tier); return; }
     startTransition(async () => {
-      const found = await searchProductsAction(linked.map((i) => i.code).filter(Boolean).join(' '));
+      /* ถามด้วยรหัสภายในของทุกบรรทัด — เดิมต่อรหัสสินค้าเป็นคำค้นคำเดียว ใบที่มีสองบรรทัดขึ้นไปจึงไม่เจออะไรเลย */
+      const found = await productsByIdsAction(linked.map((i) => i.productId!));
       learn(found);
       setDoc((d) => ({
         ...d, priceTier: tier,
@@ -432,10 +455,18 @@ export function DocEditor({
     }
     if (r.kind === 'inactive') return { ok: false, message: `${r.code} ${r.name} ปิดใช้งานอยู่ — เปิดใช้งานที่ทะเบียนสินค้าก่อน` };
     if (r.kind === 'many') {
-      /* หลายตัว — วางคำค้นลงบรรทัดว่างแรก ให้ผู้ใช้เลือกจากผลใต้บรรทัดนั้น */
+      /* หลายตัว — วางคำค้นลงบรรทัดว่างแรก แล้ว**เปิดผลค้นหาใต้บรรทัดนั้นให้เลย**
+         เดิมวางแค่รหัส ผลค้นหาไม่ขึ้นจนกว่าจะพิมพ์ต่อ และถ้าไม่เหลือบรรทัดว่างก็ไม่เกิดอะไรเลย
+         (เขียนลงลำดับที่ไม่มีอยู่) ทั้งที่ข้อความบอกให้ไปเลือกในบรรทัด */
       const blank = doc.items.findIndex((i) => !isRealItem(i));
-      setItem(blank >= 0 ? blank : doc.items.length, { code: r.term });
-      return { ok: false, message: `ตรงกับสินค้า ${r.count} รายการ — พิมพ์ต่อในบรรทัดที่ขึ้นรหัสให้แล้วเลือก` };
+      const [base] = keyRows([blank >= 0 ? doc.items[blank]! : emptyItem()]);
+      const line = patchLine(base!, { code: r.term }, isRealItem);
+      const k = rowKey(line, 0);
+      setDoc((d) => (d.items.some((it, j) => rowKey(it, j) === k)
+        ? { ...d, items: d.items.map((it, j) => (rowKey(it, j) === k ? line : it)) }
+        : { ...d, items: [...d.items, line] }));
+      setSeed({ k, term: r.term });
+      return { ok: false, message: `ตรงกับสินค้า ${r.count} รายการ — เลือกจากรายการใต้บรรทัดที่ขึ้นรหัสให้แล้ว` };
     }
     setNotFound(r.term);
     return { ok: false, message: `ไม่พบ "${r.term}"` };
@@ -463,8 +494,14 @@ export function DocEditor({
       unstocked.map((it) => it.code || it.name).join(' · ')
     : '';
 
+  /* ลูกค้าที่พิมพ์เอง (ไม่ได้เลือกจากทะเบียน) — เสนอให้บันทึกลงทะเบียนพร้อมใบนี้ */
+  const typedCustomer = !doc.partyId && doc.partyName.trim() !== '';
+  const willSaveCust = typedCustomer && (saveCust ?? worthSavingCustomer(doc));
+
   /* ส่งเฉพาะบรรทัดที่มีของ และส่วนลดตามที่ผู้ใช้เลือก (เซิร์ฟเวอร์คำนวณบาทที่มีผลจริงเอง) */
-  const payload = useMemo(() => JSON.stringify({ ...doc, vatMode, items: realItems }), [doc, vatMode, realItems]);
+  const payload = useMemo(
+    () => JSON.stringify({ ...doc, vatMode, items: stripRowKeys(realItems), saveAsCustomer: willSaveCust }),
+    [doc, vatMode, realItems, willSaveCust]);
 
   /* ปุ่มลัดวิธีรับชำระ — โหมดที่ตรงกับข้อมูลจริงตอนนี้ (lib/pay-mode.ts มีเทสต์คุม) */
   const payMode = payModeOf(doc.payments, t.payable);
@@ -520,7 +557,7 @@ export function DocEditor({
             {/* บรรทัด 1: ชื่อ | เลขประจำตัวผู้เสียภาษี · บรรทัด 2: ที่อยู่ | โทร (ผู้ใช้กำหนด) — ทะเบียนรถอยู่ที่การ์ดรถ */}
             <div className="row-fields f2">
               <div className="field">
-                <label>ชื่อลูกค้า * <span className="hint">พิมพ์ชื่อ รหัส หรือเบอร์ — ข้อมูลขึ้นให้อัตโนมัติ (ว่าง = ขาจร)</span></label>
+                <label>ชื่อลูกค้า * <span className="hint">พิมพ์ชื่อ รหัส เบอร์ หรือเลขทะเบียนรถ 2–4 ตัว — ข้อมูลขึ้นให้อัตโนมัติ (ว่าง = ขาจร)</span></label>
                 <input className="in" value={doc.partyName} placeholder="พิมพ์ชื่อเพื่อค้นหา"
                        onChange={(e) => { const v = e.target.value; setDoc((d) => ({ ...d, partyName: v, partyId: null })); setCustQuery(v); }} />
               </div>
@@ -530,6 +567,15 @@ export function DocEditor({
               </div>
             </div>
             <div className="tag-row" style={{ marginTop: 6 }}>
+              {typedCustomer ? (
+                <label className="chip savecust" title="กรอกชื่อ เบอร์ ที่อยู่ ทะเบียนรถ บนใบนี้ แล้วระบบเพิ่มลูกค้ารายนี้ลงทะเบียนให้ตอนบันทึก">
+                  <input type="checkbox" checked={willSaveCust} onChange={(e) => setSaveCust(e.target.checked)} />
+                  บันทึกเป็นลูกค้าใหม่ในทะเบียน
+                </label>
+              ) : null}
+              {typedCustomer && willSaveCust ? (
+                <span className="subtle">ครั้งหน้าค้นชื่อหรือทะเบียนแล้วข้อมูลขึ้นให้เอง · มีรายเดิมที่เลขผู้เสียภาษีหรือชื่อกับเบอร์ตรงกัน ระบบผูกใบเข้ารายเดิม ไม่สร้างซ้ำ</span>
+              ) : null}
               {custBusy ? <span className="subtle">กำลังค้น…</span> : null}
               {doc.partyId ? (
                 <>
@@ -555,7 +601,15 @@ export function DocEditor({
                         <td className="mono">{c.code}</td>
                         <td className="wrap">{c.name}</td>
                         <td className="mono">{c.tel || '-'}</td>
-                        <td className="subtle">{c.vehicles.length ? `${c.vehicles.length} คัน` : 'ไม่มีรถ'}</td>
+                        <td className="hit-plates">
+                          {c.vehicles.length ? (<>
+                            {vehiclesByMatch(c.vehicles, plateQuery || custQuery).slice(0, 2).map((v) => (
+                              <Plate key={v.id} value={[v.data.plateA, v.data.plateB].filter(Boolean).join(' ')}
+                                     hit={plateMatches(v, plateQuery || custQuery)} />
+                            ))}
+                            {c.vehicles.length > 2 ? <span className="subtle"> +{c.vehicles.length - 2} คัน</span> : null}
+                          </>) : <span className="subtle">ไม่มีรถ</span>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -579,7 +633,9 @@ export function DocEditor({
             <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line-2)' }}>
               <div className="tag-row" style={{ marginBottom: 8 }}>
                 <b>🚗 รถที่เข้ารับบริการ</b>
-                <input className="in mono search" value={plateQuery} placeholder="กรอกทะเบียน — ค้นจากรถในทะเบียนลูกค้า" style={{ width: 260 }}
+                {/* ทะเบียนของใบนี้เป็นป้ายใหญ่ตรงหัวข้อ — เห็นทันทีว่ากำลังออกเอกสารให้รถคันไหน */}
+                <Plate size="lg" value={[doc.vehicle?.plateA, doc.vehicle?.plateB, doc.vehicle?.plateProv].filter(Boolean).join(' ')} />
+                <input className="in search plate-search" value={plateQuery} placeholder="กรอกทะเบียน — ค้นจากรถในทะเบียนลูกค้า" style={{ width: 280 }}
                        onChange={(e) => { setPlateQuery(e.target.value); setCustQuery(e.target.value); }} />
               </div>
               {picked && picked.vehicles.length > 0 ? (
@@ -655,8 +711,8 @@ export function DocEditor({
                   </div>
                   <div className="field">
                     <label htmlFor="creditDays">กำหนดชำระ (วัน)</label>
-                    <input className="in mono amber" id="creditDays" inputMode="numeric" value={doc.creditDays}
-                           onChange={(e) => set('creditDays', Math.max(0, Number(e.target.value) || 0))} />
+                    <NumInput className="in mono amber" id="creditDays" inputMode="numeric" value={doc.creditDays}
+                           onNum={(num) => set('creditDays', Math.max(0, num))} />
                   </div>
                   <div className="field">
                     <label>วันครบกำหนด <span className="hint">พิมพ์ วว/ดด/ปป หรือกดปฏิทิน</span></label>
@@ -668,9 +724,9 @@ export function DocEditor({
                 <div className="row-fields f2" style={{ marginTop: 10 }}>
                   <div className="field">
                     <label htmlFor="whtRate">หัก ณ ที่จ่าย (%)</label>
-                    <input className="in mono" id="whtRate" inputMode="decimal" value={doc.whtRate}
-                           onChange={(e) => set('whtRate', Number(e.target.value) || 0)} />
-                    <span className="hint">คิดจากค่าแรงเท่านั้น (ร้านตั้งไว้ {shopWhtRate}%)</span>
+                    <NumInput className="in mono" id="whtRate" inputMode="decimal" value={doc.whtRate}
+                           onNum={(num) => set('whtRate', num)} />
+                    <span className="hint">{whtBase === 'all' ? 'คิดจากมูลค่าก่อน VAT ทั้งใบ' : 'คิดจากค่าแรงเท่านั้น'} (ร้านตั้งไว้ {shopWhtRate}%)</span>
                     {/* ขั้นต่ำตามกติกาสรรพากร — เตือนแดงให้เห็นชัด (ผู้ใช้กำหนด) · สูตรอยู่ที่ recTotals (WHT_MIN_BASE) */}
                     <span className="hint" style={{ color: 'var(--due)', fontWeight: 600 }}>(ค่าบริการ {WHT_MIN_BASE.toLocaleString('en-US')} บาทขึ้นไป)</span>
                   </div>
@@ -693,7 +749,7 @@ export function DocEditor({
                                   <tr key={o.id} className="pick" role="button" tabIndex={0} onClick={() => applySource(o)}
                                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applySource(o); } }}>
                                     <td className="mono"><b>{o.docNo}</b></td><td>{thDate(o.docDate)}</td><td className="wrap">{o.partyName}</td>
-                                    <td className="mono subtle">{o.vehiclePlate || ''}</td><td className="num mono">{baht(o.amount)}</td>
+                                    <td><Plate value={o.vehiclePlate} /></td><td className="num mono">{baht(o.amount)}</td>
                                   </tr>
                                 ))}
                             </tbody></table>
@@ -805,7 +861,8 @@ export function DocEditor({
             </thead>
             <tbody>
               {doc.items.map((it, i) => (
-                <LineRow key={i} i={i} item={it} isLast={i === doc.items.length - 1}
+                <LineRow key={rowKey(it, i)} i={i} item={it} isLast={i === doc.items.length - 1}
+                         seed={seed && seed.k === rowKey(it, i) ? seed : null}
                          stock={it.productId ? (stock[it.productId] ?? null) : null}
                          today={today} expiryWarnDays={expiryWarnDays} priceOf={priceOf}
                          onChange={(patch) => setItem(i, patch)}
@@ -879,10 +936,10 @@ export function DocEditor({
             <div className="row">
               <span className="lbl" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 ส่วนลดท้ายบิล
-                <input className="in mono" inputMode="decimal" style={{ width: 96, textAlign: 'right' }}
+                <NumInput className="in mono" inputMode="decimal" style={{ width: 96, textAlign: 'right' }}
                        value={doc.discountMode === 'pct' ? (doc.discountPct ?? 0) : doc.discount}
-                       onChange={(e) => {
-                         const v = Number(e.target.value) || 0;
+                       onNum={(num) => {
+                         const v = num;
                          if (doc.discountMode === 'pct') set('discountPct', Math.min(100, Math.max(0, v)));
                          else set('discount', Math.max(0, v));
                        }} />
@@ -911,15 +968,15 @@ export function DocEditor({
             <div className="row grand"><span>{isQuote ? 'ยอดเสนอราคาทั้งสิ้น' : 'รวมทั้งสิ้น'}</span><span>{baht(t.grand)}</span></div>
             {t.wht > 0 ? (
               <>
-                <div className="row"><span className="lbl">หัก ณ ที่จ่าย {doc.whtRate}% (ค่าแรง {baht(t.whtBase)})</span><span>−{baht(t.wht)}</span></div>
+                <div className="row"><span className="lbl">หัก ณ ที่จ่าย {doc.whtRate}% ({whtBase === 'all' ? 'ฐานทั้งใบ' : 'ค่าแรง'} {baht(t.whtBase)})</span><span>−{baht(t.wht)}</span></div>
                 <div className="row grand"><span>ยอดชำระทั้งสิ้น</span><span>{baht(t.payable)}</span></div>
               </>
             ) : !isQuote && doc.whtRate > 0 && t.whtBase > 0 && t.whtBase < WHT_MIN_BASE ? (
               <div className="note" style={{ margin: '6px 0' }}>
-                ค่าแรง {baht(t.whtBase)} บาท ไม่ถึง {WHT_MIN_BASE.toLocaleString('en-US')} บาท — ไม่หัก ณ ที่จ่าย
+                {whtBase === 'all' ? 'ฐานหัก' : 'ค่าแรง'} {baht(t.whtBase)} บาท ไม่ถึง {WHT_MIN_BASE.toLocaleString('en-US')} บาท — ไม่หัก ณ ที่จ่าย
               </div>
             ) : null}
-            <div className="subtle" style={{ fontSize: 12.5, marginTop: 4 }}>({bahttext(t.payable)})</div>
+            <div className="subtle" style={{ fontSize: '0.875rem', marginTop: 4 }}>({bahttext(t.payable)})</div>
 
             {/* รับชำระ (ใบเสร็จ) */}
             {isReceipt ? (
@@ -935,9 +992,9 @@ export function DocEditor({
                     return (
                       <div className="field" key={method}>
                         <label>{method}</label>
-                        <input className="in mono" id={`pay-${method}`} autoFocus={focusPartial && method === 'เงินสด'} inputMode="decimal" value={amount || ''} placeholder="0.00"
-                               onChange={(e) => {
-                                 const v = Number(e.target.value) || 0;
+                        <NumInput className="in mono" id={`pay-${method}`} autoFocus={focusPartial && method === 'เงินสด'} inputMode="decimal" value={amount} blankZero placeholder="0.00"
+                               onNum={(num) => {
+                                 const v = num;
                                  setCashAuto(false);
                                  setDoc((d) => {
                                    const rest = d.payments.filter((p) => p.method !== method);

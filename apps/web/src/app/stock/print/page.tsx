@@ -101,7 +101,7 @@ export default async function StockPrintPage({
               <td>
                 {p.code}
                 {p.flags.length ? (
-                  <span style={{ fontSize: 9.5, color: '#666' }}>
+                  <span style={{ fontSize: '0.875rem', color: '#666' }}>
                     {' '}
                     {p.flags.map((f: StockFlag) => STOCK_FLAG_SHORT[f]).join('/')}
                   </span>
@@ -109,7 +109,7 @@ export default async function StockPrintPage({
               </td>
               <td>{p.oem || ''}</td>
               <td>{p.name}</td>
-              <td style={{ fontSize: 11 }}>{p.categoryName ?? ''}</td>
+              <td style={{ fontSize: '0.875rem' }}>{p.categoryName ?? ''}</td>
               <td style={{ textAlign: 'center' }}>{p.unit}</td>
               {show('cost') ? <td style={{ textAlign: 'right' }}>{baht(p.lastCost)}</td> : null}
               <td style={{ textAlign: 'right' }}>{baht(p.priceA)}</td>
@@ -118,7 +118,7 @@ export default async function StockPrintPage({
               {show('max') ? (
                 <td style={{ textAlign: 'right' }}>{p.qtyMax > 0 ? p.qtyMax.toLocaleString('en-US') : ''}</td>
               ) : null}
-              {show('move') ? <td style={{ fontSize: 11 }}>{thDate(p.lastMoveOn)}</td> : null}
+              {show('move') ? <td style={{ fontSize: '0.875rem' }}>{thDate(p.lastMoveOn)}</td> : null}
             </tr>
           ))}
         </tbody>

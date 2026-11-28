@@ -172,6 +172,69 @@ export async function recordRenewal(
   ));
 }
 
+export type RenewalRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+/** คำขอต่ออายุที่อู่แจ้งชำระเงินมา (db/039_renewal_requests.sql) */
+export interface RenewalRequest {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  years: number;
+  amount: number;
+  paidOn: string;
+  note: string;
+  status: RenewalRequestStatus;
+  createdAt: string;
+  decidedAt: string | null;
+  decidedNote: string;
+}
+
+export async function listRenewalRequests(s: OperatorSession): Promise<RenewalRequest[]> {
+  return withoutTenant(async (c) => {
+    const { rows } = await c.query(`select * from ops.list_renewal_requests($1)`, [s.token]);
+    return rows.map((r) => ({
+      id: r.request_id, tenantId: r.tenant_id, tenantName: r.tenant_name,
+      years: Number(r.years), amount: Number(r.amount), paidOn: iso(r.paid_on),
+      note: r.note ?? '', status: r.status as RenewalRequestStatus,
+      createdAt: new Date(r.created_at).toISOString(),
+      decidedAt: ts(r.decided_at), decidedNote: r.decided_note ?? '',
+    }));
+  });
+}
+
+/**
+ * อนุมัติคำขอต่ออายุ — เรียกหลังตรวจยอดโอนกับบัญชีธนาคารแล้วเท่านั้น
+ *
+ * ช่วงวันที่คำนวณด้วย renewalWindow() ตัวเดียวกับที่ใช้มาตลอด (ต่อจากวันหมดอายุเดิมถ้ายังไม่หมด)
+ * จำนวนปีอ่านจากคำขอในฐานข้อมูล ไม่รับจากฟอร์ม · ฐานข้อมูลเพิ่มแถว subscriptions
+ * และปิดคำขอในคำสั่งเดียว จึงอนุมัติซ้ำสองรอบไม่ได้
+ */
+export async function approveRenewalRequest(
+  s: OperatorSession, requestId: string, note: string,
+): Promise<{ tenantId: string; expiresOn: string }> {
+  const req = (await listRenewalRequests(s)).find((r) => r.id === requestId);
+  if (!req) throw new Error('ไม่พบคำขอต่ออายุนี้');
+  if (req.status !== 'pending') throw new Error('คำขอนี้ถูกตัดสินหรือยกเลิกไปแล้ว');
+
+  const shop = await getShop(s, req.tenantId);
+  if (!shop) throw new Error('ไม่พบอู่ของคำขอนี้');
+  const { startedOn, expiresOn } = renewalWindow(shop.license, todayIso(), req.years);
+
+  await withoutTenant((c) => c.query(
+    `select ops.approve_renewal_request($1,$2,$3,$4,$5)`,
+    [s.token, requestId, startedOn, expiresOn, note],
+  ));
+  return { tenantId: req.tenantId, expiresOn };
+}
+
+export async function rejectRenewalRequest(
+  s: OperatorSession, requestId: string, note: string,
+): Promise<void> {
+  await withoutTenant((c) => c.query(
+    `select ops.reject_renewal_request($1,$2,$3)`, [s.token, requestId, note],
+  ));
+}
+
 export async function setMaxUsers(
   s: OperatorSession, tenantId: string, max: number | null,
 ): Promise<void> {
@@ -269,6 +332,8 @@ export const AUDIT_LABEL: Record<string, string> = {
   open_shop: 'เปิดอู่ใหม่',
   issue_owner_reset: 'ออกลิงก์ตั้งรหัสผ่านให้เจ้าของอู่',
   record_renewal: 'บันทึกการต่ออายุ',
+  approve_renewal: 'อนุมัติคำขอต่ออายุ',
+  reject_renewal: 'ไม่อนุมัติคำขอต่ออายุ',
   set_max_users: 'ปรับจำนวนที่นั่งพนักงาน',
   add_operator: 'เพิ่มบัญชีผู้ให้บริการ',
   enable_operator: 'เปิดบัญชีผู้ให้บริการ',

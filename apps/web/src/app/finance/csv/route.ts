@@ -2,6 +2,8 @@ import { requireCost, requireExport } from '@/lib/auth';
 import { getFinanceCsvRows } from '@/lib/reports';
 import { BOM, csvDownloadHeaders, csvField, FINANCE_HEADERS } from '@/lib/csv';
 
+const CHANNEL = { walkin: 'ขายหน้าร้าน', job: 'งานซ่อม', '': '' } as const;
+
 /** ส่งออกรายรับรายจ่ายในช่วงที่เลือกเป็น CSV — ?from=&to= */
 export async function GET(request: Request) {
   await requireExport('finance', 'sales');
@@ -20,6 +22,7 @@ export async function GET(request: Request) {
       r.net.toFixed(2), r.vat.toFixed(2), r.wht.toFixed(2),
       r.payable.toFixed(2), r.paid.toFixed(2), r.outstanding.toFixed(2),
       r.status,
+      CHANNEL[r.channel], r.labour === null ? '' : r.labour.toFixed(2), r.parts === null ? '' : r.parts.toFixed(2),
     ].map(csvField).join(','));
   }
 

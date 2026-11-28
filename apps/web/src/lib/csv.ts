@@ -166,6 +166,8 @@ export const normName = (v: string): string =>
 export const FINANCE_HEADERS = [
   'ประเภท', 'เลขที่', 'วันที่', 'คู่ค้า', 'ก่อนภาษี', 'VAT',
   'หัก ณ ที่จ่าย', 'ยอดสุทธิ', 'ชำระแล้ว', 'คงค้าง', 'สถานะ',
+  /* 24 พ.ย. 2569 - appended at the END so the original v3.6 columns keep their positions (accountants' formulas) */
+  'ช่องทาง', 'ค่าแรง', 'ค่าอะไหล่/สินค้า',
 ] as const;
 
 /**

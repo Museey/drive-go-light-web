@@ -6,6 +6,7 @@ import { issueResetAction, renewAction, setSeatsAction, type LinkResult } from '
 import { LinkBox } from '../../link-box';
 import type { FormResult } from '@/lib/mutate';
 import { ThaiDateInput } from '@/components/thai-date-input';
+import { isPlusPlan, PLAN_CHOICES, PLAN_LIGHT, PLAN_PLUS } from '@/lib/plan-core';
 
 function Submit({ label, busy }: { label: string; busy: string }) {
   const { pending } = useFormStatus();
@@ -49,25 +50,30 @@ export function RenewForm({
 
       <div className="grid g4">
         <div>
-          <label htmlFor="from" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)' }}>
+          <label htmlFor="from" style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)' }}>
             เริ่มวันที่
           </label>
           <ThaiDateInput id="from" name="from" defaultIso={from} required full />
         </div>
         <div>
-          <label htmlFor="to" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)' }}>
+          <label htmlFor="to" style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)' }}>
             ถึงวันที่
           </label>
           <ThaiDateInput id="to" name="to" defaultIso={to} required full />
         </div>
         <div>
-          <label htmlFor="plan" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)' }}>
+          <label htmlFor="plan" style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)' }}>
             แพ็กเกจ
           </label>
-          <input className="in" id="plan" name="plan" defaultValue={plan} style={{ width: '100%' }} />
+          {/* เลือกจากรายการ ไม่ให้พิมพ์เอง — แพ็กเกจตัดสินว่าอู่ได้ฟีเจอร์ Light Plus หรือไม่ (plan-core.ts)
+              พิมพ์ผิดตัวเดียวอู่ที่จ่าย Plus จะกลายเป็น Light โดยไม่มีอะไรบอก */}
+          <select className="in" id="plan" name="plan" defaultValue={isPlusPlan(plan) ? PLAN_PLUS : PLAN_LIGHT}
+                  style={{ width: '100%' }}>
+            {PLAN_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
         </div>
         <div>
-          <label htmlFor="amount" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)' }}>
+          <label htmlFor="amount" style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)' }}>
             ยอดที่เก็บ (บาท)
           </label>
           <input className="in mono" id="amount" name="amount" inputMode="decimal"
@@ -76,7 +82,7 @@ export function RenewForm({
       </div>
 
       <div style={{ marginTop: 10 }}>
-        <label htmlFor="note" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-3)' }}>
+        <label htmlFor="note" style={{ display: 'block', fontSize: '0.875rem', color: 'var(--ink-3)' }}>
           หมายเหตุ
         </label>
         <input className="in" id="note" name="note" style={{ width: '100%' }}

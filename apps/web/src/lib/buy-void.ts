@@ -22,6 +22,14 @@ export async function voidBuyDocWith(
   userId: string | null,
 ): Promise<void> {
   {
+    /* ล็อกแถวเอกสารก่อนอ่านสต๊อก — การแก้ไขใบ (lockDocForEditWith) ล็อกแถวเดียวกัน
+       สองเครื่องที่ยกเลิกกับแก้ใบเดียวกันพร้อมกันจึงต้องรอกัน ไม่ใช่ต่างคนต่างตัดของ
+       และตรวจว่าเป็นเอกสารรายจ่ายจริง — กัน id ของเอกสารรายรับหลุดเข้ามาทางนี้ */
+    const doc = await c.query(
+      `select direction::text as direction from documents where id = $1 for update`, [id]);
+    if (!doc.rows[0]) throw new Error('ไม่พบเอกสาร');
+    if (doc.rows[0].direction !== 'buy') throw new Error('เอกสารนี้ไม่ใช่ใบซื้อหรือค่าใช้จ่าย');
+
     /*
      * คิดจาก **ยอดสุทธิของใบนี้ที่ยังค้างอยู่ในคลัง** ไม่ใช่ไล่แถวรับเข้าทีละแถว
      *

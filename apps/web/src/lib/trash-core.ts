@@ -154,13 +154,19 @@ export async function purgeFromTrashWith(c: Client, source: Source, id: string):
   if (!res.rowCount) throw new Error('ไม่พบเอกสารในถังขยะ — อาจถูกกู้คืนหรือลบถาวรไปแล้ว');
 }
 
-/** ลบถาวรได้เฉพาะเจ้าของกิจการ และต้องยืนยันรหัสผ่านของบัญชีที่ล็อกอินอยู่ซ้ำ (ผู้ใช้กำหนด) */
+/**
+ * งานที่ย้อนไม่ได้ทำได้เฉพาะเจ้าของกิจการ และต้องยืนยันรหัสผ่านของบัญชีที่ล็อกอินอยู่ซ้ำ (ผู้ใช้กำหนด)
+ *
+ * ใช้กับการลบเอกสารถาวร ลบข้อมูลทั้งอู่ และกู้คืนทับข้อมูลทั้งอู่ — `what` คือคำในข้อความแจ้ง
+ * ให้ตรงกับงานที่ทำ จะได้ไม่ขึ้นว่า "ยังไม่ได้ลบ" ตอนที่ผู้ใช้กำลังกู้คืน
+ */
 export async function assertOwnerPasswordWith(
   c: Client, who: { userId: string; role: string }, password: string,
+  what: { verb: string; undone: string } = { verb: 'ลบถาวร', undone: 'ยังไม่ได้ลบ' },
 ): Promise<void> {
-  if (who.role !== 'owner') throw new Error('ลบถาวรได้เฉพาะเจ้าของกิจการ');
+  if (who.role !== 'owner') throw new Error(`${what.verb}ได้เฉพาะเจ้าของกิจการ`);
   const { rows } = await c.query(`select password_hash from users where id = $1`, [who.userId]);
   if (!(await verifyPassword(password, rows[0]?.password_hash ?? null))) {
-    throw new Error('รหัสผ่านไม่ถูกต้อง — ยังไม่ได้ลบ');
+    throw new Error(`รหัสผ่านไม่ถูกต้อง — ${what.undone}`);
   }
 }

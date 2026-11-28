@@ -26,6 +26,9 @@ const COUNT_LABEL: Record<string, string> = {
   documents: 'เอกสาร',
   docItems: 'รายการในเอกสาร',
   payments: 'การชำระเงิน',
+  appointments: 'นัดหมาย',
+  employees: 'พนักงาน',
+  payrollRuns: 'งวดเงินเดือน',
 };
 
 const list = (counts: Record<string, number>) =>
@@ -132,7 +135,7 @@ export function RestoreForm() {
               <li key={g.key}>
                 <b>{g.label} {g.count.toLocaleString('en-US')} รายการ</b> —{' '}
                 {g.kind === 'lost' ? 'จะไม่ถูกนำเข้า' : 'ยอดยังถูกต้อง แต่ประวัติหาย'}
-                <div style={{ fontSize: 12.5, opacity: 0.85 }}>{g.note}</div>
+                <div style={{ fontSize: '0.875rem', opacity: 0.85 }}>{g.note}</div>
               </li>
             ))}
           </ul>
@@ -171,8 +174,14 @@ export function RestoreForm() {
         <input className="in" id="confirm" name="confirm" autoComplete="off" required />
       </div>
 
+      <div className={state.field === 'password' ? 'field bad' : 'field'}>
+        <label htmlFor="restorePassword">รหัสผ่านของคุณ (เจ้าของกิจการ)</label>
+        <input className="in" id="restorePassword" name="password" type="password"
+               autoComplete="current-password" required />
+      </div>
+
       {preview.needsAcknowledgement ? (
-        <label className="tag-row" style={{ fontSize: 14 }}>
+        <label className="tag-row" style={{ fontSize: '0.9375rem' }}>
           <input type="checkbox" name="acceptDataLoss" />
           รับทราบว่าข้อมูลที่ระบบยังรองรับไม่ได้จะไม่ตามมา และยอมรับ
         </label>

@@ -49,10 +49,12 @@ export default async function CountPage({
             <div className="label">รายการที่ปรับยอดไปแล้ว</div>
             <div className="value">{adjusted}</div>
           </div></div>
-          <div className="card"><div className="body stat">
-            <div className="label">มูลค่าส่วนต่างสะสม</div>
-            <div className={`value${adjustedValue < 0 ? ' due' : ''}`}>{baht(adjustedValue)}</div>
-          </div></div>
+          {showValue ? (
+            <div className="card"><div className="body stat">
+              <div className="label">มูลค่าส่วนต่างสะสม</div>
+              <div className={`value${adjustedValue < 0 ? ' due' : ''}`}>{baht(adjustedValue)}</div>
+            </div></div>
+          ) : null}
         </div>
 
         <div className="note" style={{ marginBottom: 14 }}>
@@ -99,7 +101,7 @@ export default async function CountPage({
                         </Link>
                       </td>
                       <td>{thDate(r.countDate)}</td>
-                      <td className="wrap" style={{ fontSize: 12.5 }}>{r.note || '-'}</td>
+                      <td className="wrap" style={{ fontSize: '0.875rem' }}>{r.note || '-'}</td>
                       <td className="num">{r.lines}</td>
                       <td className="num">{r.done}</td>
                       <td className="num">

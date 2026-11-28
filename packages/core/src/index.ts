@@ -26,3 +26,4 @@ export * from './barcode-std.js';
 export * from './perms.js';
 export * from './product-limit.js';
 export * from './logo.js';
+export * from './promptpay.js';

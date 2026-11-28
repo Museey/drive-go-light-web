@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { query } from '@/lib/auth';
+import { query, requireSession } from '@/lib/auth';
+import { canCost } from '@/lib/perms';
 import { Shell } from '@/components/shell';
 import { SubNav } from '@/components/sub-nav';
 import { DocDateFilter, rangeFromParams } from '@/components/doc-date-filter';
@@ -26,6 +27,8 @@ export async function ClaimListView({
   sp: ClaimListParams;
 }) {
   const S = CLAIM_SIDE[side];
+  /* มูลค่าที่จ่ายออกคือต้นทุนล้วน — ซ่อนจากคนที่ไม่มีสิทธิ์เห็นต้นทุน */
+  const showCost = canCost(await requireSession());
   const { from, to } = rangeFromParams(sp);
   const { rows, total, writeOff } = await query((c) =>
     listClaims(c, { side, search: sp.q, from, to, limit: 200 }));
@@ -36,7 +39,7 @@ export async function ClaimListView({
     <Shell
       current="/stock"
       title={S.title}
-      sub={`${live.length} ใบที่ยังไม่ยกเลิก · มูลค่าที่จ่ายออก ${baht(writeOff)} บาท`}
+      sub={`${live.length} ใบที่ยังไม่ยกเลิก${showCost ? ` · มูลค่าที่จ่ายออก ${baht(writeOff)} บาท` : ''}`}
       actions={
         <Link className="btn primary" href={`/stock/claim/new?side=${side}`}>
           + เปิดใบเคลม
@@ -87,7 +90,7 @@ export async function ClaimListView({
                     {side === 'customer' ? <th>ทะเบียน</th> : <th>อ้างอิง</th>}
                     <th>เหตุผล</th>
                     <th className="num">จำนวน</th>
-                    <th className="num">มูลค่าต้นทุน</th>
+                    {showCost ? <th className="num">มูลค่าต้นทุน</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -100,25 +103,25 @@ export async function ClaimListView({
                         {r.voided ? <span className="chip due" style={{ marginLeft: 6 }}>ยกเลิก</span> : null}
                       </td>
                       <td>{thDate(r.claimDate)}</td>
-                      <td style={{ fontSize: 12.5 }}>{kindLabel(side, r.kind)}</td>
+                      <td style={{ fontSize: '0.875rem' }}>{kindLabel(side, r.kind)}</td>
                       <td className="wrap">{r.partyName || '-'}</td>
                       <td className="mono">
                         {(side === 'customer' ? r.vehiclePlate : r.refNo) || '-'}
                       </td>
-                      <td className="wrap" style={{ fontSize: 12.5 }}>{r.reason}</td>
+                      <td className="wrap" style={{ fontSize: '0.875rem' }}>{r.reason}</td>
                       <td className="num">{r.qty}</td>
-                      <td className="num">{baht(r.cost)}</td>
+                      {showCost ? <td className="num">{baht(r.cost)}</td> : null}
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
+                {showCost ? <tfoot>
                   <tr>
                     <td colSpan={7} style={{ textAlign: 'right', fontWeight: 600 }}>
                       รวมมูลค่าที่จ่ายออก (ไม่นับใบที่ยกเลิก)
                     </td>
                     <td className="num" style={{ fontWeight: 700 }}>{baht(writeOff)}</td>
                   </tr>
-                </tfoot>
+                </tfoot> : null}
               </table>
             </div>
           )}

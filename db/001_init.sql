@@ -54,6 +54,7 @@ create table tenants (
   -- จดภาษีมูลค่าเพิ่มหรือไม่ (036) — false = เอกสารรายรับไม่คิด VAT และออกใบกำกับภาษีไม่ได้
   vat_registered  boolean      not null default true,
   wht_rate        numeric(6,3) not null default 3,         -- % ค่าตั้งต้นของเอกสารขาย
+  wht_base        text        not null default 'labour' check (wht_base in ('labour', 'all')),  -- ฐานหัก ณ ที่จ่าย (041)
   price_tier      char(1)      not null default 'A' check (price_tier in ('A','B','C')),
   logo_url        text,                                    -- ย้ายจาก base64 ไป object storage
   owner_name      text        not null default '',           -- ชื่อเจ้าของกิจการ (023)
@@ -64,6 +65,10 @@ create table tenants (
   bank_name         text        not null default '',
   bank_account_no   text        not null default '',
   bank_account_name text        not null default '',
+  -- คิวอาร์รับเงินพร้อมเพย์บนเอกสาร (040) — เลขว่าง = ไม่มีคิวอาร์ · สวิตช์แยกตามชนิดเอกสาร
+  promptpay_id      text        not null default '',
+  qr_on_invoice     boolean     not null default false,
+  qr_on_receipt     boolean     not null default false,
   -- กี่วันก่อนหมดอายุถึงเริ่มเตือน (ดู 015_expiry.sql)
   expiry_warn_days  integer     not null default 60
                     constraint tenants_expiry_warn_sane
@@ -79,6 +84,15 @@ create table tenants (
 
 comment on column tenants.ui_prefs is
   'ค่าปรับแต่งหน้าจอระดับร้าน เช่น {"stockHide":["oem","max"]} — ไม่ใช่ข้อมูลธุรกิจ ไม่ต้อง migrate เข้มงวด';
+
+comment on column tenants.wht_base is
+  'ฐานหัก ณ ที่จ่ายของเอกสารขาย — labour = เฉพาะค่าแรง (ค่าตั้งต้น) · all = มูลค่าก่อน VAT ทั้งใบ (041)';
+comment on column tenants.promptpay_id is
+  'เลขพร้อมเพย์ของอู่ — เบอร์มือถือ 10 หลัก เลขประจำตัวผู้เสียภาษี 13 หลัก หรือ e-Wallet 15 หลัก · ว่าง = ไม่มีคิวอาร์ (040)';
+comment on column tenants.qr_on_invoice is
+  'พิมพ์คิวอาร์รับเงินบนใบส่งมอบ/ใบแจ้งหนี้/ใบกำกับภาษี (IV, IVT) (040)';
+comment on column tenants.qr_on_receipt is
+  'พิมพ์คิวอาร์รับเงินบนใบเสร็จรับเงิน (RC) เมื่อยังมียอดค้าง (040)';
 
 comment on column tenants.vat_registered is
   'จดภาษีมูลค่าเพิ่มหรือไม่ — false = เอกสารรายรับใบใหม่ไม่คิด VAT และออกใบกำกับภาษี (IVT) ไม่ได้ · ใบเก่าคงตามเดิม (036)';
@@ -137,6 +151,46 @@ create table subscriptions (
 );
 
 create index on subscriptions (tenant_id, expires_on desc);
+
+-- ---------------------------------------------------------------------
+-- คำขอต่ออายุที่รอผู้ให้บริการตรวจการชำระเงิน (039)
+-- นโยบาย ops_read กับฟังก์ชันอนุมัติอยู่ใน 039 เพราะอ้างสคีมา ops ที่ยังไม่มีตอนรันไฟล์นี้
+-- ---------------------------------------------------------------------
+create table renewal_requests (
+  id              uuid primary key default gen_random_uuid(),
+  tenant_id       uuid          not null references tenants(id) on delete cascade,
+  years           integer       not null
+                  constraint renewal_requests_years_check check (years between 1 and 10),
+  -- ยอดที่อู่แจ้งว่าโอนมา — ผู้ให้บริการเทียบกับรายการเดินบัญชีก่อนอนุมัติ
+  amount          numeric(14,2) not null
+                  constraint renewal_requests_amount_check check (amount > 0),
+  paid_on         date          not null,
+  -- อ้างอิงการโอน เช่น เวลาโอน ธนาคารต้นทาง เลขท้ายสลิป
+  note            text          not null default '',
+  status          text          not null default 'pending'
+                  constraint renewal_requests_status_check
+                  check (status in ('pending', 'approved', 'rejected', 'cancelled')),
+  requested_by    uuid          references users(id) on delete set null,
+  created_at      timestamptz   not null default now(),
+  decided_at      timestamptz,
+  -- เหตุผลจากผู้ให้บริการ — อู่เห็นข้อความนี้ในหน้าลิขสิทธิ์
+  decided_note    text          not null default '',
+  -- แถวใน subscriptions ที่เกิดจากการอนุมัติคำขอนี้
+  subscription_id uuid          references subscriptions(id) on delete set null,
+  constraint renewal_requests_decided_check
+    check ((status = 'pending') = (decided_at is null))
+);
+
+comment on table renewal_requests is
+  'คำขอต่ออายุที่อู่แจ้งชำระเงินมา — ผู้ให้บริการอนุมัติในคอนโซลแล้วจึงเกิดแถวใน subscriptions (039)';
+
+create index renewal_requests_tenant_idx
+  on renewal_requests (tenant_id, created_at desc);
+
+-- อู่หนึ่งมีคำขอที่รอตรวจได้ครั้งละใบ — กันกดส่งซ้ำแล้วถูกอนุมัติสองรอบ
+create unique index renewal_requests_one_pending
+  on renewal_requests (tenant_id) where status = 'pending';
+
 
 -- ---------------------------------------------------------------------
 -- ทะเบียนผู้ติดต่อ — DB.customers (ของเดิมรวม vendors เข้ามาแล้วด้วย kind)
@@ -1073,7 +1127,7 @@ create trigger documents_stamp_edit
 do $$
 declare t text;
 begin
-  foreach t in array array['users','subscriptions','contacts','vehicles',
+  foreach t in array array['users','subscriptions','renewal_requests','contacts','vehicles',
                            'product_categories','products','documents','doc_items',
                            'payments','stock_moves','doc_sequences','ignored_item_names',
                            'billnotes','billnote_docs','billnote_sequences',
@@ -1144,3 +1198,145 @@ create policy product_suppliers_tenant on product_suppliers
 -- ---------- ถังขยะ (028) ----------
 -- ต้องมีในภาพรวมด้วย ไม่งั้นอู่ที่เปิดใหม่ได้ดัชนีไม่ครบเท่าอู่ที่อัปเกรดมา (migrations.test.ts เทียบให้)
 create index documents_purged_idx on documents (tenant_id, purged_at) where purged_at is not null;
+
+-- =====================================================================
+-- DriveGo Light Plus (042) — พนักงาน งวดเงินเดือน นัดหมาย
+-- เนื้อหาเดียวกับ db/042_plus.sql ทุกบรรทัด (migrations.test.ts เทียบสองทาง)
+-- แพ็กเกจดูจาก subscriptions.plan — ดู apps/web/src/lib/plan-core.ts
+-- =====================================================================
+-- ---------------------------------------------------------------------
+-- ทะเบียนพนักงาน — คนที่อู่จ่ายเงินเดือนให้ คนละเรื่องกับ users (บัญชีเข้าระบบ)
+-- ช่างส่วนใหญ่ไม่มีบัญชีเข้าระบบ และผู้ใช้ระบบบางคนก็ไม่ได้รับเงินเดือนจากอู่
+-- ---------------------------------------------------------------------
+create table employees (
+  id              uuid primary key default gen_random_uuid(),
+  tenant_id       uuid        not null references tenants(id) on delete cascade,
+  code            text        not null,                    -- EMP-001
+  name            text        not null,
+  position        text        not null default '',
+  emp_type        text        not null default 'full'
+                  constraint employees_type_known check (emp_type in ('full', 'probation', 'temp')),
+  tax_id          text,                                    -- เลขประจำตัวผู้เสียภาษี 13 หลัก (ใช้บน ภ.ง.ด.1 / 50 ทวิ)
+  addr_text       text        not null default '',
+  tel             text        not null default '',
+  base_salary     numeric(14,2) not null default 0
+                  constraint employees_salary_sane check (base_salary >= 0),
+  sso_enabled     boolean     not null default true,       -- หักประกันสังคมหรือไม่
+  wht_rate        numeric(6,3) not null default 0          -- % หักภาษี ณ ที่จ่ายของเงินเดือน
+                  constraint employees_wht_sane check (wht_rate >= 0 and wht_rate <= 100),
+  bank_name       text        not null default '',
+  bank_account_no text        not null default '',
+  started_on      date,
+  active          boolean     not null default true,
+  note            text        not null default '',
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  unique (tenant_id, code),
+  constraint employees_tax_id_digits check (tax_id is null or tax_id ~ '^[0-9]{13}$')
+);
+
+comment on table employees is
+  'ทะเบียนพนักงานของอู่ (Light Plus · 042) — ไม่ลบ มีแต่ปิดใช้งาน เพราะงวดเงินเดือนเก่าอ้างถึง';
+
+-- ---------------------------------------------------------------------
+-- งวดเงินเดือน — เดือนละหนึ่งงวดต่ออู่
+-- เพดานประกันสังคมคิดต่อเดือน ถ้าเดือนเดียวมีหลายงวดต้องรวมฐานข้ามงวด ซึ่งยังไม่ได้ทำ
+-- ---------------------------------------------------------------------
+create table payroll_runs (
+  id              uuid primary key default gen_random_uuid(),
+  tenant_id       uuid        not null references tenants(id) on delete cascade,
+  period          text        not null                     -- 'YYYY-MM' ค.ศ.
+                  constraint payroll_runs_period_format check (period ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
+  pay_date        date        not null,
+  note            text        not null default '',
+  created_by      uuid        references users(id) on delete set null,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  unique (tenant_id, period)
+);
+
+comment on table payroll_runs is
+  'งวดเงินเดือน เดือนละหนึ่งงวดต่ออู่ (Light Plus · 042)';
+
+-- บรรทัดของงวด — ชื่อ ตำแหน่ง เลขผู้เสียภาษี ตรึงไว้ ณ วันจ่าย
+-- สลิปและ ภ.ง.ด.1 ของงวดเก่าต้องไม่เปลี่ยนตามทะเบียนพนักงานที่แก้ทีหลัง
+create table payroll_items (
+  id              uuid primary key default gen_random_uuid(),
+  tenant_id       uuid        not null references tenants(id) on delete cascade,
+  run_id          uuid        not null references payroll_runs(id) on delete cascade,
+  employee_id     uuid        not null references employees(id) on delete restrict,
+  line_no         integer     not null,
+  name            text        not null,
+  position        text        not null default '',
+  tax_id          text        not null default '',
+  base            numeric(14,2) not null default 0 constraint payroll_items_base_sane check (base >= 0),
+  overtime        numeric(14,2) not null default 0 constraint payroll_items_ot_sane check (overtime >= 0),
+  other_income    numeric(14,2) not null default 0 constraint payroll_items_income_sane check (other_income >= 0),
+  sso             numeric(14,2) not null default 0 constraint payroll_items_sso_sane check (sso >= 0),
+  wht             numeric(14,2) not null default 0 constraint payroll_items_wht_sane check (wht >= 0),
+  other_deduct    numeric(14,2) not null default 0 constraint payroll_items_deduct_sane check (other_deduct >= 0),
+  net             numeric(14,2) generated always as
+                    (base + overtime + other_income - sso - wht - other_deduct) stored,
+  note            text        not null default '',
+  unique (run_id, employee_id),
+  unique (run_id, line_no)
+);
+
+create index on payroll_items (tenant_id, employee_id);
+
+comment on column payroll_items.net is
+  'เงินได้รวม − ประกันสังคม − ภาษีหัก ณ ที่จ่าย − หักอื่น · ฐานข้อมูลคิดเอง ไม่เชื่อค่าที่หน้าเว็บส่งมา';
+
+-- ---------------------------------------------------------------------
+-- นัดหมายและแจ้งเตือนลูกค้า
+--
+-- ชื่อ เบอร์ ทะเบียน ตรึงเป็นข้อความไว้ในแถว และคีย์นอกเป็น on delete set null
+-- การกู้คืนไฟล์สำรองลบลูกค้าและรถทั้งหมดแล้วสร้างใหม่ (restore-core.ts) —
+-- นัดที่จดไว้ต้องไม่หายและต้องยังอ่านรู้เรื่องว่านัดใคร
+-- ---------------------------------------------------------------------
+create table appointments (
+  id              uuid primary key default gen_random_uuid(),
+  tenant_id       uuid        not null references tenants(id) on delete cascade,
+  kind            text        not null default 'repair'     -- repair = นัดเข้าซ่อม · remind = เตือนลูกค้า (เช็กระยะ ต่อ พ.ร.บ.)
+                  constraint appointments_kind_known check (kind in ('repair', 'remind')),
+  appt_date       date        not null,
+  appt_time       time,                                    -- null = ไม่ระบุเวลา
+  contact_id      uuid        references contacts(id) on delete set null,
+  vehicle_id      uuid        references vehicles(id) on delete set null,
+  party_name      text        not null default '',
+  tel             text        not null default '',
+  plate           text        not null default '',
+  title           text        not null,
+  note            text        not null default '',
+  status          text        not null default 'open'
+                  constraint appointments_status_known check (status in ('open', 'done', 'cancelled')),
+  notified_at     timestamptz,                             -- กดว่าแจ้งลูกค้าแล้วเมื่อไร
+  created_by      uuid        references users(id) on delete set null,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+create index on appointments (tenant_id, appt_date);
+create index appointments_open_idx on appointments (tenant_id, appt_date) where status = 'open';
+
+comment on table appointments is
+  'นัดเข้าซ่อมและรายการเตือนลูกค้า (Light Plus · 042) — ชื่อ/เบอร์/ทะเบียนตรึงเป็นข้อความ รอดจากการกู้คืนไฟล์สำรอง';
+
+-- updated_at อัตโนมัติ — ฟังก์ชันเดียวกับตารางหลัก (001)
+create trigger employees_touch before update on employees
+  for each row execute function touch_updated_at();
+create trigger payroll_runs_touch before update on payroll_runs
+  for each row execute function touch_updated_at();
+create trigger appointments_touch before update on appointments
+  for each row execute function touch_updated_at();
+
+-- แยกข้อมูลรายอู่ — เปิดและ force ทุกตาราง ไม่มีข้อยกเว้น (tenant-isolation.test.ts ไล่ตรวจ)
+alter table employees     enable row level security;  alter table employees     force row level security;
+alter table payroll_runs  enable row level security;  alter table payroll_runs  force row level security;
+alter table payroll_items enable row level security;  alter table payroll_items force row level security;
+alter table appointments  enable row level security;  alter table appointments  force row level security;
+create policy tenant_isolation on employees     using (tenant_id = current_tenant_id()) with check (tenant_id = current_tenant_id());
+create policy tenant_isolation on payroll_runs  using (tenant_id = current_tenant_id()) with check (tenant_id = current_tenant_id());
+create policy tenant_isolation on payroll_items using (tenant_id = current_tenant_id()) with check (tenant_id = current_tenant_id());
+create policy tenant_isolation on appointments  using (tenant_id = current_tenant_id()) with check (tenant_id = current_tenant_id());
+

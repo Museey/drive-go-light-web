@@ -4,7 +4,7 @@ import { kitLineName, searchKits } from '@/lib/kits';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
-  saveSalesDoc, scanForDoc, searchCustomers, searchProducts, voidSalesChain, voidSalesDoc,
+  productsByIds, saveSalesDoc, scanForDoc, searchCustomers, searchProducts, voidSalesChain, voidSalesDoc,
   type DocScan, type PickedContact, type PickedProduct, type SalesDocInput, openDocsFor, loadDocForCopy, type OpenDoc,
   docHoldsStock } from '@/lib/sales';
 import { isUuid } from '@/lib/ids';
@@ -94,6 +94,12 @@ export async function searchProductsAction(q: string): Promise<PickedProduct[]> 
     priceA: k.price, priceB: k.priceB || k.price, priceC: k.priceC || k.price, qtyOnHand: 0, shelfLifeMonths: null, nearestExpiry: null,
   }));
   return [...kitRows, ...products];
+}
+
+/** ราคาทุกระดับของอะไหล่ที่อยู่บนใบ — ใช้ตอนเปลี่ยนระดับราคา (ดู productsByIds ใน lib/sales.ts) */
+export async function productsByIdsAction(ids: string[]): Promise<PickedProduct[]> {
+  if (!Array.isArray(ids)) return [];
+  return productsByIds(ids.filter((x): x is string => typeof x === 'string'));
 }
 
 /**
