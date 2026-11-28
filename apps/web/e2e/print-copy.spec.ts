@@ -48,7 +48,7 @@ test('ใบเสร็จ: พิมพ์ออกมาสองชุด �
   expect(pos.sameCol, 'ป้ายอยู่คอลัมน์เดียวกับเลขที่').toBe(true);
 });
 
-test('ตอนพิมพ์: ต้นฉบับกับสำเนาเริ่มที่ตำแหน่งเดียวกัน · ขอบกระดาษ 10 มม. เท่ากันทุกแผ่น', async ({ page }) => {
+test('ตอนพิมพ์: ต้นฉบับกับสำเนาเริ่มที่ตำแหน่งเดียวกัน · ขอบบน 16 มม. ให้ชื่อร้านพ้นขอบที่เครื่องพิมพ์พิมพ์ไม่ได้', async ({ page }) => {
   const id = await db((c) => c.query(
     `select id from documents where kind = 'RC' and status = 'issued' and purged_at is null
       order by created_at desc limit 1`)).then((r) => r.rows[0].id);
@@ -74,7 +74,8 @@ test('ตอนพิมพ์: ต้นฉบับกับสำเนาเ
 
   for (const s of sheets) {
     expect(s.marginTop, 'ไม่มีระยะเว้นก่อนแผ่นตอนพิมพ์').toBe(0);
-    expect([s.padTop, s.padLeft, s.padRight, s.padBottom], 'ขอบ 10 มม. ทุกด้าน เท่าที่พิมพ์ออกมาจริง').toEqual([10, 10, 10, 10]);
+    /* บน 16 (ชื่อร้านต้องพ้นช่วงที่เครื่องพิมพ์พิมพ์ไม่ได้) · ข้าง 10 เท่าเดิม · ล่าง 6 (ชดเชยที่เพิ่มด้านบน) */
+    expect([s.padTop, s.padLeft, s.padRight, s.padBottom]).toEqual([16, 10, 10, 6]);
   }
   expect(sheets[1].firstInk, 'สำเนาเริ่มที่เดียวกับต้นฉบับ').toBe(sheets[0].firstInk);
 });
