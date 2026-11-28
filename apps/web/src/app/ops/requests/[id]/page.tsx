@@ -34,7 +34,7 @@ export default async function OpsRequestPage({ params }: { params: Promise<{ id:
       current="/ops/requests"
       email={session.email}
       title={r.shopName}
-      sub={`${r.kind === 'signup' ? 'ใบสมัครใหม่' : 'แจ้งชำระค่าต่ออายุ'} · ส่งเมื่อ ${thDateTime(r.at)}`}
+      sub={`ใบสมัครใหม่ · ส่งเมื่อ ${thDateTime(r.at)}`}
       actions={<Link className="btn" href="/ops/requests">← คำขอทั้งหมด</Link>}
     >
       <div className="grid g2" style={{ alignItems: 'start' }}>

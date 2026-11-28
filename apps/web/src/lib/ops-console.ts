@@ -343,7 +343,10 @@ export const AUDIT_LABEL: Record<string, string> = {
 };
 
 /* ---------------------------------------------------------------------
-   คำขอที่แนบสลิป — ใบสมัครใหม่ (และการต่ออายุในขั้น D) · db/038_payment_requests.sql
+   คำขอที่แนบสลิป — ใบสมัครใหม่เท่านั้น · db/038_payment_requests.sql
+   การต่ออายุของอู่เดิมอยู่อีกชุดหนึ่งด้านบน (listRenewalRequests · db/039_renewal_requests.sql)
+   ไมเกรชัน 043 ปิดค่า kind = 'renewal' ของตารางนี้ที่ฐานข้อมูล — การต่ออายุต้องมีคิวเดียว
+   ไม่งั้นเงินก้อนเดียวถูกอนุมัติได้สองรอบจากสองหน้า
    --------------------------------------------------------------------- */
 
 export type RequestStatus = 'pending' | 'approved' | 'rejected';
@@ -351,7 +354,7 @@ export type RequestStatus = 'pending' | 'approved' | 'rejected';
 export interface RequestRow {
   id: string;
   at: string;
-  kind: 'signup' | 'renewal';
+  kind: 'signup';
   status: RequestStatus;
   shopName: string;
   shopProvince: string;

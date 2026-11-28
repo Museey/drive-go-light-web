@@ -45,4 +45,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '040_promptpay_qr.sql',
   '041_wht_base.sql',
   '042_plus.sql',
+  '043_signup_only_requests.sql',
 ];

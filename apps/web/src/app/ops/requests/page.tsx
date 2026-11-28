@@ -18,6 +18,7 @@ const TABS: [RequestStatus | 'all', string][] = [
 
 /**
  * คำขอที่แนบสลิป — ใบสมัครใหม่จาก /signup (db/038_payment_requests.sql)
+ * คำขอต่ออายุของอู่เดิมไม่อยู่หน้านี้ — อยู่หน้าแรกของคอนโซล (renewal_requests · 039/043)
  * ค่าตั้งต้นแสดงเฉพาะที่รอตรวจ เพราะเป็นงานเดียวที่ต้องทำในหน้านี้
  */
 export default async function OpsRequestsPage({
@@ -78,7 +79,7 @@ export default async function OpsRequestsPage({
                           <div className="subtle" style={{ fontSize: 12 }}>{r.shopProvince} · {r.ownerEmail}</div>
                         </td>
                         <td>
-                          {r.kind === 'signup' ? 'ใบสมัคร' : 'ต่ออายุ'}
+                          ใบสมัคร
                           <div className="subtle" style={{ fontSize: 12 }}>
                             {r.ctype === 'juristic' ? 'นิติบุคคล' : 'บุคคลธรรมดา'}
                             {r.vatRegistered ? ' · จด VAT' : ' · ไม่จด VAT'}
