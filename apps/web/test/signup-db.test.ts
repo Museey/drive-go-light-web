@@ -53,6 +53,7 @@ describe.skipIf(!DB_URL)('ใบสมัครที่แนบสลิป', 
       'db/001_init.sql', 'db/002_auth.sql', 'db/008_ops.sql', 'db/011_ops_console.sql',
       'db/013_ops_grants.sql', 'db/031_ops_owner_scope.sql', 'db/035_error_dedup.sql',
       'db/037_usage_activity.sql', 'db/038_payment_requests.sql',
+      'db/043_signup_only_requests.sql',
     ]);
     await grantAppRole(admin);
 
@@ -247,6 +248,18 @@ describe.skipIf(!DB_URL)('ใบสมัครที่แนบสลิป', 
       [approved, 'approved', true],
       [pending, 'pending', false],
     ]);
+  });
+
+  /* การต่ออายุมีทางเดียวคือ renewal_requests (039) — ตารางนี้ต้องรับแถวต่ออายุไม่ได้แม้แต่จาก superuser
+     ไม่งั้นวันหนึ่งคอนโซลจะมีคิวต่ออายุสองคิว และเงินก้อนเดียวถูกอนุมัติได้สองรอบ (043) */
+  it('ตารางนี้รับเฉพาะใบสมัคร — แถวต่ออายุแทรกไม่ได้', async () => {
+    const insert = (kind: string) => admin.query(
+      `insert into ops.payment_requests (kind, amount_due, amount_paid, paid_at, slip_mime)
+       values ($1, 3852, 3852, now(), 'image/jpeg')`, [kind]);
+    await expect(insert('renewal')).rejects.toThrow(/payment_requests_kind_check/);
+    /* ใบสมัครที่ขาดข้อมูลยังถูกเงื่อนไขของ 038 กันอยู่ — 043 ไม่ได้ทำให้เงื่อนไขอื่นหาย */
+    await expect(insert('signup')).rejects.toThrow(/payment_requests_signup_complete/);
+    await expect(submit()).resolves.toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('ops.open_shop เดิมยังทำงานเหมือนเดิม', async () => {
