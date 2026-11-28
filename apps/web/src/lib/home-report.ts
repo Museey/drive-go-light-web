@@ -42,25 +42,43 @@ export interface SalesMonthBar {
  * (`generate_series`) แล้ว left join ยอดเข้าไป ไม่ใช่ group by สิ่งที่มีอยู่
  *
  * เดือนคิดตาม current_date ของฐาน ซึ่งตั้งเขตเวลาไทยไว้ ไม่ใช่นาฬิกาของเครื่องที่รัน
+ *
+ * **อ่านตาราง documents รอบเดียว** — รวมยอดเป็นรายเดือนไว้ใน `sales` ก่อน แล้วค่อยต่อเข้ากับแต่ละเดือนสองครั้ง
+ * (ปีนี้ / ปีก่อน) · `sales` มีเดือนละแถวเดียว การต่อสองครั้งจึงไม่คูณแถวกัน
+ *
+ * เดิมเป็นซับคิวรีสองตัวต่อเดือน = 12 เดือนอ่านเอกสารของอู่ทั้งตาราง 24 รอบ และเทียบด้วย
+ * date_trunc(doc_date) ซึ่งใช้ดัชนีไม่ได้ บนเครื่องจริง (ฐาน 0.1 CPU) คิวรีนี้ใช้ 5–9 วินาทีต่อครั้ง
+ * และ 22–31 วินาทีเมื่อเปิดหน้าแรกซ้อนกัน จนสายเชื่อมต่อทั้ง 5 เส้นค้างอยู่ที่คิวรีนี้
+ * หน้าอื่นรอไม่ไหวแล้วขึ้น 502 และฐานข้อมูลถูกฆ่าเพราะหน่วยความจำเต็ม (28 พ.ย. 2569 · 13:10 และ 15:25–15:36 น.)
  */
-export async function salesByMonthWith(c: Client, months = 6): Promise<SalesMonthBar[]> {
-  const { rows } = await c.query(
+/** แยกเป็นค่าคงที่ให้เทสต์ขอแผนการทำงานของคิวรีตัวจริงได้ (home-report-db.test.ts) */
+export const SALES_BY_MONTH_SQL =
     `with span as (
        select generate_series(
          date_trunc('month', current_date) - make_interval(months => $1::int - 1),
          date_trunc('month', current_date),
          interval '1 month')::date as m
+     ),
+     sales as (
+       select date_trunc('month', d.doc_date)::date as m, sum(d.payable) as amount
+         from documents d
+        /* ช่วงวันที่เขียนเป็นขอบล่าง-ขอบบนตรง ๆ ให้ตัดแถวนอกช่วงทิ้งได้ก่อนคิดอย่างอื่น
+           ครอบตั้งแต่เดือนแรกของปีก่อน ถึงสิ้นเดือนปัจจุบัน */
+        where d.doc_date >= (select min(m) - interval '1 year' from span)
+          and d.doc_date <  (select max(m) + interval '1 month' from span)
+          and ${SALES_DOCS}
+        group by 1
      )
      select to_char(span.m, 'YYYY-MM') as key,
-            /* สองยอดคิดแยกกันด้วยซับคิวรี — join สองรอบแล้ว sum จะคูณแถวกันเอง ยอดเพี้ยนเป็นเท่าตัว */
-            (select coalesce(sum(d.payable), 0) from documents d
-              where date_trunc('month', d.doc_date) = span.m and ${SALES_DOCS}) as amount,
-            (select coalesce(sum(d.payable), 0) from documents d
-              where date_trunc('month', d.doc_date) = span.m - interval '1 year' and ${SALES_DOCS}) as prev
+            coalesce(cur.amount, 0) as amount,
+            coalesce(prev.amount, 0) as prev
        from span
-      order by span.m`,
-    [months],
-  );
+       left join sales cur  on cur.m = span.m
+       left join sales prev on prev.m = (span.m - interval '1 year')::date
+      order by span.m`;
+
+export async function salesByMonthWith(c: Client, months = 6): Promise<SalesMonthBar[]> {
+  const { rows } = await c.query(SALES_BY_MONTH_SQL, [months]);
   return rows.map((r) => ({
     key: r.key as string, amount: round2(n(r.amount)), prev: round2(n(r.prev)),
   }));
